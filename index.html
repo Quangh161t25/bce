@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ thống Quản lý Thông tin</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsrsasign/10.5.25/jsrsasign-all-min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=20260611">
+</head>
+
+<body>
+
+    <div id="loading" class="loading-mask">
+        <div class="spinner"></div>
+        <p>Đang tải dữ liệu...</p>
+    </div>
+
+    <div id="dropOverlay">
+        <div class="drop-message">
+            <i data-lucide="upload-cloud" style="width: 48px; height: 48px;"></i>
+            Thả file vào đây để tải dữ liệu lên ${currentTab}
+        </div>
+    </div>
+
+    <div class="app-shell">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="logo" style="font-size: 16px; font-weight: 800; line-height: 1.2; text-align: center;">
+                        INFO<br>SYS</div>
+                    <h1 id="pageTitle">Hệ thống</h1>
+                </div>
+                <button class="sidebar-toggle" type="button" onclick="toggleSidebar()" title="Thu gọn menu">
+                    <i data-lucide="panel-left-close" style="width:18px;"></i>
+                </button>
+            </div>
+
+            <div class="tabs">
+                <div class="tab active" data-tab="THONG_TIN" onclick="switchTab('THONG_TIN')">
+                    <i data-lucide="database" style="width:18px;"></i>
+                    <span>THÔNG TIN</span>
+                </div>
+                <div class="tab" data-tab="DON_HANG" onclick="switchTab('DON_HANG')">
+                    <i data-lucide="shopping-cart" style="width:18px;"></i>
+                    <span>ĐƠN HÀNG</span>
+                </div>
+                <div class="tab" data-tab="HOA_DON" onclick="switchTab('HOA_DON')">
+                    <i data-lucide="file-text" style="width:18px;"></i>
+                    <span>HÓA ĐƠN</span>
+                </div>
+                <div class="tab" data-tab="DS_SP" onclick="switchTab('DS_SP')">
+                    <i data-lucide="package" style="width:18px;"></i>
+                    <span>DS SP</span>
+                </div>
+                <div class="tab" data-tab="DH_HOAN" onclick="switchTab('DH_HOAN')">
+                    <i data-lucide="undo-2" style="width:18px;"></i>
+                    <span>ĐƠN TRẢ</span>
+                </div>
+                <div class="tab" data-tab="NHAP_XUAT" onclick="switchTab('NHAP_XUAT')">
+                    <i data-lucide="arrow-left-right" style="width:18px;"></i>
+                    <span>NHẬP XUẤT</span>
+                </div>
+                <div class="tab" data-tab="TON_KHO" onclick="switchTab('TON_KHO')">
+                    <i data-lucide="warehouse" style="width:18px;"></i>
+                    <span>TỒN KHO</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="header-container">
+                <div id="headerActions">
+                    <div class="search-container">
+                        <i data-lucide="search" class="search-icon" style="width: 18px;"></i>
+                        <input type="text" id="searchInput" class="search-input" placeholder="Tìm kiếm nhanh..."
+                            oninput="filterTable()">
+                    </div>
+                    <input id="truongFilter" class="filter-input" type="text" list="truongOptions"
+                        placeholder="Lọc theo Trường..." oninput="filterTable()">
+                    <select id="storeFilter" class="filter-input" onchange="filterTable()">
+                        <option value="">Chọn gian hàng...</option>
+                    </select>
+
+                    <button id="reloadBtn" type="button" onclick="reloadCurrentTab()">
+                        <i data-lucide="refresh-cw" style="width:18px;"></i> Load lại
+                    </button>
+                    <button id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+                        <i data-lucide="upload" style="width:18px;"></i> Tải Dữ Liệu Lên
+                    </button>
+                    <button id="addBtn" type="button" onclick="openRecordForm()">
+                        <i data-lucide="plus" style="width:18px;"></i> Thêm mới
+                    </button>
+                    <button id="fillProductPriceBtn" type="button" onclick="fillVisibleOrderProductPrices()">
+                        <i data-lucide="badge-dollar-sign" style="width:18px;"></i> Điền giá sản phẩm
+                    </button>
+                    <button id="deleteOrderBtn" type="button" onclick="deleteSelectedOrders()">
+                        <i data-lucide="trash-2" style="width:18px;"></i> Xóa đơn hàng
+                    </button>
+                    <input type="file" id="fileInput" hidden multiple accept=".xlsx, .xls, .csv"
+                        onchange="handleFileUpload(event)">
+                </div>
+                <div id="orderFilters" class="order-filters">
+                    <label><span>Từ ngày</span><input id="orderDateFrom" type="date" onchange="filterTable()"></label>
+                    <label><span>Tới ngày</span><input id="orderDateTo" type="date" onchange="filterTable()"></label>
+                    <div class="quick-date-filters">
+                        <button type="button" onclick="setOrderQuickDateFilter('today')">Hôm nay</button>
+                        <button type="button" onclick="setOrderQuickDateFilter('yesterday')">Hôm qua</button>
+                        <button type="button" onclick="setOrderQuickDateFilter('week')">Tuần này</button>
+                        <button type="button" onclick="setOrderQuickDateFilter('month')">Tháng này</button>
+                    </div>
+                    <input id="orderMdhFilter" type="text" placeholder="Lọc MDH..." oninput="filterTable()">
+                    <input id="orderMvdFilter" type="text" placeholder="Lọc MVD..." oninput="filterTable()">
+                    <input id="orderTinhTrangFilter" type="hidden" value="">
+                    <div class="profit-filter-buttons">
+                        <button type="button" data-status-filter="HỦY" onclick="toggleStatusFilter('HỦY')">Hủy</button>
+                        <button type="button" data-status-filter="HOÀN"
+                            onclick="toggleStatusFilter('HOÀN')">Hoàn</button>
+                        <button type="button" data-status-filter="TRẢ" onclick="toggleStatusFilter('TRẢ')">Trả</button>
+                        <button type="button" data-status-filter="HOÀN TRẢ"
+                            onclick="toggleStatusFilter('HOÀN TRẢ')">Hoàn trả</button>
+                        <button type="button" data-status-filter="HOÀN THÀNH"
+                            onclick="toggleStatusFilter('HOÀN THÀNH')">Hoàn thành</button>
+                    </div>
+                    <select id="orderTrangThaiFilter" onchange="filterTable()">
+                        <option value="">Tất cả trạng thái</option>
+                        <option value="HỦY">HỦY</option>
+                        <option value="HOÀN THÀNH">HOÀN THÀNH</option>
+                    </select>
+                    <input id="orderProfitFilter" type="hidden" value="">
+                    <div class="profit-filter-buttons">
+                        <button type="button" data-profit-filter="negative"
+                            onclick="toggleOrderProfitFilter('negative')">Lợi nhuận âm</button>
+                        <button type="button" data-profit-filter="positive"
+                            onclick="toggleOrderProfitFilter('positive')">Lợi nhuận +</button>
+                    </div>
+                    <div class="order-summary">
+                        <span>DOANH_THU: <strong id="orderReceivedTotal">0</strong></span>
+                        <span>LOI_NHUAN: <strong id="orderProfitTotal">0</strong></span>
+                    </div>
+                </div>
+                <div id="returnOrderControls" class="order-filters">
+                    <select id="returnStoreSelect" onchange="filterTable()">
+                        <option value="">Chọn gian...</option>
+                    </select>
+                    <select id="returnStatusSelect" onchange="filterTable()">
+                        <option value="">Chọn tình trạng...</option>
+                        <option value="HỦY">HỦY</option>
+                        <option value="HOÀN">HOÀN</option>
+                        <option value="TRẢ">TRẢ</option>
+                        <option value="HOÀN TRẢ">HOÀN TRẢ</option>
+                    </select>
+                    <label><span>Từ ngày</span><input id="returnDateFrom" type="date" onchange="filterTable()"></label>
+                    <label><span>Tới ngày</span><input id="returnDateTo" type="date" onchange="filterTable()"></label>
+                </div>
+            </div>
+
+            <div class="table-wrapper" id="tableWrapper">
+                <table id="dataTable">
+                    <thead id="tableHead">
+                        <!-- Headers will be injected here -->
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Data rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="pagination" class="pagination"></div>
+        </main>
+    </div>
+
+    <div class="modal-mask" id="productModal">
+        <form class="modal" onsubmit="saveRecordFromForm(event)">
+            <div class="modal-header">
+                <h2 id="productModalTitle">Thêm mới</h2>
+                <button type="button" class="icon-btn" onclick="closeProductForm()" title="Đóng">
+                    <i data-lucide="x" style="width:18px;"></i>
+                </button>
+            </div>
+            <input type="hidden" id="editingSheetRow">
+            <div id="formFields" class="form-fields"></div>
+            <div class="modal-actions">
+                <button type="button" class="secondary-btn" onclick="closeProductForm()">Hủy</button>
+                <button type="submit" class="primary-btn">Lưu</button>
+            </div>
+        </form>
+    </div>
+    <div class="modal-mask" id="orderDetailModal">
+        <div class="modal order-detail-modal">
+            <div class="modal-header">
+                <h2 id="orderDetailTitle">Chi tiết đơn hàng</h2>
+                <button type="button" class="icon-btn" onclick="closeDonHangDetail()" title="Đóng">
+                    <i data-lucide="x" style="width:18px;"></i>
+                </button>
+            </div>
+            <div id="orderDetailFields" class="order-detail-fields"></div>
+            <div class="order-items-wrapper">
+                <table>
+                    <thead id="orderDetailHead"></thead>
+                    <tbody id="orderDetailBody"></tbody>
+                </table>
+            </div>
+            <div class="order-item-actions">
+                <button type="button" class="secondary-btn" onclick="addDonHangItem()">
+                    <i data-lucide="plus" style="width:16px;"></i> Thêm sản phẩm
+                </button>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="secondary-btn" onclick="closeDonHangDetail()">Đóng</button>
+                <button type="button" class="primary-btn" onclick="saveDonHangDetail()">Lưu thay đổi</button>
+            </div>
+        </div>
+    </div>
+    <datalist id="truongOptions"></datalist>
+    <datalist id="nccOptions"></datalist>
+    <script src="app.js?v=20260611"></script>
+</body>
+
+</html>
