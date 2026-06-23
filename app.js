@@ -38,9 +38,15 @@ sR2Sh8e3h3Knd6j1tceRIFU=
             imgCol: 10
         },
         'DON_HANG': {
-            range: 'DON_HANG!A2:W',
-            headers: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien'],
-            displayHeaders: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'chi_phi', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai'],
+            range: 'DON_HANG!A2:X',
+            headers: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'hoan_hang'],
+            displayHeaders: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'chi_phi', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'hoan_hang', 'mvd_tra', 'hh_kho'],
+            priceCols: [5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 21, 22]
+        },
+        'DON_HANG_CHI_TIET': {
+            range: 'DON_HANG!A2:X',
+            headers: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'hoan_hang'],
+            displayHeaders: ['gian_hang', 'ngay', 'mdh', 'mvd', 'tong_tien', 'chi_phi', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'hoan_hang', 'mvd_tra', 'hh_kho'],
             priceCols: [5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 21, 22]
         },
         'HOA_DON': {
@@ -54,18 +60,20 @@ sR2Sh8e3h3Knd6j1tceRIFU=
             priceCols: [3, 4, 5, 6]
         },
         'DH_HOAN': {
-            range: 'DH_HOAN!A2:J',
-            headers: ['gian', 'tinh_trang', 'ngay', 'mdh', 'mvd', 'ly_do', 'mdh_tra', 'mvd_tra', 'ghi_chu', 'trang_thai'],
+            range: 'DH_HOAN!A2:K',
+            headers: ['gian', 'tinh_trang', 'ngay', 'mdh', 'mvd', 'ly_do', 'mdh_tra', 'mvd_tra', 'ghi_chu', 'trang_thai', 'ngay_tai_len'],
             priceCols: []
         },
         'NHAP_XUAT': {
-            range: 'NHAP_XUAT!A2:F',
-            headers: ['id', 'ngay', 'truong', 'gian', 'id_sp', 'slg'],
-            priceCols: [5]
+            range: 'NHAP_XUAT!A2:H',
+            headers: ['id', 'ngay', 'truong', 'gian', 'id_sp', 'slg', 'don_gia', 'thanh_tien'],
+            displayHeaders: ['ngay', 'truong', 'gian', 'id_sp', 'slg', 'don_gia', 'thanh_tien'],
+            priceCols: [5, 6, 7]
         },
         'TON_KHO': {
             range: 'TON_KHO!A2:D',
             headers: ['id', 'gian', 'id_sp', 'ton_dau'],
+            displayHeaders: ['id', 'gian', 'id_sp', 'ton_dau', 'nhap', 'xuat', 'ton'],
             priceCols: [3]
         }
     }
@@ -86,6 +94,7 @@ let dsSpOptionsCache = null;
 const TAB_LABELS = {
     THONG_TIN: 'THÔNG TIN',
     DON_HANG: 'ĐƠN HÀNG',
+    DON_HANG_CHI_TIET: 'ĐH CHI TIẾT',
     HOA_DON: 'HÓA ĐƠN',
     DS_SP: 'DS SP',
     DH_HOAN: 'ĐƠN TRẢ',
@@ -137,8 +146,10 @@ async function switchTab(tabName) {
     const storeFilter = document.getElementById('storeFilter');
     const orderFilters = document.getElementById('orderFilters');
     const returnOrderControls = document.getElementById('returnOrderControls');
+    const changeUploadDateBtn = document.getElementById('changeUploadDateBtn');
+    const newUploadDateLabel = document.getElementById('newUploadDateLabel');
     const isThongTinModule = currentTab === 'THONG_TIN';
-    const isDonHangModule = currentTab === 'DON_HANG';
+    const isDonHangModule = currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET';
     const isReturnOrderModule = currentTab === 'DH_HOAN';
     const isStoreDataModule = currentTab === 'NHAP_XUAT' || currentTab === 'TON_KHO';
     if (uploadBtn) {
@@ -152,6 +163,10 @@ async function switchTab(tabName) {
         deleteOrderBtn.style.display = (isDonHangModule || isReturnOrderModule) ? 'flex' : 'none';
         deleteOrderBtn.innerHTML = `<i data-lucide="trash-2" style="width:18px;"></i> ${isReturnOrderModule ? 'Xóa đơn trả' : 'Xóa đơn hàng'}`;
     }
+    if (changeUploadDateBtn && newUploadDateLabel) {
+        changeUploadDateBtn.style.display = isReturnOrderModule ? 'flex' : 'none';
+        newUploadDateLabel.style.display = isReturnOrderModule ? 'flex' : 'none';
+    }
     if (truongFilter) {
         truongFilter.style.display = isThongTinModule ? 'block' : 'none';
         lucide.createIcons();
@@ -164,6 +179,10 @@ async function switchTab(tabName) {
     }
     if (returnOrderControls) {
         returnOrderControls.style.display = isReturnOrderModule ? 'flex' : 'none';
+    }
+    const dsSpFilters = document.getElementById('dsSpFilters');
+    if (dsSpFilters) {
+        dsSpFilters.style.display = currentTab === 'DS_SP' ? 'flex' : 'none';
     }
     document.getElementById('searchInput').value = '';
     selectedOrderIds.clear();
@@ -193,6 +212,22 @@ async function reloadCurrentTab() {
     }
 }
 
+let hhBhMvdSetCache = null;
+async function fetchHhBhMvdSet(force = false) {
+    if (hhBhMvdSetCache && !force) return hhBhMvdSetCache;
+    try {
+        const token = await getAccessToken();
+        const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/1cnA33cHHMhcOSaXa9l4Jeu6qw8QnXlUnEU4Bqtkj9wo/values/HH_BH!C2:C`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) throw new Error('Không đọc được HH_BH.');
+        const data = await res.json();
+        hhBhMvdSetCache = new Set((data.values || []).map(row => String(row[0] || '').trim()).filter(Boolean));
+    } catch (err) {
+        console.error('Lỗi khi tải HH_BH:', err);
+        hhBhMvdSetCache = new Set();
+    }
+    return hhBhMvdSetCache;
+}
+
 async function fetchData() {
     document.getElementById('loading').style.display = 'flex';
     document.querySelector('#loading p').innerText = `Đang tải dữ liệu ${currentTab}...`;
@@ -201,20 +236,75 @@ async function fetchData() {
         const tabConfig = CONFIG.tabs[currentTab];
         const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${tabConfig.range}`, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
+        let nhapXuatRows = [];
+        if (currentTab === 'TON_KHO') {
+            try {
+                const resNX = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/NHAP_XUAT!A2:H`, { headers: { Authorization: `Bearer ${token}` } });
+                if (resNX.ok) {
+                    const nxData = await resNX.json();
+                    nhapXuatRows = nxData.values || [];
+                }
+            } catch (err) {
+                console.error('Failed to fetch NHAP_XUAT for TON_KHO', err);
+            }
+        }
+
         const rawRows = data.values || [];
         allData = rawRows.map((row, i) => {
             const arr = Array.isArray(row) ? row.slice() : [];
             arr._sheetRow = i + 2;
             return arr;
         });
+
+        if (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') {
+            await fetchReturnStatusByOrderMap(true);
+            const hhBhSet = await fetchHhBhMvdSet(true);
+            allData.forEach(row => {
+                const mdh = String(row[DON_HANG_INDEX.mdh] || '').trim();
+                const currentMvd = String(row[DON_HANG_INDEX.mvd] || '').trim();
+                let mvdTra = '';
+                if (mdh && returnDataByOrderCache?.has(mdh)) {
+                    mvdTra = returnDataByOrderCache.get(mdh).mvd_tra;
+                }
+                row.mvd_tra = mvdTra;
+                row.hh_kho = (row.mvd_tra && hhBhSet.has(row.mvd_tra)) ? row.mvd_tra : '';
+            });
+        }
+
+        if (currentTab === 'TON_KHO') {
+            allData.forEach(row => {
+                const gian = String(row[1] || '').trim();
+                const idSp = String(row[2] || '').trim().toUpperCase();
+                let nhap = 0;
+                let xuat = 0;
+                nhapXuatRows.forEach(nx => {
+                    if (String(nx[3] || '').trim() === gian && String(nx[4] || '').trim().toUpperCase() === idSp) {
+                        const isNhap = String(nx[2] || '').trim().toUpperCase() === 'NHẬP';
+                        const slg = Number(nx[5]) || 0;
+                        if (isNhap) nhap += slg;
+                        else xuat += slg;
+                    }
+                });
+                const tonDau = Number(row[3]) || 0;
+                row['nhap'] = nhap;
+                row['xuat'] = xuat;
+                row['ton'] = tonDau + nhap - xuat;
+            });
+        }
+        if (currentTab === 'DS_SP') {
+            generateDsSpPrefixButtons();
+        }
         filteredData = currentTab === 'DON_HANG' ? getDonHangSummaryRows() : [...allData];
-        if (currentTab === 'DON_HANG') {
+        if (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') {
             try { await fetchReturnStatusByOrderMap(true); } catch (err) { console.error(err); }
             filteredData.sort((a, b) => parseDonHangDateTime(b[DON_HANG_INDEX.ngay_h]) - parseDonHangDateTime(a[DON_HANG_INDEX.ngay_h]));
             updateDonHangSummary();
         }
         if (currentTab === 'HOA_DON') {
             filteredData.sort((a, b) => parseHoaDonDate(b[1]) - parseHoaDonDate(a[1]));
+        }
+        if (currentTab === 'NHAP_XUAT') {
+            filteredData.sort((a, b) => parseDdMmYyyyDate(b[1]) - parseDdMmYyyyDate(a[1]));
         }
         populateFilters();
         renderHeaders();
@@ -229,7 +319,7 @@ async function fetchData() {
 
 function renderHeaders() {
     const head = document.getElementById('tableHead');
-    const selectHeader = currentTab === 'DON_HANG'
+    const selectHeader = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
         ? `<th class="select-col"><input type="checkbox" onchange="toggleAllVisibleOrders(this.checked)" title="Chọn tất cả đơn đang lọc"></th>`
         : currentTab === 'DH_HOAN'
             ? `<th class="select-col"><input type="checkbox" onchange="toggleAllReturnOrders(this.checked)" title="Chọn tất cả đơn trả"></th>`
@@ -260,6 +350,7 @@ function getDisplayHeaders(tabName = currentTab) {
 
 function isNumericDisplayHeader(header, tabName = currentTab) {
     if (tabName === 'DON_HANG') return DON_HANG_NUMERIC_HEADERS.has(header);
+    if (tabName === 'TON_KHO' && ['ton_dau', 'nhap', 'xuat', 'ton'].includes(header)) return true;
     const storageIndex = getStorageHeaders(tabName).indexOf(header);
     return storageIndex >= 0 && (CONFIG.tabs[tabName]?.priceCols || []).includes(storageIndex);
 }
@@ -280,6 +371,31 @@ function getDonHangSummaryRows(rows = allData) {
         const orderId = getRowId(row, 'DON_HANG');
         if (!orderId) return;
         if (!summaries.has(orderId)) summaries.set(orderId, row);
+    });
+    return [...summaries.values()];
+}
+
+function getNhapXuatSummaryRows(rows = allData) {
+    const summaries = new Map();
+    rows.forEach(row => {
+        const ngay = String(row[1] || '').trim();
+        const truong = String(row[2] || '').trim();
+        const gian = String(row[3] || '').trim();
+        if (!ngay || !truong || !gian) return;
+        const key = `${ngay}_${truong}_${gian}`;
+        if (!summaries.has(key)) {
+            summaries.set(key, [...row]);
+        } else {
+            const summaryRow = summaries.get(key);
+            const currentSlg = parseMoney(summaryRow[5] || 0);
+            const rowSlg = parseMoney(row[5] || 0);
+            summaryRow[5] = currentSlg + rowSlg;
+            summaryRow[4] = '(Nhiều sản phẩm)';
+            summaryRow[6] = '';
+            const currentTotal = parseMoney(summaryRow[7] || 0);
+            const rowTotal = parseMoney(row[7] || 0);
+            summaryRow[7] = currentTotal + rowTotal;
+        }
     });
     return [...summaries.values()];
 }
@@ -380,7 +496,7 @@ function getRowById(id) {
     return allData.find(row => getRowId(row) === key) || null;
 }
 
-function generateNextId(extraIds = []) {
+function generateNextId(extraIds = [], prefixTab = currentTab) {
     const ids = [...allData.map(getRowId), ...extraIds].filter(Boolean);
     const numericIds = ids.map(id => Number(id)).filter(n => Number.isFinite(n));
     if (numericIds.length === ids.length && numericIds.length) {
@@ -395,11 +511,11 @@ function generateNextId(extraIds = []) {
         String(now.getMinutes()).padStart(2, '0'),
         String(now.getSeconds()).padStart(2, '0')
     ].join('');
-    let candidate = `${ID_PREFIXES[currentTab] || currentTab}-${stamp}`;
+    let candidate = `${ID_PREFIXES[prefixTab] || prefixTab}-${stamp}`;
     let suffix = 1;
     while (ids.includes(candidate)) {
         suffix += 1;
-        candidate = `${ID_PREFIXES[currentTab] || currentTab}-${stamp}-${suffix}`;
+        candidate = `${ID_PREFIXES[prefixTab] || prefixTab}-${stamp}-${suffix}`;
     }
     return candidate;
 }
@@ -841,15 +957,16 @@ async function fetchDsSpOptions() {
         const idSp = String(row[1] || '').trim().toUpperCase();
         if (!idSp || seen.has(idSp)) return;
         seen.add(idSp);
-        dsSpOptionsCache.push({ id: idSp, name: String(row[2] || '').trim() });
+        dsSpOptionsCache.push({ id: idSp, name: String(row[2] || '').trim(), gia_nhap: parseMoney(row[3]), gia_ban: parseMoney(row[4]) });
     });
     return dsSpOptionsCache;
 }
 
+let returnDataByOrderCache = null;
 async function fetchReturnStatusByOrderMap(force = false) {
     if (returnStatusByOrderCache && !force) return returnStatusByOrderCache;
     const token = await getAccessToken();
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DH_HOAN!A2:J`, {
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DH_HOAN!A2:K`, {
         headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -859,12 +976,19 @@ async function fetchReturnStatusByOrderMap(force = false) {
     const data = await res.json();
     returnStatusByOrderCache = new Map();
     returnStatusByMvdCache = new Map();
+    returnDataByOrderCache = new Map();
     (data.values || []).forEach(row => {
         const store = String(row[0] || '').trim().toLowerCase();
         const status = String(row[1] || '').trim().toLocaleUpperCase('vi');
         const orderId = String(row[3] || '').trim();
         const mvd = String(row[4] || '').trim();
-        if (store && orderId && status) returnStatusByOrderCache.set(`${store}::${orderId}`, status);
+        const mvdTra = String(row[7] || '').trim();
+        if (store && orderId && status) {
+            returnStatusByOrderCache.set(`${store}::${orderId}`, status);
+            if (!returnDataByOrderCache.has(orderId)) {
+                returnDataByOrderCache.set(orderId, { status, mvd_tra: mvdTra || mvd });
+            }
+        }
         if (store && mvd && status) {
             const matches = returnStatusByMvdCache.get(mvd) || [];
             matches.push({ store, status });
@@ -984,6 +1108,47 @@ async function deleteSelectedReturnOrders() {
     }
 }
 
+async function changeSelectedReturnOrderUploadDate() {
+    const selectedKeys = [...selectedReturnOrderIds];
+    if (!selectedKeys.length) {
+        alert('Vui lòng tick chọn đơn trả cần đổi ngày tải lên.');
+        return;
+    }
+    const isoDate = document.getElementById('newUploadDateInput')?.value;
+    if (!isoDate) {
+        alert('Vui lòng chọn ngày mới ở ô Đổi ngày.');
+        return;
+    }
+    const newDate = formatDateDdMmYyyy(isoDate);
+
+    const rowsToUpdate = allData.filter(row => selectedKeys.includes(getReturnOrderKey(row)));
+    if (!rowsToUpdate.length) {
+        alert('Không tìm thấy dòng đơn trả đã chọn.');
+        return;
+    }
+
+    const DH_HOAN_UPLOAD_DATE_INDEX = 10;
+
+    rowsToUpdate.forEach(row => {
+        row[DH_HOAN_UPLOAD_DATE_INDEX] = newDate;
+    });
+
+    document.getElementById('loading').style.display = 'flex';
+    document.querySelector('#loading p').innerText = 'Đang đổi ngày tải lên...';
+    try {
+        const items = rowsToUpdate.map(row => ({ row, sheetRow: getDataSheetRow(row) }));
+        await batchWriteRecordRows(items);
+        await fetchData();
+        filterTable();
+        alert(`Đã đổi ngày tải lên cho ${rowsToUpdate.length} dòng đơn trả.`);
+    } catch (err) {
+        console.error(err);
+        alert('Không đổi được ngày tải lên: ' + err.message);
+    } finally {
+        document.getElementById('loading').style.display = 'none';
+    }
+}
+
 async function quickUpdateOrderStatus(orderId, newStatus) {
     if (currentTab !== 'DON_HANG') return;
     const targets = allData.filter(row => getRowId(row, 'DON_HANG') === orderId);
@@ -998,6 +1163,32 @@ async function quickUpdateOrderStatus(orderId, newStatus) {
 
     document.getElementById('loading').style.display = 'flex';
     document.querySelector('#loading p').innerText = `Đang cập nhật tình trạng...`;
+    try {
+        const items = targets.map(row => ({ row, sheetRow: getDataSheetRow(row) }));
+        await batchWriteRecordRows(items);
+        await fetchData();
+        filterTable();
+    } catch (err) {
+        console.error(err);
+        alert('Cập nhật thất bại: ' + err.message);
+    } finally {
+        document.getElementById('loading').style.display = 'none';
+    }
+}
+
+async function quickUpdateOrderHoanHang(orderId, newStatus) {
+    if (currentTab !== 'DON_HANG' && currentTab !== 'DON_HANG_CHI_TIET') return;
+    const targets = allData.filter(row => getRowId(row, 'DON_HANG') === orderId);
+    if (!targets.length) return;
+
+    targets.forEach(row => {
+        row[DON_HANG_INDEX.hoan_hang] = newStatus;
+    });
+
+    recalculateDonHangRows(targets.map(r => r));
+
+    document.getElementById('loading').style.display = 'flex';
+    document.querySelector('#loading p').innerText = `Đang cập nhật trạng thái hoàn hàng...`;
     try {
         const items = targets.map(row => ({ row, sheetRow: getDataSheetRow(row) }));
         await batchWriteRecordRows(items);
@@ -1046,13 +1237,15 @@ function setOptionButtonValue(button, value) {
     if (currentTab === 'DON_HANG') {
         recalculateDonHangForm();
         recalculateDonHangDetail();
+    } else if (currentTab === 'NHAP_XUAT') {
+        recalculateNhapXuatForm();
     }
 }
 
 function renderNhapXuatProductSelect(value = '') {
     const selectedValue = String(value || '').trim().toUpperCase();
     const options = dsSpOptionsCache || [];
-    return `<select data-nhap-xuat-item-field="id_sp">
+    return `<select data-nhap-xuat-item-field="id_sp" onchange="recalculateNhapXuatForm()">
         <option value=""></option>
         ${options.map(item => {
         const label = item.name ? `${item.id} - ${item.name}` : item.id;
@@ -1062,44 +1255,74 @@ function renderNhapXuatProductSelect(value = '') {
 }
 
 function renderNhapXuatItemRow(item = {}) {
-    return `<tr>
+    return `<tr data-sheet-row="${item._sheetRow || ''}">
         <td>${renderNhapXuatProductSelect(item.id_sp)}</td>
-        <td><input data-nhap-xuat-item-field="slg" type="number" min="0" step="1" value="${escapeHtml(item.slg || '')}"></td>
-        <td><button type="button" class="secondary-btn compact-btn" onclick="removeNhapXuatItemRow(this)">Xóa</button></td>
+        <td><input data-nhap-xuat-item-field="slg" type="number" min="0" step="1" value="${escapeHtml(item.slg || '')}" oninput="recalculateNhapXuatForm()"></td>
+        <td><input data-nhap-xuat-item-field="don_gia" type="text" readonly value="" style="background: #f8fafc; color: #64748b;"></td>
+        <td><input data-nhap-xuat-item-field="thanh_tien" type="text" readonly value="" style="background: #f8fafc; color: #64748b; font-weight: bold;"></td>
+        <td style="text-align: center; vertical-align: middle;"><input type="checkbox" data-nhap-xuat-item-field="xac_nhan" ${item.xac_nhan !== false ? 'checked' : ''} style="width: 20px; height: 20px; cursor: pointer; margin-top: 5px;"></td>
+        <td style="text-align: center; vertical-align: middle;"><button type="button" class="icon-btn" style="color: #ef4444; border: transparent; margin: 0 auto;" onclick="removeNhapXuatItemRow(this)"><i data-lucide="trash-2" style="width:16px;"></i></button></td>
     </tr>`;
 }
 
-function renderNhapXuatForm(row = null) {
+function renderNhapXuatForm(groupRows = null) {
+    const isEditing = groupRows && Array.isArray(groupRows) && groupRows.length > 0;
+    const firstRow = isEditing ? groupRows[0] : null;
     const container = document.getElementById('formFields');
-    const idValue = row ? row[0] : generateNextId();
-    const dateValue = getFormRowValue(row, 'ngay', 1);
-    const fieldValue = row ? String(row[2] || '').trim() : 'NHẬP';
-    const storeValue = row ? String(row[3] || '').trim() : '';
-    const items = row
-        ? [{ id_sp: row[4] || '', slg: row[5] || '' }]
-        : [{ id_sp: '', slg: '' }];
+    const idValue = firstRow ? firstRow[0] : generateNextId();
+    const dateValue = getFormRowValue(firstRow, 'ngay', 1);
+    const fieldValue = firstRow ? String(firstRow[2] || '').trim() : 'NHẬP';
+    const storeValue = firstRow ? String(firstRow[3] || '').trim() : '';
+    
+    const items = isEditing
+        ? groupRows.map(r => ({ id_sp: r[4] || '', slg: r[5] || '', xac_nhan: true, _sheetRow: getDataSheetRow(r) }))
+        : [{ id_sp: '', slg: '', xac_nhan: true, _sheetRow: '' }];
+
+    const originalSheetRows = isEditing ? groupRows.map(r => getDataSheetRow(r)).join(',') : '';
+
     container.innerHTML = `
         <input id="formField_0" data-field="id" type="hidden" value="${escapeHtml(idValue)}">
+        <input id="nhapXuatOriginalSheetRows" type="hidden" value="${originalSheetRows}">
         <div class="form-section-grid">
             <label><span>NGÀY</span><input id="formField_1" data-field="ngay" type="date" value="${escapeHtml(dateValue)}"></label>
             <label><span>TRƯỜNG</span>${renderOptionButtons('nhap_xuat_truong', fieldValue, ['NHẬP', 'XUẤT'], 'id="formField_2" data-field="truong"')}</label>
             <label><span>GIAN</span><select id="formField_3" data-field="gian"><option value=""></option>${thongTinStoreNames.map(option => `<option value="${escapeHtml(option)}" ${storeValue === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select></label>
         </div>
         <div class="form-table-section">
-            <div class="form-table-title">
-                <strong>SẢN PHẨM</strong>
-                ${row ? '' : '<button type="button" class="secondary-btn compact-btn" onclick="addNhapXuatItemRow()">+ Thêm sản phẩm</button>'}
+            <div class="form-table-title" style="margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <strong style="font-size: 1.1rem; color: var(--primary);">SẢN PHẨM</strong>
+                    <button type="button" class="secondary-btn compact-btn" style="display: flex; align-items: center; gap: 6px;" onclick="addNhapXuatItemRow()"><i data-lucide="plus" style="width:16px;"></i> Thêm sản phẩm</button>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="secondary-btn compact-btn" onclick="toggleAllNhapXuatConfirm(true)">Xác nhận hết</button>
+                    <button type="button" class="secondary-btn compact-btn" onclick="toggleAllNhapXuatConfirm(false)">Bỏ xác nhận</button>
+                </div>
             </div>
-            <table class="form-edit-table">
-                <thead><tr><th>ID_SP</th><th>SLG</th><th></th></tr></thead>
-                <tbody id="nhapXuatItemsBody">${items.map(renderNhapXuatItemRow).join('')}</tbody>
-            </table>
+            <div style="overflow-x: auto; padding-bottom: 4px; border-radius: 8px; border: 1px solid var(--border);">
+                <table class="form-edit-table" style="min-width: 700px; border: none;">
+                    <thead><tr>
+                        <th style="width: 35%; background: #f8fafc;">ID_SP</th>
+                        <th style="width: 15%; background: #f8fafc;">SLG</th>
+                        <th style="width: 20%; background: #f8fafc;">ĐƠN GIÁ</th>
+                        <th style="width: 20%; background: #f8fafc;">THÀNH TIỀN</th>
+                        <th style="width: 10%; text-align: center; background: #f8fafc;">XÁC NHẬN</th>
+                        <th style="width: 50px; background: #f8fafc;"></th>
+                    </tr></thead>
+                    <tbody id="nhapXuatItemsBody">${items.map(renderNhapXuatItemRow).join('')}</tbody>
+                </table>
+            </div>
         </div>
     `;
+    setTimeout(() => {
+        recalculateNhapXuatForm();
+        lucide.createIcons();
+    }, 0);
 }
 
 function addNhapXuatItemRow() {
     document.getElementById('nhapXuatItemsBody')?.insertAdjacentHTML('beforeend', renderNhapXuatItemRow());
+    lucide.createIcons();
 }
 
 function removeNhapXuatItemRow(button) {
@@ -1107,18 +1330,53 @@ function removeNhapXuatItemRow(button) {
     const rows = body ? [...body.querySelectorAll('tr')] : [];
     if (rows.length <= 1) {
         const row = button.closest('tr');
-        row?.querySelectorAll('select,input').forEach(input => { input.value = ''; });
+        row?.querySelectorAll('select,input[type="number"],input[type="text"]').forEach(input => { input.value = ''; });
+        row?.querySelectorAll('input[type="checkbox"]').forEach(input => { input.checked = false; });
         return;
     }
     button.closest('tr')?.remove();
+    recalculateNhapXuatForm();
 }
 
-function renderFormFields(row = null) {
+function toggleAllNhapXuatConfirm(checked) {
+    document.querySelectorAll('#nhapXuatItemsBody input[data-nhap-xuat-item-field="xac_nhan"]').forEach(cb => {
+        cb.checked = checked;
+    });
+}
+
+function recalculateNhapXuatForm() {
+    if (currentTab !== 'NHAP_XUAT') return;
+    const truong = document.getElementById('formField_2')?.value.trim() || 'NHẬP';
+    const isNhap = truong === 'NHẬP';
+    const optionsMap = new Map((dsSpOptionsCache || []).map(o => [o.id, o]));
+    
+    document.querySelectorAll('#nhapXuatItemsBody tr').forEach(tr => {
+        const idSp = tr.querySelector('[data-nhap-xuat-item-field="id_sp"]')?.value.trim() || '';
+        const slgInput = tr.querySelector('[data-nhap-xuat-item-field="slg"]');
+        const donGiaInput = tr.querySelector('[data-nhap-xuat-item-field="don_gia"]');
+        const thanhTienInput = tr.querySelector('[data-nhap-xuat-item-field="thanh_tien"]');
+        
+        let donGia = 0;
+        if (idSp && optionsMap.has(idSp)) {
+            const product = optionsMap.get(idSp);
+            donGia = isNhap ? product.gia_nhap : product.gia_ban;
+        }
+        
+        const slg = parseMoney(slgInput?.value || '');
+        const thanhTien = donGia * slg;
+        
+        if (donGiaInput) donGiaInput.value = formatDisplayNumber(donGia);
+        if (thanhTienInput) thanhTienInput.value = formatDisplayNumber(thanhTien);
+    });
+}
+
+function renderFormFields(rowOrGroup = null) {
     const container = document.getElementById('formFields');
     if (currentTab === 'NHAP_XUAT') {
-        renderNhapXuatForm(row);
+        renderNhapXuatForm(rowOrGroup);
         return;
     }
+    const row = rowOrGroup;
     const headers = getStorageHeaders();
     container.innerHTML = headers.map((header, idx) => {
         const rawValue = getFormRowValue(row, header, idx);
@@ -1186,6 +1444,18 @@ async function openRecordForm(rowIndex = null) {
 
     document.getElementById('editingSheetRow').value = row ? getDataSheetRow(row) : '';
     if (currentTab === 'NHAP_XUAT') {
+        modal.classList.add('side-panel-mask');
+        let groupRows = null;
+        if (row) {
+            const ngay = String(row[1] || '').trim();
+            const truong = String(row[2] || '').trim();
+            const gian = String(row[3] || '').trim();
+            groupRows = allData.filter(r => 
+                String(r[1] || '').trim() === ngay && 
+                String(r[2] || '').trim() === truong && 
+                String(r[3] || '').trim() === gian
+            );
+        }
         try {
             await fetchDsSpOptions();
         } catch (err) {
@@ -1193,8 +1463,11 @@ async function openRecordForm(rowIndex = null) {
             alert(err.message);
             return;
         }
+        renderFormFields(groupRows);
+    } else {
+        modal.classList.remove('side-panel-mask');
+        renderFormFields(row);
     }
-    renderFormFields(row);
     if (currentTab === 'DON_HANG') {
         document.getElementById('formFields').oninput = recalculateDonHangForm;
         recalculateDonHangForm();
@@ -1421,6 +1694,46 @@ async function saveDonHangDetail() {
     }
 }
 
+async function syncTonKhoFromNhapXuat(gian, idSps) {
+    if (!gian || !idSps || !idSps.length) return;
+    try {
+        const token = await getAccessToken();
+        const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/TON_KHO!A2:D`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+        const tonKhoRows = data.values || [];
+        
+        const existingTonKhoSet = new Set(
+            tonKhoRows
+                .filter(row => String(row[1] || '').trim() === gian)
+                .map(row => String(row[2] || '').trim().toUpperCase())
+        );
+        
+        const idsToProcess = [...new Set(idSps.map(id => id.trim().toUpperCase()))].filter(Boolean);
+        const newTonKhoRows = [];
+        const existingIds = tonKhoRows.map(row => String(row[0] || '').trim());
+        
+        for (const idSp of idsToProcess) {
+            if (!existingTonKhoSet.has(idSp)) {
+                const newId = generateNextId([...existingIds, ...newTonKhoRows.map(r => r[0])], 'TON_KHO');
+                newTonKhoRows.push([newId, gian, idSp, 0]);
+                existingTonKhoSet.add(idSp);
+            }
+        }
+        
+        if (newTonKhoRows.length > 0) {
+            const appendRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/TON_KHO!A2:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ values: newTonKhoRows })
+            });
+            if (!appendRes.ok) console.error('Failed to append to TON_KHO');
+        }
+    } catch (err) {
+        console.error('Error syncing TON_KHO:', err);
+    }
+}
+
 async function saveRecordFromForm(event) {
     event.preventDefault();
     const headers = getStorageHeaders();
@@ -1432,30 +1745,72 @@ async function saveRecordFromForm(event) {
             const truong = document.getElementById('formField_2')?.value.trim() || '';
             const gian = document.getElementById('formField_3')?.value.trim() || '';
             const itemRows = [...document.querySelectorAll('#nhapXuatItemsBody tr')]
+                .filter(tr => tr.querySelector('[data-nhap-xuat-item-field="xac_nhan"]')?.checked)
                 .map((tr, index) => {
                     const idSp = tr.querySelector('[data-nhap-xuat-item-field="id_sp"]')?.value.trim() || '';
                     const slg = parseMoney(tr.querySelector('[data-nhap-xuat-item-field="slg"]')?.value || '');
-                    return { idSp, slg, index };
+                    const donGia = parseMoney(tr.querySelector('[data-nhap-xuat-item-field="don_gia"]')?.value || '');
+                    const thanhTien = parseMoney(tr.querySelector('[data-nhap-xuat-item-field="thanh_tien"]')?.value || '');
+                    const sheetRow = tr.dataset.sheetRow || '';
+                    return { idSp, slg, donGia, thanhTien, sheetRow, index };
                 })
                 .filter(item => item.idSp || item.slg);
             if (!ngay || !truong || !gian) throw new Error('Vui lòng nhập đủ ngày, trường và gian.');
-            if (!itemRows.length) throw new Error('Vui lòng thêm ít nhất một sản phẩm.');
-            if (itemRows.some(item => !item.idSp || !item.slg)) throw new Error('Mỗi dòng sản phẩm phải có đủ ID_SP và SLG.');
+            
+            const originalSheetRows = (document.getElementById('nhapXuatOriginalSheetRows')?.value || '').split(',').filter(Boolean).map(Number);
+            
+            if (!itemRows.length) {
+                if (originalSheetRows.length) {
+                    if (!confirm('Bạn đã bỏ xác nhận tất cả sản phẩm. Toàn bộ nhóm dữ liệu này sẽ bị xóa. Bạn có chắc chắn?')) {
+                        return;
+                    }
+                    document.getElementById('loading').style.display = 'flex';
+                    document.querySelector('#loading p').innerText = `Đang xóa dữ liệu...`;
+                    await deleteSheetRows('NHAP_XUAT', originalSheetRows);
+                    closeProductForm();
+                    await fetchData();
+                    filterTable();
+                    return;
+                } else {
+                    throw new Error('Vui lòng thêm và chọn xác nhận ít nhất một sản phẩm hợp lệ.');
+                }
+            }
+            
+            if (itemRows.some(item => !item.idSp || !item.slg)) throw new Error('Mỗi dòng sản phẩm được xác nhận phải có đủ ID_SP và SLG.');
+            
             const rows = itemRows.map((item, index) => [
-                editingSheetRow ? baseId : (index === 0 ? baseId : `${baseId}-${index + 1}`),
+                baseId,
                 ngay,
                 truong,
                 gian,
                 item.idSp,
-                item.slg
+                item.slg,
+                item.donGia,
+                item.thanhTien
             ]);
             document.getElementById('loading').style.display = 'flex';
             document.querySelector('#loading p').innerText = `Đang lưu dữ liệu...`;
-            if (editingSheetRow) {
-                await writeRecordRow(rows[0], editingSheetRow);
-            } else {
-                await appendRecordRows(rows);
+            
+            const newRows = [];
+            for (let i = 0; i < rows.length; i++) {
+                if (i < originalSheetRows.length) {
+                    await writeRecordRow(rows[i], originalSheetRows[i]);
+                } else {
+                    newRows.push(rows[i]);
+                }
             }
+            if (newRows.length) {
+                await appendRecordRows(newRows);
+            }
+            if (originalSheetRows.length > rows.length) {
+                const rowsToDelete = originalSheetRows.slice(rows.length);
+                await deleteSheetRows('NHAP_XUAT', rowsToDelete);
+            }
+            
+            document.querySelector('#loading p').innerText = `Đang đồng bộ tồn kho...`;
+            const uniqueIdSps = [...new Set(itemRows.map(item => item.idSp))];
+            await syncTonKhoFromNhapXuat(gian, uniqueIdSps);
+            
             closeProductForm();
             await fetchData();
             filterTable();
@@ -1546,11 +1901,11 @@ function renderTable() {
 
     tbody.innerHTML = pageData.map((row, rowIndex) => {
         const cells = displayHeaders.map(header => {
-            if (currentTab === 'DON_HANG' && header === 'chi_phi') {
+            if ((currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && header === 'chi_phi') {
                 return `<td class="cost-toggle-cell" onclick="event.stopPropagation(); toggleOrderCostDetails();" title="Bấm để ${orderCostDetailsExpanded ? 'thu' : 'mở'} chi phí chi tiết">${escapeHtml(formatDisplayNumber(getDonHangCostTotal(row)))}</td>`;
             }
             const idx = storageHeaders.indexOf(header);
-            const cell = row[idx] || '';
+            const cell = (idx >= 0 ? row[idx] : row[header]) ?? '';
             if (idx === tabConfig.imgCol && cell) {
                 const firstImg = cell.split(',')[0].trim();
                 return `<td>
@@ -1569,16 +1924,16 @@ function renderTable() {
             const displayCell = isNumericDisplayHeader(header)
                 ? formatDisplayNumber(cell)
                 : cell;
-            const matchedReturnStatus = currentTab === 'DON_HANG' && header === 'tinh_trang'
+            const matchedReturnStatus = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && header === 'tinh_trang'
                 ? getMatchedReturnStatusForOrder(row)
                 : '';
-            const mvdDifferentStoreReturnStatus = currentTab === 'DON_HANG' && header === 'tinh_trang' && !matchedReturnStatus
+            const mvdDifferentStoreReturnStatus = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && header === 'tinh_trang' && !matchedReturnStatus
                 ? getMvdDifferentStoreReturnStatusForOrder(row)
                 : '';
             const displayValue = displayCell;
             const classNames = [];
-            if (currentTab === 'DON_HANG'
-                && header === 'ngay_h'
+            if (
+                ((currentTab === 'DON_HANG' && header === 'ngay_h') || (currentTab === 'DON_HANG_CHI_TIET' && header === 'mdh'))
                 && getDonHangItemCount(getRowId(row, 'DON_HANG')) >= 2) {
                 classNames.push('multi-item-date');
             }
@@ -1588,20 +1943,27 @@ function renderTable() {
             if (returnStatusClass) classNames.push(returnStatusClass);
             const cellClass = classNames.length ? ` class="${classNames.join(' ')}"` : '';
 
-            if (currentTab === 'DON_HANG' && header === 'tinh_trang') {
+            if ((currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && header === 'tinh_trang') {
                 const statusOptions = ['HỦY', 'HOÀN', 'TRẢ', 'HOÀN THÀNH'];
                 const orderIdStr = escapeHtml(escapeJsString(getRowId(row, 'DON_HANG')));
                 const buttons = statusOptions.map(opt => `<button onclick="event.stopPropagation(); quickUpdateOrderStatus('${orderIdStr}', '${opt}')" style="font-size:10px; padding:2px 4px; cursor:pointer; background:${opt === displayValue ? 'var(--primary)' : '#f8f9fa'}; color:${opt === displayValue ? '#fff' : '#333'}; border:1px solid #ddd; border-radius:4px; margin:2px;">${escapeHtml(opt)}</button>`).join('');
                 return `<td${cellClass} style="white-space:normal; min-width:140px;">${buttons}</td>`;
             }
 
+            if ((currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && header === 'hoan_hang') {
+                const hoanHangOptions = ['Đã về kho', 'Chưa về'];
+                const orderIdStr = escapeHtml(escapeJsString(getRowId(row, 'DON_HANG')));
+                const buttons = hoanHangOptions.map(opt => `<button onclick="event.stopPropagation(); quickUpdateOrderHoanHang('${orderIdStr}', '${opt}')" style="font-size:10px; padding:2px 4px; cursor:pointer; background:${opt === displayValue ? 'var(--primary)' : '#f8f9fa'}; color:${opt === displayValue ? '#fff' : '#333'}; border:1px solid #ddd; border-radius:4px; margin:2px;">${escapeHtml(opt)}</button>`).join('');
+                return `<td${cellClass} style="white-space:normal; min-width:130px;">${buttons}</td>`;
+            }
+
             return `<td${cellClass}>${escapeHtml(displayValue || '')}</td>`;
         }).join('');
 
-        const editAction = currentTab === 'DON_HANG'
+        const editAction = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
             ? ` ondblclick="openDonHangDetail('${escapeHtml(escapeJsString(getRowId(row)))}')"`
             : ` ondblclick="openRecordForm(${start + rowIndex})"`;
-        const selectCell = currentTab === 'DON_HANG'
+        const selectCell = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
             ? `<td class="select-col"><input type="checkbox" ${selectedOrderIds.has(getRowId(row, 'DON_HANG')) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleOrderSelection('${escapeHtml(escapeJsString(getRowId(row, 'DON_HANG')))}', this.checked)"></td>`
             : currentTab === 'DH_HOAN'
                 ? `<td class="select-col"><input type="checkbox" ${selectedReturnOrderIds.has(getReturnOrderKey(row)) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleReturnOrderSelection('${escapeHtml(escapeJsString(getReturnOrderKey(row)))}', this.checked)"></td>`
@@ -1654,13 +2016,16 @@ function filterTable() {
     const dateFromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : 0;
     const dateToTime = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : 0;
     const sourceData = currentTab === 'DON_HANG' ? getDonHangSummaryRows() : allData;
+    const terms = term.split(',').map(s => s.trim()).filter(Boolean);
     filteredData = sourceData.filter(row => {
-        const matchesSearch = currentTab === 'DON_HANG'
+        const matchesSearch = terms.length === 0 || terms.some(t => 
+            currentTab === 'DON_HANG'
             ? allData.some(item => getRowId(item, 'DON_HANG') === getRowId(row, 'DON_HANG')
-                && item.some(cell => String(cell).toLowerCase().includes(term)))
-            : row.some(cell => String(cell).toLowerCase().includes(term));
+                && item.some(cell => String(cell).toLowerCase().includes(t)))
+            : row.some(cell => String(cell).toLowerCase().includes(t))
+        );
         const matchesTruong = !truong || String(row[1] || '').toLowerCase().includes(truong);
-        const matchesStore = currentTab !== 'DON_HANG' || !store || String(row[DON_HANG_INDEX.gian_hang] || '').toLowerCase().includes(store);
+        const matchesStore = !['DON_HANG', 'DON_HANG_CHI_TIET'].includes(currentTab) || !store || String(row[DON_HANG_INDEX.gian_hang] || '').toLowerCase().includes(store);
         if (currentTab === 'DH_HOAN') {
             const returnStore = (document.getElementById('returnStoreSelect')?.value || '').toLowerCase();
             const returnTinhTrang = (document.getElementById('returnStatusSelect')?.value || '').toLowerCase();
@@ -1675,7 +2040,11 @@ function filterTable() {
             const matchesReturnTo = !returnDateToTime || returnTime <= returnDateToTime;
             return matchesSearch && matchesReturnStore && matchesReturnTinhTrang && matchesReturnFrom && matchesReturnTo;
         }
-        if (currentTab !== 'DON_HANG') return matchesSearch && matchesTruong && matchesStore;
+        if (currentTab === 'DS_SP') {
+            const matchesDsSpPrefix = !currentDsSpPrefixFilter || String(row[1] || '').toUpperCase().startsWith(currentDsSpPrefixFilter);
+            return matchesSearch && matchesDsSpPrefix && matchesTruong && matchesStore;
+        }
+        if (!['DON_HANG', 'DON_HANG_CHI_TIET'].includes(currentTab)) return matchesSearch && matchesTruong && matchesStore;
         const orderTime = parseDonHangDateTime(row[DON_HANG_INDEX.ngay_h]);
         const matchesDateFrom = !dateFromTime || orderTime >= dateFromTime;
         const matchesDateTo = !dateToTime || orderTime <= dateToTime;
@@ -1689,13 +2058,16 @@ function filterTable() {
             || (profitFilter === 'positive' && profit > 0);
         return matchesSearch && matchesStore && matchesDateFrom && matchesDateTo && matchesMdh && matchesMvd && matchesTinhTrang && matchesTrangThai && matchesProfit;
     });
-    if (currentTab === 'DON_HANG') {
+    if (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') {
         filteredData.sort((a, b) => parseDonHangDateTime(b[DON_HANG_INDEX.ngay_h]) - parseDonHangDateTime(a[DON_HANG_INDEX.ngay_h]));
         updateDonHangSummary();
         syncOrderProfitFilterButtons();
     }
     if (currentTab === 'HOA_DON') {
         filteredData.sort((a, b) => parseHoaDonDate(b[1]) - parseHoaDonDate(a[1]));
+    }
+    if (currentTab === 'NHAP_XUAT') {
+        filteredData.sort((a, b) => parseDdMmYyyyDate(b[1]) - parseDdMmYyyyDate(a[1]));
     }
     currentPage = 1;
     renderTable();
@@ -1720,11 +2092,38 @@ function setOrderQuickDateFilter(type) {
         start = new Date(today.getFullYear(), today.getMonth(), 1);
         end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     }
-    const fromInput = document.getElementById('orderDateFrom');
-    const toInput = document.getElementById('orderDateTo');
-    if (fromInput) fromInput.value = toIsoDateInput(start);
-    if (toInput) toInput.value = toIsoDateInput(end);
+    document.getElementById('orderDateFrom').value = toIsoDateInput(start);
+    document.getElementById('orderDateTo').value = toIsoDateInput(end);
     filterTable();
+}
+
+let currentDsSpPrefixFilter = '';
+
+function setDsSpPrefixFilter(prefix) {
+    currentDsSpPrefixFilter = prefix;
+    document.querySelectorAll('#dsSpPrefixButtons button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.prefix === prefix);
+    });
+    filterTable();
+}
+
+function generateDsSpPrefixButtons() {
+    if (currentTab !== 'DS_SP') return;
+    const prefixes = new Set();
+    allData.forEach(row => {
+        const idSp = String(row[1] || '').trim().toUpperCase(); // id_sp
+        if (idSp.length >= 1) prefixes.add(idSp.substring(0, 1));
+        if (idSp.length >= 2) prefixes.add(idSp.substring(0, 2));
+    });
+    
+    const sortedPrefixes = Array.from(prefixes).sort();
+    const container = document.getElementById('dsSpPrefixButtons');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <button type="button" class="${!currentDsSpPrefixFilter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefixFilter('')">Tất cả</button>
+        ${sortedPrefixes.map(p => `<button type="button" class="${currentDsSpPrefixFilter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefixFilter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}</button>`).join('')}
+    `;
 }
 
 function syncOrderProfitFilterButtons() {
@@ -2091,13 +2490,14 @@ function buildReturnOrderRows(rows) {
         returnWaybill: 'Mã vận đơn trả hàng',
         returnRefundStatus: 'Trạng thái Trả hàng/Hoàn tiền',
         deliveryWaybill: 'Mã vận đơn giao hàng',
-        refunded: 'Đã hoàn tiền cho Người mua'
+        refunded: 'Đã hoàn tiền cho Người mua',
+        returning: 'Người mua đang trả hàng'
     };
     return rows.map(source => {
         const type = selectedTinhTrang.toLocaleUpperCase('vi');
         if (type === 'TRẢ') {
             const refundStatus = normalizeTextValue(getExcelCell(source, HEADERS.returnRefundStatus));
-            if (refundStatus !== HEADERS.refunded) return null;
+            if (refundStatus !== HEADERS.refunded && refundStatus !== HEADERS.returning) return null;
         }
         const orderId = String(getExcelCell(source, HEADERS.orderId) || '').trim();
         if (!orderId || existingOrderIds.has(orderId) || seenOrderIds.has(orderId)) return null;
@@ -2112,6 +2512,7 @@ function buildReturnOrderRows(rows) {
         const waybill = type === 'TRẢ'
             ? String(getExcelCell(source, HEADERS.deliveryWaybill) || getExcelCell(source, HEADERS.waybill) || '').trim()
             : String(getExcelCell(source, HEADERS.waybill) || '').trim();
+        const uploadDate = formatDateDdMmYyyy(toIsoDateInput(new Date()));
         return [
             selectedStore,
             selectedTinhTrang,
@@ -2122,7 +2523,8 @@ function buildReturnOrderRows(rows) {
             claimId,
             returnWaybill,
             '',
-            ''
+            '',
+            uploadDate
         ];
     }).filter(Boolean);
 }
@@ -2170,7 +2572,7 @@ async function processFiles(files) {
     }
 
     const fileNames = excelFiles.map(f => f.name).join(", ");
-    if (currentTab === 'DON_HANG' && !String(document.getElementById('storeFilter')?.value || '').trim()) {
+    if ((currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && !String(document.getElementById('storeFilter')?.value || '').trim()) {
         alert('Vui lòng chọn gian hàng trước khi thêm Excel.');
         return;
     }
@@ -2178,7 +2580,7 @@ async function processFiles(files) {
         alert('Vui lòng chọn gian và tình trạng trước khi thêm Excel.');
         return;
     }
-    const confirmMessage = currentTab === 'DON_HANG'
+    const confirmMessage = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
         ? `Dữ liệu từ ${excelFiles.length} file (${fileNames}) sẽ được đọc theo tên cột và cập nhật sheet '${currentTab}'. Tiếp tục?`
         : currentTab === 'DS_SP'
             ? `Dữ liệu từ ${excelFiles.length} file (${fileNames}) sẽ XÓA TOÀN BỘ dữ liệu cũ trong sheet '${currentTab}' rồi ghi dữ liệu mới. Tiếp tục?`
@@ -2191,7 +2593,7 @@ async function processFiles(files) {
     document.querySelector('#loading p').innerText = `Đang xử lý ${excelFiles.length} file và cập nhật Google Sheets...`;
 
     try {
-        const reader = currentTab === 'DON_HANG'
+        const reader = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
             ? readDonHangExcelRows
             : currentTab === 'DS_SP'
                 ? readDsSpExcelRows
@@ -2261,7 +2663,7 @@ async function processFiles(files) {
         } else {
             result = await upsertRecordRows(allRowsToUpload);
         }
-        alert(currentTab === 'DON_HANG'
+        alert((currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
             ? `Đã thêm mới ${result.inserted} đơn hàng vào sheet '${currentTab}'. Bỏ qua ${result.skipped} dòng có mã đơn hàng trùng.`
             : currentTab === 'DS_SP'
                 ? `Đã xóa dữ liệu cũ và ghi mới ${result.inserted} dòng vào sheet '${currentTab}'.`
@@ -2289,3 +2691,4 @@ async function init() {
 }
 
 init();
+

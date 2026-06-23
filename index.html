@@ -48,6 +48,10 @@
                     <i data-lucide="shopping-cart" style="width:18px;"></i>
                     <span>ĐƠN HÀNG</span>
                 </div>
+                <div class="tab" data-tab="DON_HANG_CHI_TIET" onclick="switchTab('DON_HANG_CHI_TIET')">
+                    <i data-lucide="list" style="width:18px;"></i>
+                    <span>ĐH CHI TIẾT</span>
+                </div>
                 <div class="tab" data-tab="HOA_DON" onclick="switchTab('HOA_DON')">
                     <i data-lucide="file-text" style="width:18px;"></i>
                     <span>HÓA ĐƠN</span>
@@ -99,6 +103,13 @@
                     </button>
                     <button id="deleteOrderBtn" type="button" onclick="deleteSelectedOrders()">
                         <i data-lucide="trash-2" style="width:18px;"></i> Xóa đơn hàng
+                    </button>
+                    <label id="newUploadDateLabel" style="display:none; align-items:center; gap: 4px; font-weight: 500;">
+                        <span>Đổi ngày:</span>
+                        <input type="date" id="newUploadDateInput" class="filter-input" style="height: 32px; padding: 0 8px;">
+                    </label>
+                    <button id="changeUploadDateBtn" type="button" onclick="changeSelectedReturnOrderUploadDate()" style="display:none;">
+                        <i data-lucide="calendar-clock" style="width:18px;"></i> Cập nhật ngày
                     </button>
                     <input type="file" id="fileInput" hidden multiple accept=".xlsx, .xls, .csv"
                         onchange="handleFileUpload(event)">
@@ -155,6 +166,11 @@
                     </select>
                     <label><span>Từ ngày</span><input id="returnDateFrom" type="date" onchange="filterTable()"></label>
                     <label><span>Tới ngày</span><input id="returnDateTo" type="date" onchange="filterTable()"></label>
+                </div>
+                <div id="dsSpFilters" class="order-filters" style="display: none; flex-wrap: wrap; gap: 8px;">
+                    <div id="dsSpPrefixButtons" class="quick-date-filters" style="flex-wrap: wrap; gap: 4px;">
+                        <!-- Buttons will be generated here -->
+                    </div>
                 </div>
             </div>
 
