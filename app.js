@@ -292,7 +292,7 @@ async function fetchData() {
             });
         }
         if (currentTab === 'DS_SP') {
-            generateDsSpPrefixButtons();
+            generateDsSpPrefix1Buttons();
         }
         filteredData = currentTab === 'DON_HANG' ? getDonHangSummaryRows() : [...allData];
         if (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') {
@@ -305,6 +305,9 @@ async function fetchData() {
         }
         if (currentTab === 'NHAP_XUAT') {
             filteredData.sort((a, b) => parseDdMmYyyyDate(b[1]) - parseDdMmYyyyDate(a[1]));
+        }
+        if (currentTab === 'DH_HOAN') {
+            filteredData.sort((a, b) => parseDdMmYyyyDate(b[2]) - parseDdMmYyyyDate(a[2]));
         }
         populateFilters();
         renderHeaders();
@@ -2041,8 +2044,10 @@ function filterTable() {
             return matchesSearch && matchesReturnStore && matchesReturnTinhTrang && matchesReturnFrom && matchesReturnTo;
         }
         if (currentTab === 'DS_SP') {
-            const matchesDsSpPrefix = !currentDsSpPrefixFilter || String(row[1] || '').toUpperCase().startsWith(currentDsSpPrefixFilter);
-            return matchesSearch && matchesDsSpPrefix && matchesTruong && matchesStore;
+            const tenSp = String(row[1] || '').toUpperCase();
+            const matchesDsSpPrefix1 = !currentDsSpPrefix1Filter || tenSp.startsWith(currentDsSpPrefix1Filter);
+            const matchesDsSpPrefix2 = !currentDsSpPrefix2Filter || tenSp.startsWith(currentDsSpPrefix2Filter);
+            return matchesSearch && matchesDsSpPrefix1 && matchesDsSpPrefix2 && matchesTruong && matchesStore;
         }
         if (!['DON_HANG', 'DON_HANG_CHI_TIET'].includes(currentTab)) return matchesSearch && matchesTruong && matchesStore;
         const orderTime = parseDonHangDateTime(row[DON_HANG_INDEX.ngay_h]);
@@ -2068,6 +2073,9 @@ function filterTable() {
     }
     if (currentTab === 'NHAP_XUAT') {
         filteredData.sort((a, b) => parseDdMmYyyyDate(b[1]) - parseDdMmYyyyDate(a[1]));
+    }
+    if (currentTab === 'DH_HOAN') {
+        filteredData.sort((a, b) => parseDdMmYyyyDate(b[2]) - parseDdMmYyyyDate(a[2]));
     }
     currentPage = 1;
     renderTable();
@@ -2097,32 +2105,85 @@ function setOrderQuickDateFilter(type) {
     filterTable();
 }
 
-let currentDsSpPrefixFilter = '';
+let currentDsSpPrefix1Filter = '';
+let currentDsSpPrefix2Filter = '';
 
-function setDsSpPrefixFilter(prefix) {
-    currentDsSpPrefixFilter = prefix;
-    document.querySelectorAll('#dsSpPrefixButtons button').forEach(btn => {
+function setDsSpPrefix1Filter(prefix) {
+    currentDsSpPrefix1Filter = prefix;
+    currentDsSpPrefix2Filter = ''; // Reset 2nd level filter
+    document.querySelectorAll('#dsSpPrefix1Buttons button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.prefix === prefix);
+    });
+    
+    // Only show 2nd level buttons if a 1st level is selected
+    const container2 = document.getElementById('dsSpPrefix2Buttons');
+    if (prefix && container2) {
+        container2.style.display = 'flex';
+        generateDsSpPrefix2Buttons(prefix);
+    } else if (container2) {
+        container2.style.display = 'none';
+    }
+    
+    filterTable();
+}
+
+function setDsSpPrefix2Filter(prefix) {
+    currentDsSpPrefix2Filter = prefix;
+    document.querySelectorAll('#dsSpPrefix2Buttons button').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.prefix === prefix);
     });
     filterTable();
 }
 
-function generateDsSpPrefixButtons() {
+function generateDsSpPrefix1Buttons() {
     if (currentTab !== 'DS_SP') return;
     const prefixes = new Set();
     allData.forEach(row => {
         const idSp = String(row[1] || '').trim().toUpperCase(); // id_sp
         if (idSp.length >= 1) prefixes.add(idSp.substring(0, 1));
-        if (idSp.length >= 2) prefixes.add(idSp.substring(0, 2));
     });
     
     const sortedPrefixes = Array.from(prefixes).sort();
-    const container = document.getElementById('dsSpPrefixButtons');
+    const container = document.getElementById('dsSpPrefix1Buttons');
     if (!container) return;
     
     container.innerHTML = `
-        <button type="button" class="${!currentDsSpPrefixFilter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefixFilter('')">Tất cả</button>
-        ${sortedPrefixes.map(p => `<button type="button" class="${currentDsSpPrefixFilter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefixFilter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}</button>`).join('')}
+        <button type="button" class="${!currentDsSpPrefix1Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix1Filter('')">Tất cả</button>
+        ${sortedPrefixes.map(p => `<button type="button" class="${currentDsSpPrefix1Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix1Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}</button>`).join('')}
+    `;
+    
+    // Also regenerate level 2 if needed
+    const container2 = document.getElementById('dsSpPrefix2Buttons');
+    if (currentDsSpPrefix1Filter && container2) {
+        container2.style.display = 'flex';
+        generateDsSpPrefix2Buttons(currentDsSpPrefix1Filter);
+    } else if (container2) {
+        container2.style.display = 'none';
+    }
+}
+
+function generateDsSpPrefix2Buttons(prefix1) {
+    if (currentTab !== 'DS_SP' || !prefix1) return;
+    const prefixes = new Set();
+    allData.forEach(row => {
+        const idSp = String(row[1] || '').trim().toUpperCase();
+        if (idSp.startsWith(prefix1) && idSp.length >= 2) {
+            prefixes.add(idSp.substring(0, 2));
+        }
+    });
+    
+    const sortedPrefixes = Array.from(prefixes).sort();
+    const container = document.getElementById('dsSpPrefix2Buttons');
+    if (!container) return;
+    
+    if (sortedPrefixes.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+    
+    container.innerHTML = `
+        <button type="button" class="${!currentDsSpPrefix2Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix2Filter('')">Tất cả</button>
+        ${sortedPrefixes.map(p => `<button type="button" class="${currentDsSpPrefix2Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix2Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}</button>`).join('')}
     `;
 }
 
