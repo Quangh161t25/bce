@@ -81,7 +81,7 @@ sR2Sh8e3h3Knd6j1tceRIFU=
 
 const XNK_TT_TAB_STORAGE_KEY = 'xnkTtActiveTab';
 
-let currentTab = 'THONG_TIN', allData = [], accessToken = null, tokenExpiry = 0;
+let currentTab = '', allData = [], accessToken = null, tokenExpiry = 0;
 let currentPage = 1, rowsPerPage = 150, filteredData = [];
 let sheetTitleToIdCache = null;
 let thongTinStoreNames = [];
@@ -90,7 +90,8 @@ let dsSpNameMapCache = null;
 let selectedOrderIds = new Set();
 let orderCostDetailsExpanded = false;
 let dsSpOptionsCache = null;
-
+let rangeDataCache = {};
+let allDataCache = {};
 const TAB_LABELS = {
     THONG_TIN: 'THÔNG TIN',
     DON_HANG: 'ĐƠN HÀNG',
@@ -129,11 +130,21 @@ async function getAccessToken() {
 }
 
 async function switchTab(tabName) {
+    if (tabName === currentTab) return;
+    const previousTab = currentTab;
     currentTab = CONFIG.tabs[tabName] ? tabName : 'THONG_TIN';
     try { sessionStorage.setItem(XNK_TT_TAB_STORAGE_KEY, currentTab); } catch (_) { /* ignore */ }
     document.querySelectorAll('.tab').forEach(t => {
         t.classList.toggle('active', t.dataset.tab === currentTab);
     });
+    
+    // Check if we can reuse data
+    const prevRange = CONFIG.tabs[previousTab]?.range;
+    const currRange = CONFIG.tabs[currentTab]?.range;
+    const canReuse = previousTab !== 'THONG_TIN' && currentTab !== 'THONG_TIN' &&
+                     prevRange && currRange && prevRange === currRange &&
+                     allData && allData.length > 0;
+
     document.getElementById('tableWrapper').style.display = 'block';
     document.getElementById('pagination').style.display = 'flex';
     document.getElementById('headerActions').style.display = 'flex';
@@ -191,7 +202,17 @@ async function switchTab(tabName) {
     currentPage = 1;
     if (isDonHangModule || isReturnOrderModule || isStoreDataModule) await fetchThongTinStoreNames();
     if (isReturnOrderModule) setReturnStoreOptions();
-    await fetchData();
+    
+    if (canReuse) {
+        renderHeaders();
+        filterTable();
+    } else if (allDataCache[currentTab]) {
+        allData = allDataCache[currentTab];
+        renderHeaders();
+        filterTable();
+    } else {
+        await fetchData();
+    }
 }
 
 function toggleSidebar() {
@@ -236,6 +257,10 @@ async function fetchData() {
         const tabConfig = CONFIG.tabs[currentTab];
         const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${tabConfig.range}`, { headers: { Authorization: `Bearer ${token}` } });
         const data = await res.json();
+        
+        const rawRows = data.values || [];
+        rangeDataCache[tabConfig.range] = rawRows; // cache the fetched data
+        
         let nhapXuatRows = [];
         if (currentTab === 'TON_KHO') {
             try {
@@ -243,13 +268,13 @@ async function fetchData() {
                 if (resNX.ok) {
                     const nxData = await resNX.json();
                     nhapXuatRows = nxData.values || [];
+                    rangeDataCache['NHAP_XUAT!A2:H'] = nhapXuatRows; // cache this too
                 }
             } catch (err) {
                 console.error('Failed to fetch NHAP_XUAT for TON_KHO', err);
             }
         }
 
-        const rawRows = data.values || [];
         allData = rawRows.map((row, i) => {
             const arr = Array.isArray(row) ? row.slice() : [];
             arr._sheetRow = i + 2;
@@ -309,9 +334,13 @@ async function fetchData() {
         if (currentTab === 'DH_HOAN') {
             filteredData.sort((a, b) => parseDdMmYyyyDate(b[2]) - parseDdMmYyyyDate(a[2]));
         }
+        if (currentTab === 'DS_SP') {
+            filteredData.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
+        }
         populateFilters();
         renderHeaders();
         renderTable();
+        allDataCache[currentTab] = allData;
     } catch (e) {
         console.error("Lỗi khi tải dữ liệu:", e);
         alert("Không thể tải dữ liệu. Vui lòng kiểm tra lại sheet '" + currentTab + "' có tồn tại không.");
@@ -591,6 +620,8 @@ function resetFilters() {
     });
     syncOrderProfitFilterButtons();
     if (typeof syncOrderStatusFilterButtons === 'function') syncOrderStatusFilterButtons();
+    currentDsSpPrefix1Filter = '';
+    currentDsSpPrefix2Filter = '';
 }
 
 async function fetchThongTinStoreNames() {
@@ -861,7 +892,9 @@ function recalculateDonHangRows(rows, options = {}) {
         row[DON_HANG_INDEX['phí thuế']] = taxFee;
         row[DON_HANG_INDEX['phí piship']] = pishipFee;
         
-        if (status === 'HỦY' || status === 'HOÀN' || status === 'TRẢ' || status === 'HOÀN TRẢ') {
+        if (status === 'HỦY') {
+            row[DON_HANG_INDEX.doanh_thu] = 0;
+        } else if (status === 'HOÀN' || status === 'TRẢ') {
             row[DON_HANG_INDEX.doanh_thu] = -pishipFee;
         } else {
             row[DON_HANG_INDEX.doanh_thu] = received;
@@ -870,8 +903,8 @@ function recalculateDonHangRows(rows, options = {}) {
         row[DON_HANG_INDEX.tien_sp] = productTotal || '';
         if (status === 'HỦY') {
             row[DON_HANG_INDEX.trang_thai] = 'HỦY';
-            row[DON_HANG_INDEX.loi_nhuan] = -pishipFee;
-        } else if (status === 'HOÀN' || status === 'TRẢ' || status === 'HOÀN TRẢ') {
+            row[DON_HANG_INDEX.loi_nhuan] = 0;
+        } else if (status === 'HOÀN' || status === 'TRẢ') {
             row[DON_HANG_INDEX.trang_thai] = 'HỦY';
             row[DON_HANG_INDEX.loi_nhuan] = -pishipFee;
         } else {
@@ -1176,7 +1209,21 @@ async function quickUpdateOrderStatus(orderId, newStatus) {
     try {
         const items = targets.map(row => ({ row, sheetRow: getDataSheetRow(row) }));
         await batchWriteRecordRows(items);
-        await fetchData();
+        
+        const range = CONFIG.tabs[currentTab].range;
+        if (rangeDataCache[range]) {
+            targets.forEach(t => {
+                if (t._sheetRow) {
+                    const cacheIdx = t._sheetRow - 2;
+                    if (rangeDataCache[range][cacheIdx]) {
+                        CONFIG.tabs[currentTab].headers.forEach((_, colIdx) => {
+                            rangeDataCache[range][cacheIdx][colIdx] = t[colIdx] ?? '';
+                        });
+                    }
+                }
+            });
+        }
+        
         filterTable();
     } catch (err) {
         console.error(err);
@@ -1202,7 +1249,21 @@ async function quickUpdateOrderHoanHang(orderId, newStatus) {
     try {
         const items = targets.map(row => ({ row, sheetRow: getDataSheetRow(row) }));
         await batchWriteRecordRows(items);
-        await fetchData();
+        
+        const range = CONFIG.tabs[currentTab].range;
+        if (rangeDataCache[range]) {
+            targets.forEach(t => {
+                if (t._sheetRow) {
+                    const cacheIdx = t._sheetRow - 2;
+                    if (rangeDataCache[range][cacheIdx]) {
+                        CONFIG.tabs[currentTab].headers.forEach((_, colIdx) => {
+                            rangeDataCache[range][cacheIdx][colIdx] = t[colIdx] ?? '';
+                        });
+                    }
+                }
+            });
+        }
+        
         filterTable();
     } catch (err) {
         console.error(err);
@@ -1614,7 +1675,9 @@ function recalculateDonHangDetail() {
     const orderStatusInput = document.querySelector(`[data-order-header="trang_thai"]`);
     const status = String(statusInput?.value || '').trim().toLocaleUpperCase('vi');
     
-    if (status === 'HỦY' || status === 'HOÀN' || status === 'TRẢ' || status === 'HOÀN TRẢ') {
+    if (status === 'HỦY') {
+        if (receivedInput) receivedInput.value = formatDisplayNumber(0);
+    } else if (status === 'HOÀN' || status === 'TRẢ') {
         if (receivedInput) receivedInput.value = formatDisplayNumber(-parseMoney(pishipFeeInput?.value));
     } else {
         if (receivedInput) receivedInput.value = formatDisplayNumber(received);
@@ -1623,8 +1686,8 @@ function recalculateDonHangDetail() {
     if (profitInput) {
         if (status === 'HỦY') {
             if (orderStatusInput) orderStatusInput.value = 'HỦY';
-            profitInput.value = formatDisplayNumber(-parseMoney(pishipFeeInput?.value));
-        } else if (status === 'HOÀN' || status === 'TRẢ' || status === 'HOÀN TRẢ') {
+            profitInput.value = formatDisplayNumber(0);
+        } else if (status === 'HOÀN' || status === 'TRẢ') {
             if (orderStatusInput) orderStatusInput.value = 'HỦY';
             profitInput.value = formatDisplayNumber(-parseMoney(pishipFeeInput?.value));
         } else {
@@ -2095,6 +2158,9 @@ function filterTable() {
     if (currentTab === 'DH_HOAN') {
         filteredData.sort((a, b) => parseDdMmYyyyDate(b[2]) - parseDdMmYyyyDate(a[2]));
     }
+    if (currentTab === 'DS_SP') {
+        filteredData.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
+    }
     currentPage = 1;
     renderTable();
 }
@@ -2133,15 +2199,7 @@ function setDsSpPrefix1Filter(prefix) {
         btn.classList.toggle('active', btn.dataset.prefix === prefix);
     });
     
-    // Only show 2nd level buttons if a 1st level is selected
-    const container2 = document.getElementById('dsSpPrefix2Buttons');
-    if (prefix && container2) {
-        container2.style.display = 'flex';
-        generateDsSpPrefix2Buttons(prefix);
-    } else if (container2) {
-        container2.style.display = 'none';
-    }
-    
+    generateDsSpPrefix2Buttons(prefix);
     filterTable();
 }
 
@@ -2157,7 +2215,7 @@ function generateDsSpPrefix1Buttons() {
     if (currentTab !== 'DS_SP') return;
     const prefixes = new Set();
     allData.forEach(row => {
-        const idSp = String(row[1] || '').trim().toUpperCase(); // id_sp
+        const idSp = String(row[1] || '').trim().toUpperCase();
         if (idSp.length >= 1) prefixes.add(idSp.substring(0, 1));
     });
     
@@ -2170,22 +2228,15 @@ function generateDsSpPrefix1Buttons() {
         ${sortedPrefixes.map(p => `<button type="button" class="${currentDsSpPrefix1Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix1Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}</button>`).join('')}
     `;
     
-    // Also regenerate level 2 if needed
-    const container2 = document.getElementById('dsSpPrefix2Buttons');
-    if (currentDsSpPrefix1Filter && container2) {
-        container2.style.display = 'flex';
-        generateDsSpPrefix2Buttons(currentDsSpPrefix1Filter);
-    } else if (container2) {
-        container2.style.display = 'none';
-    }
+    generateDsSpPrefix2Buttons(currentDsSpPrefix1Filter);
 }
 
 function generateDsSpPrefix2Buttons(prefix1) {
-    if (currentTab !== 'DS_SP' || !prefix1) return;
+    if (currentTab !== 'DS_SP') return;
     const prefixes = new Set();
     allData.forEach(row => {
         const idSp = String(row[1] || '').trim().toUpperCase();
-        if (idSp.startsWith(prefix1) && idSp.length >= 2) {
+        if ((!prefix1 || idSp.startsWith(prefix1)) && idSp.length >= 2) {
             prefixes.add(idSp.substring(0, 2));
         }
     });
@@ -2193,11 +2244,6 @@ function generateDsSpPrefix2Buttons(prefix1) {
     const sortedPrefixes = Array.from(prefixes).sort();
     const container = document.getElementById('dsSpPrefix2Buttons');
     if (!container) return;
-    
-    if (sortedPrefixes.length === 0) {
-        container.style.display = 'none';
-        return;
-    }
     
     container.innerHTML = `
         <button type="button" class="${!currentDsSpPrefix2Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix2Filter('')">Tất cả</button>
@@ -2718,11 +2764,11 @@ async function processFiles(files) {
 
                 const updates = [];
                 allRowsToUpload.forEach(hoanRow => {
-                    const mdh = String(hoanRow[3] || '').trim();
+                    const mdh = String(hoanRow[3] || '').replace(/^'/, '').trim().toLocaleUpperCase('vi');
                     const newStatus = String(hoanRow[1] || '').trim().toLocaleUpperCase('vi');
                     if (!mdh || !newStatus) return;
 
-                    const targets = dhRows.filter(r => String(r[DON_HANG_INDEX.mdh] || '').trim() === mdh && String(r[DON_HANG_INDEX.tinh_trang] || '').trim() !== newStatus);
+                    const targets = dhRows.filter(r => String(r[DON_HANG_INDEX.mdh] || '').replace(/^'/, '').trim().toLocaleUpperCase('vi') === mdh && String(r[DON_HANG_INDEX.tinh_trang] || '').trim().toLocaleUpperCase('vi') !== newStatus);
                     if (targets.length) {
                         targets.forEach(r => r[DON_HANG_INDEX.tinh_trang] = newStatus);
                         recalculateDonHangRows(targets);
@@ -2741,7 +2787,17 @@ async function processFiles(files) {
                         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ valueInputOption: 'RAW', data: batchData })
                     });
-                    if (!batchRes.ok) console.error("Lỗi đồng bộ DON_HANG:", await batchRes.text());
+                    if (!batchRes.ok) {
+                        console.error("Lỗi đồng bộ DON_HANG:", await batchRes.text());
+                    } else {
+                        rangeDataCache[dhRange] = dhRows.map(r => {
+                            const arr = [...r];
+                            delete arr._sheetRow;
+                            return arr;
+                        });
+                        delete allDataCache['DON_HANG'];
+                        delete allDataCache['DON_HANG_CHI_TIET'];
+                    }
                 }
             } catch (err) {
                 console.error("Lỗi khi đồng bộ về DON_HANG:", err);
