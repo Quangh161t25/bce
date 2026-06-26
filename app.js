@@ -38,16 +38,16 @@ sR2Sh8e3h3Knd6j1tceRIFU=
             imgCol: 10
         },
         'DON_HANG': {
-            range: 'DON_HANG!A2:X',
-            headers: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'hoan_hang'],
-            displayHeaders: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'chi_phi', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'hoan_hang', 'mvd_tra', 'hh_kho'],
-            priceCols: [5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 21, 22]
+            range: 'DON_HANG!A2:Y',
+            headers: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'afl', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'hoan_hang'],
+            displayHeaders: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'chi_phi', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'afl', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'hoan_hang', 'mvd_tra', 'hh_kho'],
+            priceCols: [5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 22, 23]
         },
         'DON_HANG_CHI_TIET': {
-            range: 'DON_HANG!A2:X',
-            headers: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'hoan_hang'],
+            range: 'DON_HANG!A2:Y',
+            headers: ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'afl', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'hoan_hang'],
             displayHeaders: ['gian_hang', 'ngay', 'mdh', 'mvd', 'tong_tien', 'chi_phi', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'hoan_hang', 'mvd_tra', 'hh_kho'],
-            priceCols: [5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 21, 22]
+            priceCols: [5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 22, 23]
         },
         'HOA_DON': {
             range: 'HOA_DON!A2:D',
@@ -111,8 +111,8 @@ const ID_PREFIXES = {
 
 const DON_HANG_HEADERS = CONFIG.tabs.DON_HANG.headers;
 const DON_HANG_INDEX = Object.fromEntries(DON_HANG_HEADERS.map((header, index) => [header, index]));
-const DON_HANG_NUMERIC_HEADERS = new Set(['tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'slg', 'don_gia', 'thanh_tien']);
-const DON_HANG_COST_DETAIL_HEADERS = ['Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship'];
+const DON_HANG_NUMERIC_HEADERS = new Set(['tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'afl', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan', 'slg', 'don_gia', 'thanh_tien']);
+const DON_HANG_COST_DETAIL_HEADERS = ['Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'afl'];
 let selectedReturnOrderIds = new Set();
 let returnStatusByOrderCache = null;
 let returnStatusByMvdCache = null;
@@ -853,17 +853,24 @@ function recalculateDonHangRows(rows, options = {}) {
         const transactionFee = parseMoney(row[DON_HANG_INDEX['Phí xử lý giao dịch']]);
         const taxFee = roundMoney((total - shopDiscount) * 0.015);
         const pishipFee = 2700;
+        const aflFee = parseMoney(row[DON_HANG_INDEX['afl']]);
         const otherFee = parseMoney(row[DON_HANG_INDEX['phí khác']]);
         const productTotal = itemTotalsByOrder.get(getDonHangOrderKey(row)) || 0;
-        const received = roundMoney(total - shopDiscount - fixedFee - serviceFee - transactionFee - taxFee - pishipFee);
+        const received = roundMoney(total - shopDiscount - fixedFee - serviceFee - transactionFee - taxFee - pishipFee - aflFee);
         const status = String(row[DON_HANG_INDEX.tinh_trang] || '').trim().toLocaleUpperCase('vi');
         row[DON_HANG_INDEX['phí thuế']] = taxFee;
         row[DON_HANG_INDEX['phí piship']] = pishipFee;
-        row[DON_HANG_INDEX.doanh_thu] = received;
+        
+        if (status === 'HỦY' || status === 'HOÀN' || status === 'TRẢ' || status === 'HOÀN TRẢ') {
+            row[DON_HANG_INDEX.doanh_thu] = -pishipFee;
+        } else {
+            row[DON_HANG_INDEX.doanh_thu] = received;
+        }
+        
         row[DON_HANG_INDEX.tien_sp] = productTotal || '';
         if (status === 'HỦY') {
             row[DON_HANG_INDEX.trang_thai] = 'HỦY';
-            row[DON_HANG_INDEX.loi_nhuan] = 0;
+            row[DON_HANG_INDEX.loi_nhuan] = -pishipFee;
         } else if (status === 'HOÀN' || status === 'TRẢ' || status === 'HOÀN TRẢ') {
             row[DON_HANG_INDEX.trang_thai] = 'HỦY';
             row[DON_HANG_INDEX.loi_nhuan] = -pishipFee;
@@ -1498,7 +1505,7 @@ async function openDonHangDetail(orderId) {
     }
 
     const generalHeaders = ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tinh_trang', 'trang_thai'];
-    const financeHeaders = ['tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan'];
+    const financeHeaders = ['tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'afl', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan'];
     const itemHeaders = ['SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien'];
     const firstRow = rows[0];
     editingDonHangRows = rows;
@@ -1576,6 +1583,7 @@ function recalculateDonHangDetail() {
     const transactionFeeInput = document.querySelector(`[data-order-header="Phí xử lý giao dịch"]`);
     const taxFeeInput = document.querySelector(`[data-order-header="phí thuế"]`);
     const pishipFeeInput = document.querySelector(`[data-order-header="phí piship"]`);
+    const aflFeeInput = document.querySelector(`[data-order-header="afl"]`);
     const receivedInput = document.querySelector(`[data-order-header="doanh_thu"]`);
     const taxFee = roundMoney((parseMoney(totalInput?.value) - parseMoney(shopDiscountInput?.value)) * 0.015);
     if (taxFeeInput) taxFeeInput.value = formatDisplayNumber(taxFee);
@@ -1587,8 +1595,8 @@ function recalculateDonHangDetail() {
         - parseMoney(transactionFeeInput?.value)
         - taxFee
         - parseMoney(pishipFeeInput?.value)
+        - parseMoney(aflFeeInput?.value)
     );
-    if (receivedInput) receivedInput.value = formatDisplayNumber(received);
     let productTotal = 0;
     editingDonHangRows.forEach((_, rowIndex) => {
         const quantityInput = document.querySelector(`[data-order-item-row="${rowIndex}"][data-order-item-header="slg"]`);
@@ -1605,13 +1613,20 @@ function recalculateDonHangDetail() {
     const statusInput = document.querySelector(`[data-order-header="tinh_trang"]`);
     const orderStatusInput = document.querySelector(`[data-order-header="trang_thai"]`);
     const status = String(statusInput?.value || '').trim().toLocaleUpperCase('vi');
+    
+    if (status === 'HỦY' || status === 'HOÀN' || status === 'TRẢ' || status === 'HOÀN TRẢ') {
+        if (receivedInput) receivedInput.value = formatDisplayNumber(-parseMoney(pishipFeeInput?.value));
+    } else {
+        if (receivedInput) receivedInput.value = formatDisplayNumber(received);
+    }
+
     if (profitInput) {
         if (status === 'HỦY') {
             if (orderStatusInput) orderStatusInput.value = 'HỦY';
-            profitInput.value = formatDisplayNumber(0);
+            profitInput.value = formatDisplayNumber(-parseMoney(pishipFeeInput?.value));
         } else if (status === 'HOÀN' || status === 'TRẢ' || status === 'HOÀN TRẢ') {
             if (orderStatusInput) orderStatusInput.value = 'HỦY';
-            profitInput.value = formatDisplayNumber(parseMoney(pishipFeeInput?.value));
+            profitInput.value = formatDisplayNumber(-parseMoney(pishipFeeInput?.value));
         } else {
             if (orderStatusInput) orderStatusInput.value = 'HOÀN THÀNH';
             profitInput.value = formatDisplayNumber(parseMoney(receivedInput?.value) - parseMoney(otherFeeInput?.value) - productTotal);
@@ -1655,16 +1670,19 @@ function addDonHangItem() {
 async function saveDonHangDetail() {
     if (!editingDonHangRows.length) return;
     recalculateDonHangDetail();
-    const detailHeaders = getDisplayHeaders('DON_HANG');
     const itemHeaders = ['SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien'];
-    const commonValues = Object.fromEntries(detailHeaders.map(header => [
-        header,
-        document.querySelector(`[data-order-header="${CSS.escape(header)}"]`)?.value.trim() || ''
+    const headerInputs = Array.from(document.querySelectorAll('[data-order-header]'));
+    const commonValues = Object.fromEntries(headerInputs.map(input => [
+        input.getAttribute('data-order-header'),
+        input.value.trim()
     ]));
+    const detailHeadersToSave = Object.keys(commonValues);
     const updatedRows = editingDonHangRows.map((sourceRow, rowIndex) => {
         const row = normalizeRow(sourceRow);
-        detailHeaders.forEach(header => {
-            row[DON_HANG_INDEX[header]] = DON_HANG_NUMERIC_HEADERS.has(header) ? parseMoney(commonValues[header]) : commonValues[header];
+        detailHeadersToSave.forEach(header => {
+            if (DON_HANG_INDEX[header] !== undefined) {
+                row[DON_HANG_INDEX[header]] = DON_HANG_NUMERIC_HEADERS.has(header) ? parseMoney(commonValues[header]) : commonValues[header];
+            }
         });
         itemHeaders.forEach(header => {
             const value = document.querySelector(`[data-order-item-row="${rowIndex}"][data-order-item-header="${CSS.escape(header)}"]`)?.value.trim() || '';
@@ -2417,7 +2435,7 @@ function normalizeOrderStatus(orderStatus, returnStatus) {
     return 'HOÀN THÀNH';
 }
 
-function buildDonHangRows(rows) {
+function buildDonHangRows(rows, priceMap) {
     const selectedStore = String(document.getElementById('storeFilter')?.value || '').trim();
     if (!selectedStore) throw new Error('Vui lòng chọn gian hàng trước khi thêm Excel.');
 
@@ -2442,8 +2460,12 @@ function buildDonHangRows(rows) {
         row[DON_HANG_INDEX.tinh_trang] = status;
         row[DON_HANG_INDEX.trang_thai] = status === 'HỦY' ? 'HỦY' : 'HOÀN THÀNH';
         row[DON_HANG_INDEX['SKU phân loại hàng']] = sku;
-        row[DON_HANG_INDEX.id_sp] = sku.slice(0, 4);
+        const idSp = sku.slice(0, 4);
+        row[DON_HANG_INDEX.id_sp] = idSp;
         row[DON_HANG_INDEX.slg] = parseMoney(getExcelCell(source, 'Số lượng'));
+        if (priceMap && priceMap.has(idSp)) {
+            row[DON_HANG_INDEX.don_gia] = priceMap.get(idSp);
+        }
         return row;
     }).filter(row => row[DON_HANG_INDEX.mdh]);
 
@@ -2472,7 +2494,11 @@ function readDonHangExcelRows(file) {
                     });
                     return row;
                 });
-                resolve(buildDonHangRows(rows));
+                fetchDsSpGiaBanMap().then(priceMap => {
+                    resolve(buildDonHangRows(rows, priceMap));
+                }).catch(err => {
+                    reject(err);
+                });
             } catch (err) {
                 reject(err);
             }
