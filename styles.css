@@ -972,3 +972,117 @@
             from { transform: translateX(100%); }
             to { transform: translateX(0); }
         }
+        .tinh-gia-modal {
+            width: 90%;
+            max-width: 600px;
+        }
+        
+        .tinh-gia-section {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: #fff;
+        }
+
+        .tinh-gia-section.highlight-section {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .tinh-gia-section.result-section {
+            background: #eef2ff;
+            border-color: #c7d2fe;
+        }
+
+        .tinh-gia-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .tinh-gia-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .tinh-gia-grid {
+            display: grid;
+            grid-template-columns: 1fr 100px;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .tinh-gia-row-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            color: #475569;
+            font-size: 0.95rem;
+        }
+
+        .tinh-gia-row-info.total-row {
+            font-weight: bold;
+            font-size: 1.1rem;
+            color: #1e293b;
+        }
+
+        .tinh-gia-row-info.profit-row {
+            color: var(--primary);
+        }
+
+        .quick-btn {
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            background: #e2e8f0;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        .quick-btn:hover {
+            background: #cbd5e1;
+        }
+        .inline-edit-input {
+            width: 100%;
+            min-width: 60px;
+            padding: 4px 6px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            box-sizing: border-box;
+            text-align: right;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            color: #334155;
+            transition: all 0.2s;
+        }
+        
+        .inline-edit-input:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.2);
+            background: #fff;
+        }
+        
+        .inline-edit-input[data-header="gia_đăng"],
+        .inline-edit-input[data-header="lai_mong_muon"] {
+            font-weight: 600;
+            color: var(--primary);
+            min-width: 130px;
+        }
+        .quick-btn-inline {
+            background: #eef2ff;
+            color: var(--primary);
+            border: 1px solid #c7d2fe;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 6px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .quick-btn-inline:hover {
+            background: #e0e7ff;
+            border-color: var(--primary);
+        }

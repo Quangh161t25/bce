@@ -72,6 +72,10 @@
                     <i data-lucide="warehouse" style="width:18px;"></i>
                     <span>TỒN KHO</span>
                 </div>
+                <div class="tab" data-tab="TINH_GIA" onclick="switchTab('TINH_GIA')">
+                    <i data-lucide="calculator" style="width:18px;"></i>
+                    <span>TÍNH GIÁ</span>
+                </div>
             </div>
         </aside>
 
@@ -236,6 +240,90 @@
     </div>
     <datalist id="truongOptions"></datalist>
     <datalist id="nccOptions"></datalist>
+    <div class="modal-mask" id="tinhGiaModal">
+        <form class="modal tinh-gia-modal" onsubmit="saveTinhGia(event)">
+            <div class="modal-header">
+                <h2 id="tinhGiaTitle">Tính Giá Sản Phẩm</h2>
+                <button type="button" class="icon-btn" onclick="closeTinhGiaForm()" title="Đóng">
+                    <i data-lucide="x" style="width:18px;"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="tinh-gia-section">
+                    <div class="tinh-gia-row">
+                        <label>Tên sản phẩm</label>
+                        <input type="text" id="tg_ten_sp" readonly style="flex:1;">
+                    </div>
+                    <div class="tinh-gia-row">
+                        <label>Giá nhập NCC</label>
+                        <input type="text" id="tg_gia_nhap_ncc" readonly style="width: 150px; text-align: right;">
+                    </div>
+                </div>
+
+                <div class="tinh-gia-section highlight-section">
+                    <div class="tinh-gia-row">
+                        <label>Giá đăng <span style="color:red">*</span></label>
+                        <input type="text" id="tg_gia_dang" class="currency-input" oninput="formatCurrencyInput(this); handleTinhGiaInput('gia_dang')" style="width: 150px; text-align: right; font-weight: bold;">
+                    </div>
+                    <div class="tinh-gia-row">
+                        <label>Lợi nhuận (%) <span style="color:red">*</span></label>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="number" step="0.1" id="tg_loi_nhuan_pt" oninput="handleTinhGiaInput('loi_nhuan_pt')" style="width: 80px; text-align: right;">
+                            <button type="button" class="quick-btn" onclick="setQuickLoiNhuan(10)">10%</button>
+                            <button type="button" class="quick-btn" onclick="setQuickLoiNhuan(20)">20%</button>
+                        </div>
+                    </div>
+                    <div class="tinh-gia-row">
+                        <label>Lãi mong muốn <span style="color:red">*</span></label>
+                        <input type="text" id="tg_lai_mong_muon" class="currency-input" oninput="formatCurrencyInput(this); handleTinhGiaInput('lai_mong_muon')" style="width: 150px; text-align: right; font-weight: bold; color: var(--primary);">
+                    </div>
+                </div>
+
+                <div class="tinh-gia-section">
+                    <div class="tinh-gia-grid">
+                        <label>Phí Ads (%)</label>
+                        <input type="number" step="0.1" id="tg_phi_ads_pt" oninput="handleTinhGiaInput('phi')" style="text-align: right;">
+                        
+                        <label>Phí Affiliate (%)</label>
+                        <input type="number" step="0.1" id="tg_phi_aff_pt" oninput="handleTinhGiaInput('phi')" style="text-align: right;">
+                        
+                        <label>Phí cố định (%)</label>
+                        <input type="number" step="0.1" id="tg_phi_co_dinh_pt" oninput="handleTinhGiaInput('phi')" style="text-align: right;">
+                        
+                        <label>Phí giao dịch (%)</label>
+                        <input type="number" step="0.1" id="tg_phi_giao_dich_pt" oninput="handleTinhGiaInput('phi')" style="text-align: right;">
+                        
+                        <label>XTRA (%)</label>
+                        <input type="number" step="0.1" id="tg_xtra_pt" oninput="handleTinhGiaInput('phi')" style="text-align: right;">
+                        
+                        <label>Thuế (%)</label>
+                        <input type="number" step="0.1" id="tg_thue_pt" oninput="handleTinhGiaInput('phi')" style="text-align: right;">
+                    </div>
+                </div>
+
+                <div class="tinh-gia-section result-section">
+                    <div class="tinh-gia-row-info"><span>Phí cố định:</span> <span id="tg_phi_co_dinh_val">0</span></div>
+                    <div class="tinh-gia-row-info"><span>Phí giao dịch:</span> <span id="tg_phi_giao_dich_val">0</span></div>
+                    <div class="tinh-gia-row-info"><span>XTRA:</span> <span id="tg_xtra_val">0</span></div>
+                    <div class="tinh-gia-row-info"><span>Thuế:</span> <span id="tg_thue_val">0</span></div>
+                    <div class="tinh-gia-row-info"><span>Phí hạ tầng:</span> <span id="tg_phi_ha_tang_val">3.000</span></div>
+                    <div class="tinh-gia-row-info"><span>PiShip:</span> <span id="tg_phi_piship_val">2.700</span></div>
+                    <div class="tinh-gia-row-info"><span>Phí Ads:</span> <span id="tg_phi_ads_val">0</span></div>
+                    <div class="tinh-gia-row-info"><span>Phí Affiliate:</span> <span id="tg_phi_aff_val">0</span></div>
+                    <hr>
+                    <div class="tinh-gia-row-info total-row"><span>TỔNG CHI PHÍ:</span> <span id="tg_tong_chi_phi">0</span></div>
+                    <div class="tinh-gia-row-info total-row profit-row"><span>LỢI NHUẬN:</span> <span id="tg_loi_nhuan_val">0</span></div>
+                    <div class="tinh-gia-row-info total-row profit-row"><span>TỶ SUẤT LỢI NHUẬN:</span> <span id="tg_ty_suat_val">0%</span></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <input type="hidden" id="tg_rowIndex">
+                <button type="button" class="btn secondary" onclick="closeTinhGiaForm()">Hủy</button>
+                <button type="submit" class="btn primary">Lưu</button>
+            </div>
+        </form>
+    </div>
+
     <script src="app.js?v=20260611"></script>
 </body>
 

@@ -75,6 +75,12 @@ sR2Sh8e3h3Knd6j1tceRIFU=
             headers: ['id', 'gian', 'id_sp', 'ton_dau'],
             displayHeaders: ['id', 'gian', 'id_sp', 'ton_dau', 'nhap', 'xuat', 'ton'],
             priceCols: [3]
+        },
+        'TINH_GIA': {
+            range: 'TINH_GIA!A2:V',
+            headers: ['id_sp_con', 'id_sp', 'ten_sp', 'gia_nhap', 'gia_ban', 'gia_đong_goi', 'gia_thap_nhat', 'loi_nhuan%', 'lai_mong_muon', 'gia_đăng', 'phi_ads_%', 'phi_aff_%', '11%_phi_co_dinh', 'phi_co_dinh', '6%_phi_giao_dich', 'phi_giao_dich', '5.5% xtra', 'xtra', '1,5%_thue', 'thue', 'phi_ha_tang3.000_₫', 'phi_piship'],
+            displayHeaders: ['id_sp_con', 'id_sp', 'ten_sp', 'gia_nhap', 'gia_ban', 'gia_đong_goi', 'gia_thap_nhat', 'loi_nhuan%', 'lai_mong_muon', 'gia_đăng', 'phi_ads_%', 'phi_aff_%', '11%_phi_co_dinh', 'phi_co_dinh', '6%_phi_giao_dich', 'phi_giao_dich', '5.5% xtra', 'xtra', '1,5%_thue', 'thue', 'phi_ha_tang3.000_₫', 'phi_piship'],
+            priceCols: [3, 4, 5, 6, 8, 9, 13, 15, 17, 19, 20, 21]
         }
     }
 };
@@ -193,7 +199,7 @@ async function switchTab(tabName) {
     }
     const dsSpFilters = document.getElementById('dsSpFilters');
     if (dsSpFilters) {
-        dsSpFilters.style.display = currentTab === 'DS_SP' ? 'flex' : 'none';
+        dsSpFilters.style.display = (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') ? 'flex' : 'none';
     }
     document.getElementById('searchInput').value = '';
     selectedOrderIds.clear();
@@ -316,9 +322,7 @@ async function fetchData() {
                 row['ton'] = tonDau + nhap - xuat;
             });
         }
-        if (currentTab === 'DS_SP') {
-            generateDsSpPrefix1Buttons();
-        }
+        if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') { generateDsSpPrefix1Buttons(); }
         filteredData = currentTab === 'DON_HANG' ? getDonHangSummaryRows() : [...allData];
         if (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') {
             try { await fetchReturnStatusByOrderMap(true); } catch (err) { console.error(err); }
@@ -336,6 +340,9 @@ async function fetchData() {
         }
         if (currentTab === 'DS_SP') {
             filteredData.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
+        }
+        if (currentTab === 'TINH_GIA') {
+            filteredData.sort((a, b) => String(b[1] || '').localeCompare(String(a[1] || '')));
         }
         populateFilters();
         renderHeaders();
@@ -357,7 +364,7 @@ function renderHeaders() {
             ? `<th class="select-col"><input type="checkbox" onchange="toggleAllReturnOrders(this.checked)" title="Chọn tất cả đơn trả"></th>`
             : '';
     head.innerHTML = `<tr>${selectHeader}${getDisplayHeaders().map(h => h === 'chi_phi'
-        ? `<th class="cost-toggle-header" onclick="toggleOrderCostDetails()">CHI_PHÍ ${orderCostDetailsExpanded ? '−' : '+'}</th>`
+        ? `<th class="cost-toggle-header" onclick="toggleOrderCostDetails()">CHI_PHÃ ${orderCostDetailsExpanded ? '−' : '+'}</th>`
         : `<th>${h.toUpperCase()}</th>`).join('')}</tr>`;
 }
 
@@ -630,12 +637,12 @@ async function fetchThongTinStoreNames() {
         const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/THONG_TIN!C2:C`, {
             headers: { Authorization: `Bearer ${token}` }
         });
-        if (!res.ok) throw new Error('Không đọc được danh sách gian hàng.');
+        if (!res.ok) throw new Error('KhÃ´ng Ä‘á»c Ä‘Æ°á»£c danh sÃ¡ch gian hàng.');
         const data = await res.json();
         thongTinStoreNames = [...new Set((data.values || []).map(row => String(row[0] || '').trim()).filter(Boolean))].sort();
         setStoreFilterOptions(thongTinStoreNames);
     } catch (err) {
-        console.error('Lỗi khi tải danh sách gian hàng:', err);
+        console.error('Lá»—i khi táº£i danh sÃ¡ch gian hàng:', err);
         thongTinStoreNames = [];
     }
 }
@@ -646,21 +653,22 @@ function getDataSheetRow(row) {
     return idx >= 0 ? idx + 2 : 0;
 }
 
-async function writeRecordRow(row, sheetRow) {
+async function writeRecordRow(row, sheetRow, startColIndex = 0) {
     const token = await getAccessToken();
-    const cleanRow = normalizeRow(row);
+    const cleanRow = normalizeRow(row).slice(startColIndex);
     const rowNum = Number(sheetRow);
-    if (!rowNum || rowNum < 2) throw new Error('Không xác định được dòng cần cập nhật.');
-    const endCol = colName(getStorageHeaders().length - 1);
+    if (!rowNum || rowNum < 2) throw new Error('KhÃ´ng xÃ¡c Ä‘á»‹nh Ä‘Æ°á»£c dòng cáº§n cáº­p nháº­t.');
+    const startColStr = colName(startColIndex);
+    const endColStr = colName(getStorageHeaders().length - 1);
 
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${currentTab}!A${rowNum}:${endCol}${rowNum}?valueInputOption=RAW`, {
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${currentTab}!${startColStr}${rowNum}:${endColStr}${rowNum}?valueInputOption=RAW`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [cleanRow] })
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Cập nhật dòng thất bại.');
+        throw new Error(err.error?.message || 'Cáº­p nháº­t dòng tháº¥t báº¡i.');
     }
 }
 
@@ -679,7 +687,7 @@ async function batchWriteRecordRows(items) {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Cập nhật nhiều dòng thất bại.');
+        throw new Error(err.error?.message || 'Cáº­p nháº­t nhiá»u dòng tháº¥t báº¡i.');
     }
 }
 
@@ -691,7 +699,7 @@ async function getSheetIdByTitle(title) {
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            throw new Error(err.error?.message || 'Không đọc được metadata sheet.');
+            throw new Error(err.error?.message || 'KhÃ´ng Ä‘á»c Ä‘Æ°á»£c metadata sheet.');
         }
         const data = await res.json();
         sheetTitleToIdCache = new Map((data.sheets || []).map(sheet => [sheet.properties.title, sheet.properties.sheetId]));
@@ -722,7 +730,7 @@ async function deleteSheetRows(sheetTitle, sheetRows) {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Xóa dòng thất bại.');
+        throw new Error(err.error?.message || 'XÃ³a dòng tháº¥t báº¡i.');
     }
 }
 
@@ -736,7 +744,7 @@ async function appendRecordRows(rows) {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Thêm dòng thất bại.');
+        throw new Error(err.error?.message || 'ThÃªm dòng tháº¥t báº¡i.');
     }
 }
 
@@ -749,7 +757,7 @@ async function clearCurrentTabData() {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Xóa dữ liệu cũ thất bại.');
+        throw new Error(err.error?.message || 'XÃ³a dá»¯ liá»‡u cÅ© tháº¥t báº¡i.');
     }
 }
 
@@ -780,7 +788,7 @@ async function upsertRecordRows(rows) {
             generatedIds.push(id);
         }
     });
-    if (!cleanRows.length) throw new Error('Không có dòng dữ liệu hợp lệ.');
+    if (!cleanRows.length) throw new Error('KhÃ´ng cÃ³ dòng dá»¯ liá»‡u há»£p lá»‡.');
 
     const existingById = new Map(allData.map(row => [getRowId(row), row]).filter(([id]) => id));
     const updates = [];
@@ -890,7 +898,7 @@ function recalculateDonHangRows(rows, options = {}) {
         const received = roundMoney(total - shopDiscount - fixedFee - serviceFee - transactionFee - taxFee - pishipFee - aflFee);
         const status = String(row[DON_HANG_INDEX.tinh_trang] || '').trim().toLocaleUpperCase('vi');
         row[DON_HANG_INDEX['phí thuế']] = taxFee;
-        row[DON_HANG_INDEX['phí piship']] = pishipFee;
+        row[DON_HANG_INDEX['phÃ­ piship']] = pishipFee;
         
         if (status === 'HỦY') {
             row[DON_HANG_INDEX.doanh_thu] = 0;
@@ -908,7 +916,7 @@ function recalculateDonHangRows(rows, options = {}) {
             row[DON_HANG_INDEX.trang_thai] = 'HỦY';
             row[DON_HANG_INDEX.loi_nhuan] = -pishipFee;
         } else {
-            row[DON_HANG_INDEX.trang_thai] = 'HOÀN THÀNH';
+            row[DON_HANG_INDEX.trang_thai] = 'HOÀN THÃ€NH';
             row[DON_HANG_INDEX.loi_nhuan] = roundMoney(received - otherFee - productTotal);
         }
     });
@@ -916,7 +924,7 @@ function recalculateDonHangRows(rows, options = {}) {
 }
 
 function hasDonHangFormulaChanges(before, after) {
-    return ['phí thuế', 'phí piship', 'doanh_thu', 'tien_sp', 'loi_nhuan', 'thanh_tien']
+    return ['phí thuế', 'phÃ­ piship', 'doanh_thu', 'tien_sp', 'loi_nhuan', 'thanh_tien']
         .some(header => String(before[DON_HANG_INDEX[header]] ?? '').trim() !== String(after[DON_HANG_INDEX[header]] ?? '').trim());
 }
 
@@ -951,7 +959,7 @@ async function fetchDsSpGiaBanMap() {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Không đọc được sheet DS_SP.');
+        throw new Error(err.error?.message || 'KhÃ´ng Ä‘á»c Ä‘Æ°á»£c sheet DS_SP.');
     }
     const data = await res.json();
     const map = new Map();
@@ -971,7 +979,7 @@ async function fetchDsSpNameMap() {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Không đọc được tên sản phẩm từ sheet DS_SP.');
+        throw new Error(err.error?.message || 'KhÃ´ng Ä‘á»c Ä‘Æ°á»£c tÃªn sáº£n pháº©m tá»« sheet DS_SP.');
     }
     const data = await res.json();
     dsSpNameMapCache = new Map();
@@ -991,7 +999,7 @@ async function fetchDsSpOptions() {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Không đọc được danh sách sản phẩm từ sheet DS_SP.');
+        throw new Error(err.error?.message || 'KhÃ´ng Ä‘á»c Ä‘Æ°á»£c danh sÃ¡ch sáº£n pháº©m tá»« sheet DS_SP.');
     }
     const data = await res.json();
     const seen = new Set();
@@ -1014,7 +1022,7 @@ async function fetchReturnStatusByOrderMap(force = false) {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Không đọc được sheet DH_HOAN.');
+        throw new Error(err.error?.message || 'KhÃ´ng Ä‘á»c Ä‘Æ°á»£c sheet DH_HOAN.');
     }
     const data = await res.json();
     returnStatusByOrderCache = new Map();
@@ -1045,13 +1053,13 @@ async function fillVisibleOrderProductPrices() {
     if (currentTab !== 'DON_HANG') return;
     const selectedIds = getSelectedOrderIds();
     if (!selectedIds.length) {
-        alert('Vui lòng tick chọn đơn hàng cần điền giá.');
+        alert('Vui lÃ²ng tick chá»n Ä‘Æ¡n hÃ ng cáº§n Ä‘iá»n giÃ¡.');
         return;
     }
     if (!confirm(`Điền giá bán từ DS_SP cho ${selectedIds.length} đơn hàng đã chọn?`)) return;
 
     document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Đang điền giá sản phẩm từ DS_SP...';
+    document.querySelector('#loading p').innerText = 'Äang Ä‘iá»n giÃ¡ sáº£n pháº©m tá»« DS_SP...';
     try {
         const priceMap = await fetchDsSpGiaBanMap();
         const selectedOrderIdSet = new Set(selectedIds);
@@ -1082,7 +1090,7 @@ async function fillVisibleOrderProductPrices() {
         alert(`Đã điền giá cho ${matched} dòng sản phẩm. Không tìm thấy giá: ${unmatched} dòng. Đã đồng bộ ${changedRows.length} dòng trên sheet.`);
     } catch (err) {
         console.error(err);
-        alert('Không điền được giá sản phẩm: ' + err.message);
+        alert('KhÃ´ng Ä‘iá»n Ä‘Æ°á»£c giÃ¡ sáº£n pháº©m: ' + err.message);
     } finally {
         document.getElementById('loading').style.display = 'none';
     }
@@ -1096,18 +1104,18 @@ async function deleteSelectedOrders() {
     if (currentTab !== 'DON_HANG') return;
     const selectedIds = getSelectedOrderIds();
     if (!selectedIds.length) {
-        alert('Vui lòng tick chọn đơn hàng cần xóa.');
+        alert('Vui lÃ²ng tick chá»n Ä‘Æ¡n hÃ ng cáº§n xÃ³a.');
         return;
     }
     const rowsToDelete = allData.filter(row => selectedIds.includes(getRowId(row, 'DON_HANG')));
     if (!rowsToDelete.length) {
-        alert('Không tìm thấy dòng dữ liệu của đơn đã chọn.');
+        alert('KhÃ´ng tÃ¬m tháº¥y dòng dá»¯ liá»‡u cá»§a Ä‘Æ¡n Ä‘Ã£ chá»n.');
         return;
     }
     if (!confirm(`Xóa ${selectedIds.length} đơn hàng đã chọn, gồm ${rowsToDelete.length} dòng sản phẩm?`)) return;
 
     document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Đang xóa đơn hàng đã chọn...';
+    document.querySelector('#loading p').innerText = 'Äang xÃ³a Ä‘Æ¡n hÃ ng Ä‘Ã£ chá»n...';
     try {
         await deleteSheetRows('DON_HANG', rowsToDelete.map(getDataSheetRow));
         selectedOrderIds.clear();
@@ -1125,18 +1133,18 @@ async function deleteSelectedOrders() {
 async function deleteSelectedReturnOrders() {
     const selectedKeys = [...selectedReturnOrderIds];
     if (!selectedKeys.length) {
-        alert('Vui lòng tick chọn đơn trả cần xóa.');
+        alert('Vui lÃ²ng tick chá»n Ä‘Æ¡n tráº£ cáº§n xÃ³a.');
         return;
     }
     const rowsToDelete = allData.filter(row => selectedKeys.includes(getReturnOrderKey(row)));
     if (!rowsToDelete.length) {
-        alert('Không tìm thấy dòng đơn trả đã chọn.');
+        alert('KhÃ´ng tÃ¬m tháº¥y dòng Ä‘Æ¡n tráº£ Ä‘Ã£ chá»n.');
         return;
     }
     if (!confirm(`Xóa ${rowsToDelete.length} dòng đơn trả đã chọn?`)) return;
 
     document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Đang xóa đơn trả đã chọn...';
+    document.querySelector('#loading p').innerText = 'Äang xÃ³a Ä‘Æ¡n tráº£ Ä‘Ã£ chá»n...';
     try {
         await deleteSheetRows('DH_HOAN', rowsToDelete.map(getDataSheetRow));
         selectedReturnOrderIds.clear();
@@ -1154,19 +1162,19 @@ async function deleteSelectedReturnOrders() {
 async function changeSelectedReturnOrderUploadDate() {
     const selectedKeys = [...selectedReturnOrderIds];
     if (!selectedKeys.length) {
-        alert('Vui lòng tick chọn đơn trả cần đổi ngày tải lên.');
+        alert('Vui lÃ²ng tick chá»n Ä‘Æ¡n tráº£ cáº§n Ä‘á»•i ngày táº£i lÃªn.');
         return;
     }
     const isoDate = document.getElementById('newUploadDateInput')?.value;
     if (!isoDate) {
-        alert('Vui lòng chọn ngày mới ở ô Đổi ngày.');
+        alert('Vui lÃ²ng chá»n ngày má»›i á»Ÿ Ã´ Äá»•i ngày.');
         return;
     }
     const newDate = formatDateDdMmYyyy(isoDate);
 
     const rowsToUpdate = allData.filter(row => selectedKeys.includes(getReturnOrderKey(row)));
     if (!rowsToUpdate.length) {
-        alert('Không tìm thấy dòng đơn trả đã chọn.');
+        alert('KhÃ´ng tÃ¬m tháº¥y dòng Ä‘Æ¡n tráº£ Ä‘Ã£ chá»n.');
         return;
     }
 
@@ -1177,7 +1185,7 @@ async function changeSelectedReturnOrderUploadDate() {
     });
 
     document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Đang đổi ngày tải lên...';
+    document.querySelector('#loading p').innerText = 'Äang Ä‘á»•i ngày táº£i lÃªn...';
     try {
         const items = rowsToUpdate.map(row => ({ row, sheetRow: getDataSheetRow(row) }));
         await batchWriteRecordRows(items);
@@ -1186,7 +1194,7 @@ async function changeSelectedReturnOrderUploadDate() {
         alert(`Đã đổi ngày tải lên cho ${rowsToUpdate.length} dòng đơn trả.`);
     } catch (err) {
         console.error(err);
-        alert('Không đổi được ngày tải lên: ' + err.message);
+        alert('KhÃ´ng Ä‘á»•i Ä‘Æ°á»£c ngày táº£i lÃªn: ' + err.message);
     } finally {
         document.getElementById('loading').style.display = 'none';
     }
@@ -1275,8 +1283,8 @@ async function quickUpdateOrderHoanHang(orderId, newStatus) {
 
 function getDonHangFieldOptions(header) {
     if (header === 'gian_hang') return thongTinStoreNames;
-    if (header === 'tinh_trang') return ['HỦY', 'HOÀN', 'TRẢ', 'HOÀN THÀNH'];
-    if (header === 'trang_thai') return ['HỦY', 'HOÀN THÀNH'];
+    if (header === 'tinh_trang') return ['HỦY', 'HOÀN', 'TRẢ', 'HOÀN THÃ€NH'];
+    if (header === 'trang_thai') return ['HỦY', 'HOÀN THÃ€NH'];
     return null;
 }
 
@@ -1286,7 +1294,7 @@ function recalculateDonHangForm() {
     row[DON_HANG_INDEX.ngay] = getDateOnly(row[DON_HANG_INDEX.ngay_h]);
     row[DON_HANG_INDEX.id_sp] = String(row[DON_HANG_INDEX['SKU phân loại hàng']] || '').slice(0, 4);
     recalculateDonHangRows([row]);
-    ['ngay', 'phí thuế', 'phí piship', 'doanh_thu', 'tien_sp', 'loi_nhuan', 'trang_thai', 'id_sp', 'thanh_tien'].forEach(header => {
+    ['ngay', 'phí thuế', 'phÃ­ piship', 'doanh_thu', 'tien_sp', 'loi_nhuan', 'trang_thai', 'id_sp', 'thanh_tien'].forEach(header => {
         const input = document.getElementById(`formField_${DON_HANG_INDEX[header]}`);
         if (input) input.value = row[DON_HANG_INDEX[header]];
     });
@@ -1499,7 +1507,7 @@ function renderFormFields(rowOrGroup = null) {
                 }
                 return `<label><span>${header.toUpperCase()}</span><select id="formField_${idx}" data-field="${header}"><option value=""></option>${options.map(option => `<option value="${escapeHtml(option)}" ${String(rawValue) === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select></label>`;
             }
-            if (['ngay', 'phí thuế', 'phí piship', 'doanh_thu', 'tien_sp', 'loi_nhuan', 'id_sp', 'thanh_tien'].includes(header)) {
+            if (['ngay', 'phí thuế', 'phÃ­ piship', 'doanh_thu', 'tien_sp', 'loi_nhuan', 'id_sp', 'thanh_tien'].includes(header)) {
                 return `<label><span>${header.toUpperCase()}</span><input id="formField_${idx}" data-field="${header}" type="text" value="${value}" readonly></label>`;
             }
         }
@@ -1566,7 +1574,7 @@ async function openDonHangDetail(orderId) {
     }
 
     const generalHeaders = ['gian_hang', 'ngay', 'ngay_h', 'mdh', 'mvd', 'tinh_trang', 'trang_thai'];
-    const financeHeaders = ['tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phí piship', 'afl', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan'];
+    const financeHeaders = ['tong_tien', 'Mã giảm giá', 'Phí cố định', 'Phí Dịch Vụ', 'Phí xử lý giao dịch', 'phí thuế', 'phÃ­ piship', 'afl', 'doanh_thu', 'phí khác', 'tien_sp', 'loi_nhuan'];
     const itemHeaders = ['SKU phân loại hàng', 'id_sp', 'slg', 'don_gia', 'thanh_tien'];
     const firstRow = rows[0];
     editingDonHangRows = rows;
@@ -1596,8 +1604,8 @@ async function openDonHangDetail(orderId) {
         </div>
     </section>`;
     document.getElementById('orderDetailFields').innerHTML =
-        renderFieldsTable('THÔNG TIN ĐƠN HÀNG', generalHeaders)
-        + renderFieldsTable('THÔNG TIN TÀI CHÍNH', financeHeaders);
+        renderFieldsTable('THÃ”NG TIN ÄÆ N HÃ€NG', generalHeaders)
+        + renderFieldsTable('THÃ”NG TIN TÃ€I CHÃNH', financeHeaders);
     document.getElementById('orderDetailFields').oninput = recalculateDonHangDetail;
     document.getElementById('orderDetailHead').innerHTML = `<tr>${itemHeaders.map(header => `<th>${escapeHtml(header.toUpperCase())}</th>`).join('')}</tr>`;
     const renderItemInput = (row, rowIndex, header) => {
@@ -1691,7 +1699,7 @@ function recalculateDonHangDetail() {
             if (orderStatusInput) orderStatusInput.value = 'HỦY';
             profitInput.value = formatDisplayNumber(-parseMoney(pishipFeeInput?.value));
         } else {
-            if (orderStatusInput) orderStatusInput.value = 'HOÀN THÀNH';
+            if (orderStatusInput) orderStatusInput.value = 'HOÀN THÃ€NH';
             profitInput.value = formatDisplayNumber(parseMoney(receivedInput?.value) - parseMoney(otherFeeInput?.value) - productTotal);
         }
     }
@@ -1755,7 +1763,7 @@ async function saveDonHangDetail() {
     });
 
     document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Đang lưu chi tiết đơn hàng...';
+    document.querySelector('#loading p').innerText = 'Äang lÆ°u chi tiáº¿t Ä‘Æ¡n hÃ ng...';
     try {
         const newRows = [];
         for (let index = 0; index < updatedRows.length; index += 1) {
@@ -1839,13 +1847,13 @@ async function saveRecordFromForm(event) {
                     return { idSp, slg, donGia, thanhTien, sheetRow, index };
                 })
                 .filter(item => item.idSp || item.slg);
-            if (!ngay || !truong || !gian) throw new Error('Vui lòng nhập đủ ngày, trường và gian.');
+            if (!ngay || !truong || !gian) throw new Error('Vui lÃ²ng nháº­p Ä‘á»§ ngày, trÆ°á»ng vÃ  gian.');
             
             const originalSheetRows = (document.getElementById('nhapXuatOriginalSheetRows')?.value || '').split(',').filter(Boolean).map(Number);
             
             if (!itemRows.length) {
                 if (originalSheetRows.length) {
-                    if (!confirm('Bạn đã bỏ xác nhận tất cả sản phẩm. Toàn bộ nhóm dữ liệu này sẽ bị xóa. Bạn có chắc chắn?')) {
+                    if (!confirm('Báº¡n Ä‘Ã£ bá» xÃ¡c nháº­n táº¥t cáº£ sáº£n pháº©m. ToÃ n bá»™ nhÃ³m dá»¯ liá»‡u nÃ y sáº½ bá»‹ xÃ³a. Báº¡n cÃ³ cháº¯c cháº¯n?')) {
                         return;
                     }
                     document.getElementById('loading').style.display = 'flex';
@@ -1856,7 +1864,7 @@ async function saveRecordFromForm(event) {
                     filterTable();
                     return;
                 } else {
-                    throw new Error('Vui lòng thêm và chọn xác nhận ít nhất một sản phẩm hợp lệ.');
+                    throw new Error('Vui lÃ²ng thÃªm vÃ  chá»n xÃ¡c nháº­n Ã­t nháº¥t má»™t sáº£n pháº©m há»£p lá»‡.');
                 }
             }
             
@@ -2005,6 +2013,24 @@ function renderTable() {
                 const linksHtml = parts.map((l, i) => `<a href="${l.trim()}" target="_blank" style="color: var(--primary); font-weight: 600; text-decoration: none;">Link ${parts.length > 1 ? i + 1 : ''}</a>`.trim());
                 return `<td>${linksHtml.join(', ')}</td>`;
             }
+            if (currentTab === 'TINH_GIA') {
+                if (header === 'hanh_dong') {
+                    return `<td><button class="btn primary" style="padding: 4px 12px; min-width: unset; height: 28px; line-height: 20px; font-size: 12px;" onclick="event.stopPropagation(); saveInlineTinhGia(${start + rowIndex}, this)">Lưu</button></td>`;
+                }
+                const editableCols = ['gia_đăng', 'loi_nhuan%', 'lai_mong_muon', 'phi_ads_%', 'phi_aff_%', '11%_phi_co_dinh', '6%_phi_giao_dich', '5.5% xtra', '1,5%_thue'];
+                if (editableCols.includes(header)) {
+                    let isCurrency = ['gia_đăng', 'lai_mong_muon'].includes(header);
+                    let val = isCurrency ? formatDisplayNumber(cell) : (cellStr.includes('%') ? cellStr : cellStr + (cellStr ? '%' : ''));
+                    let inputHtml = `<input type="text" class="inline-edit-input" data-header="${header}" value="${escapeHtml(String(val))}" oninput="handleInlineTinhGiaInput(${start + rowIndex}, this)" onchange="saveInlineTinhGia(${start + rowIndex}, this)" onclick="event.stopPropagation()">`;
+                    if (header === 'loi_nhuan%') {
+                        inputHtml = `<div style="display:flex; align-items:center; gap:4px;">` + inputHtml + `<button class="quick-btn-inline" onclick="event.stopPropagation(); setInlineQuickLoiNhuan(${start + rowIndex}, this, 10)">10%</button><button class="quick-btn-inline" onclick="event.stopPropagation(); setInlineQuickLoiNhuan(${start + rowIndex}, this, 20)">20%</button></div>`;
+                    }
+                    if (header === 'gia_đăng') {
+                        inputHtml = `<div style="display:flex; align-items:center; gap:4px;">` + inputHtml + `<button class="quick-btn-inline" onclick="event.stopPropagation(); setInlineQuickGiaDang(${start + rowIndex}, this)" title="Điền Giá Thấp Nhất" style="padding: 2px 4px; font-size: 10px;">👇</button><button class="quick-btn-inline" onclick="event.stopPropagation(); setInlineQuickFees(${start + rowIndex}, this)" title="Điền Phí Mặc Định" style="padding: 2px 4px; font-size: 10px;">⚡</button></div>`;
+                    }
+                    return `<td>${inputHtml}</td>`;
+                }
+            }
             const displayCell = isNumericDisplayHeader(header)
                 ? formatDisplayNumber(cell)
                 : cell;
@@ -2028,25 +2054,27 @@ function renderTable() {
             const cellClass = classNames.length ? ` class="${classNames.join(' ')}"` : '';
 
             if ((currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && header === 'tinh_trang') {
-                const statusOptions = ['HỦY', 'HOÀN', 'TRẢ', 'HOÀN THÀNH'];
+                const statusOptions = ['HỦY', 'HOÀN', 'TRẢ', 'HOÀN THÃ€NH'];
                 const orderIdStr = escapeHtml(escapeJsString(getRowId(row, 'DON_HANG')));
                 const buttons = statusOptions.map(opt => `<button onclick="event.stopPropagation(); quickUpdateOrderStatus('${orderIdStr}', '${opt}')" style="font-size:10px; padding:2px 4px; cursor:pointer; background:${opt === displayValue ? 'var(--primary)' : '#f8f9fa'}; color:${opt === displayValue ? '#fff' : '#333'}; border:1px solid #ddd; border-radius:4px; margin:2px;">${escapeHtml(opt)}</button>`).join('');
                 return `<td${cellClass} style="white-space:normal; min-width:140px;">${buttons}</td>`;
             }
 
             if ((currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && header === 'hoan_hang') {
-                const hoanHangOptions = ['Đã về kho', 'Chưa về'];
+                const hoanHangOptions = ['ÄÃ£ vá» kho', 'ChÆ°a vá»'];
                 const orderIdStr = escapeHtml(escapeJsString(getRowId(row, 'DON_HANG')));
                 const buttons = hoanHangOptions.map(opt => `<button onclick="event.stopPropagation(); quickUpdateOrderHoanHang('${orderIdStr}', '${opt}')" style="font-size:10px; padding:2px 4px; cursor:pointer; background:${opt === displayValue ? 'var(--primary)' : '#f8f9fa'}; color:${opt === displayValue ? '#fff' : '#333'}; border:1px solid #ddd; border-radius:4px; margin:2px;">${escapeHtml(opt)}</button>`).join('');
                 return `<td${cellClass} style="white-space:normal; min-width:130px;">${buttons}</td>`;
             }
 
-            return `<td${cellClass}>${escapeHtml(displayValue || '')}</td>`;
+            return `<td${cellClass} data-col="${header}">${escapeHtml(displayValue || '')}</td>`;
         }).join('');
 
         const editAction = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
             ? ` ondblclick="openDonHangDetail('${escapeHtml(escapeJsString(getRowId(row)))}')"`
-            : ` ondblclick="openRecordForm(${start + rowIndex})"`;
+            : currentTab === 'TINH_GIA'
+                ? ` ondblclick="event.stopPropagation()"`
+                : ` ondblclick="openRecordForm(${start + rowIndex})"`;
         const selectCell = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
             ? `<td class="select-col"><input type="checkbox" ${selectedOrderIds.has(getRowId(row, 'DON_HANG')) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleOrderSelection('${escapeHtml(escapeJsString(getRowId(row, 'DON_HANG')))}', this.checked)"></td>`
             : currentTab === 'DH_HOAN'
@@ -2097,8 +2125,8 @@ function filterTable() {
     const tinhTrangList = (document.getElementById('orderTinhTrangFilter')?.value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     const trangThai = (document.getElementById('orderTrangThaiFilter')?.value || '').toLowerCase();
     const profitFilter = document.getElementById('orderProfitFilter')?.value || '';
-    const dateFromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : 0;
-    const dateToTime = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : 0;
+    const dateFromTime = dateFrom ? new Date($dateFrom + "T00:00:00").getTime() : 0;
+    const dateToTime = dateTo ? new Date($dateTo + "T23:59:59").getTime() : 0;
     const sourceData = currentTab === 'DON_HANG' ? getDonHangSummaryRows() : allData;
     const terms = term.split(',').map(s => s.trim()).filter(Boolean);
     filteredData = sourceData.filter(row => {
@@ -2124,7 +2152,7 @@ function filterTable() {
             const matchesReturnTo = !returnDateToTime || returnTime <= returnDateToTime;
             return matchesSearch && matchesReturnStore && matchesReturnTinhTrang && matchesReturnFrom && matchesReturnTo;
         }
-        if (currentTab === 'DS_SP') {
+        if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') {
             const tenSp = String(row[1] || '').toUpperCase();
             const matchesDsSpPrefix1 = !currentDsSpPrefix1Filter || tenSp.startsWith(currentDsSpPrefix1Filter);
             const matchesDsSpPrefix2 = !currentDsSpPrefix2Filter || tenSp.startsWith(currentDsSpPrefix2Filter);
@@ -2160,6 +2188,9 @@ function filterTable() {
     }
     if (currentTab === 'DS_SP') {
         filteredData.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
+    }
+    if (currentTab === 'TINH_GIA') {
+        filteredData.sort((a, b) => String(b[1] || '').localeCompare(String(a[1] || '')));
     }
     currentPage = 1;
     renderTable();
@@ -2212,7 +2243,7 @@ function setDsSpPrefix2Filter(prefix) {
 }
 
 function generateDsSpPrefix1Buttons() {
-    if (currentTab !== 'DS_SP') return;
+    if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA') return;
     const prefixes = new Set();
     allData.forEach(row => {
         const idSp = String(row[1] || '').trim().toUpperCase();
@@ -2232,7 +2263,7 @@ function generateDsSpPrefix1Buttons() {
 }
 
 function generateDsSpPrefix2Buttons(prefix1) {
-    if (currentTab !== 'DS_SP') return;
+    if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA') return;
     const prefixes = new Set();
     allData.forEach(row => {
         const idSp = String(row[1] || '').trim().toUpperCase();
@@ -2333,10 +2364,10 @@ function getHeaderMappedCell(source, header) {
     const aliases = {
         id: ['id'],
         ngay: ['ngay', 'ngày'],
-        truong: ['truong', 'trường'],
+        truong: ['truong', 'trÆ°á»ng'],
         gian: ['gian', 'gian_hang', 'gian hàng'],
         id_sp: ['id_sp', 'id sp', 'mã sp', 'ma sp'],
-        slg: ['slg', 'số lượng', 'so luong'],
+        slg: ['slg', 'sá»‘ lÆ°á»£ng', 'so luong'],
         ton_dau: ['ton_dau', 'tồn đầu', 'ton dau']
     };
     const keys = aliases[header] || [header];
@@ -2476,39 +2507,39 @@ function parseDonHangDateTime(value) {
 
 function normalizeOrderStatus(orderStatus, returnStatus) {
     const value = `${orderStatus || ''} ${returnStatus || ''}`.toLocaleUpperCase('vi');
-    if (value.includes('HỦY') || value.includes('HUỶ')) return 'HỦY';
-    if (value.includes('TRẢ') || value.includes('HOÀN TIỀN')) return 'HOÀN TRẢ';
-    return 'HOÀN THÀNH';
+    if (value.includes('HỦY') || value.includes('HUá»¶')) return 'HỦY';
+    if (value.includes('TRẢ') || value.includes('HOÀN TIá»€N')) return 'HOÀN TRẢ';
+    return 'HOÀN THÃ€NH';
 }
 
 function buildDonHangRows(rows, priceMap) {
     const selectedStore = String(document.getElementById('storeFilter')?.value || '').trim();
-    if (!selectedStore) throw new Error('Vui lòng chọn gian hàng trước khi thêm Excel.');
+    if (!selectedStore) throw new Error('Vui lÃ²ng chá»n gian hàng trÆ°á»›c khi thÃªm Excel.');
 
     const mappedRows = rows.map(source => {
         const row = Array(DON_HANG_HEADERS.length).fill('');
         const sku = String(getExcelCell(source, 'SKU phân loại hàng') || '').trim();
         const status = normalizeOrderStatus(
-            getExcelCell(source, 'Trạng Thái Đơn Hàng'),
-            getExcelCell(source, 'Trạng thái Trả hàng/Hoàn tiền')
+            getExcelCell(source, 'Tráº¡ng ThÃ¡i ÄÆ¡n HÃ ng'),
+            getExcelCell(source, 'Tráº¡ng thÃ¡i Tráº£ hÃ ng/HoÃ n tiá»n')
         );
         row[DON_HANG_INDEX.gian_hang] = selectedStore;
         row[DON_HANG_INDEX.ngay_h] = formatExcelDateTime(getExcelCell(source, 'Ngày đặt hàng'));
         row[DON_HANG_INDEX.ngay] = getDateOnly(row[DON_HANG_INDEX.ngay_h]);
         row[DON_HANG_INDEX.mdh] = String(getExcelCell(source, 'Mã đơn hàng') || '').trim();
         row[DON_HANG_INDEX.mvd] = String(getExcelCell(source, 'Mã vận đơn') || '').trim();
-        row[DON_HANG_INDEX.tong_tien] = parseMoney(getExcelCell(source, 'Tổng số tiền Người mua thanh toán'));
+        row[DON_HANG_INDEX.tong_tien] = parseMoney(getExcelCell(source, 'Tá»•ng sá»‘ tiá»n NgÆ°á»i mua thanh toÃ¡n'));
         row[DON_HANG_INDEX['Mã giảm giá']] = parseMoney(getExcelCell(source, 'Mã giảm giá') || getExcelCell(source, 'Mã giảm giá của Shop'));
         row[DON_HANG_INDEX['Phí cố định']] = parseMoney(getExcelCell(source, 'Phí cố định'));
         row[DON_HANG_INDEX['Phí Dịch Vụ']] = parseMoney(getExcelCell(source, 'Phí Dịch Vụ'));
         row[DON_HANG_INDEX['Phí xử lý giao dịch']] = parseMoney(getExcelCell(source, 'Phí xử lý giao dịch'));
         row[DON_HANG_INDEX['phí khác']] = '';
         row[DON_HANG_INDEX.tinh_trang] = status;
-        row[DON_HANG_INDEX.trang_thai] = status === 'HỦY' ? 'HỦY' : 'HOÀN THÀNH';
+        row[DON_HANG_INDEX.trang_thai] = status === 'HỦY' ? 'HỦY' : 'HOÀN THÃ€NH';
         row[DON_HANG_INDEX['SKU phân loại hàng']] = sku;
         const idSp = sku.slice(0, 4);
         row[DON_HANG_INDEX.id_sp] = idSp;
-        row[DON_HANG_INDEX.slg] = parseMoney(getExcelCell(source, 'Số lượng'));
+        row[DON_HANG_INDEX.slg] = parseMoney(getExcelCell(source, 'Sá»‘ lÆ°á»£ng'));
         if (priceMap && priceMap.has(idSp)) {
             row[DON_HANG_INDEX.don_gia] = priceMap.get(idSp);
         }
@@ -2563,7 +2594,7 @@ function buildDsSpRows(rows) {
             String(getExcelCell(source, 'Tên') || '').trim(),
             parseMoney(getExcelCell(source, 'Giá nhập')),
             parseMoney(getExcelCell(source, 'Giá bán lẻ')),
-            parseMoney(getExcelCell(source, 'Giá đón gói')),
+            parseMoney(getExcelCell(source, 'Giá đóng gói')),
             parseMoney(getExcelCell(source, 'Giá bán thấp nhất'))
         ];
     }).filter(row => row.some(cell => String(cell || '').trim()));
@@ -2608,8 +2639,8 @@ function normalizeTextValue(value) {
 function buildReturnOrderRows(rows) {
     const selectedStore = String(document.getElementById('returnStoreSelect')?.value || '').trim();
     const selectedTinhTrang = String(document.getElementById('returnStatusSelect')?.value || '').trim();
-    if (!selectedStore) throw new Error('Vui lòng chọn gian trước khi thêm Excel.');
-    if (!selectedTinhTrang) throw new Error('Vui lòng chọn tình trạng trước khi thêm Excel.');
+    if (!selectedStore) throw new Error('Vui lÃ²ng chá»n gian trÆ°á»›c khi thÃªm Excel.');
+    if (!selectedTinhTrang) throw new Error('Vui lÃ²ng chá»n tÃ¬nh tráº¡ng trÆ°á»›c khi thÃªm Excel.');
 
     const existingOrderIds = new Set(allData.map(row => String(row[3] || '').trim()).filter(Boolean));
     const seenOrderIds = new Set();
@@ -2618,13 +2649,13 @@ function buildReturnOrderRows(rows) {
         waybill: 'Mã vận đơn',
         orderDate: 'Ngày đặt hàng',
         cancelReason: 'Lý do hủy',
-        returnReason: 'Lí do Trả hàng/Hoàn tiền',
-        claimId: 'Mã số khiếu nại',
-        returnWaybill: 'Mã vận đơn trả hàng',
-        returnRefundStatus: 'Trạng thái Trả hàng/Hoàn tiền',
-        deliveryWaybill: 'Mã vận đơn giao hàng',
-        refunded: 'Đã hoàn tiền cho Người mua',
-        returning: 'Người mua đang trả hàng'
+        returnReason: 'LÃ­ do Tráº£ hÃ ng/HoÃ n tiá»n',
+        claimId: 'Mã sá»‘ khiáº¿u náº¡i',
+        returnWaybill: 'Mã vận đơn tráº£ hÃ ng',
+        returnRefundStatus: 'Tráº¡ng thÃ¡i Tráº£ hÃ ng/HoÃ n tiá»n',
+        deliveryWaybill: 'Mã vận đơn giao hÃ ng',
+        refunded: 'ÄÃ£ hoÃ n tiá»n cho NgÆ°á»i mua',
+        returning: 'NgÆ°á»i mua Ä‘ang tráº£ hÃ ng'
     };
     return rows.map(source => {
         const type = selectedTinhTrang.toLocaleUpperCase('vi');
@@ -2706,11 +2737,11 @@ async function processFiles(files) {
 
     const fileNames = excelFiles.map(f => f.name).join(", ");
     if ((currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') && !String(document.getElementById('storeFilter')?.value || '').trim()) {
-        alert('Vui lòng chọn gian hàng trước khi thêm Excel.');
+        alert('Vui lÃ²ng chá»n gian hàng trÆ°á»›c khi thÃªm Excel.');
         return;
     }
     if (currentTab === 'DH_HOAN' && (!String(document.getElementById('returnStoreSelect')?.value || '').trim() || !String(document.getElementById('returnStatusSelect')?.value || '').trim())) {
-        alert('Vui lòng chọn gian và tình trạng trước khi thêm Excel.');
+        alert('Vui lÃ²ng chá»n gian vÃ  tÃ¬nh tráº¡ng trÆ°á»›c khi thÃªm Excel.');
         return;
     }
     const confirmMessage = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
@@ -2826,7 +2857,7 @@ async function processFiles(files) {
 
 async function init() {
     lucide.createIcons();
-    document.getElementById('pageTitle').innerText = 'Hệ thống';
+    document.getElementById('pageTitle').innerText = 'Há»‡ thá»‘ng';
     initDragAndDrop();
     let saved = '';
     try { saved = sessionStorage.getItem(XNK_TT_TAB_STORAGE_KEY) || ''; } catch (_) { }
@@ -2834,4 +2865,474 @@ async function init() {
 }
 
 init();
+
+// ==================== TINH GIA LOGIC ====================
+let currentTinhGiaRow = null;
+let currentTinhGiaRowIndex = -1;
+let tinhGiaRecalculating = false;
+
+function openTinhGiaForm(rowIndex) {
+    if (rowIndex === null || rowIndex < 0 || rowIndex >= filteredData.length) return;
+    currentTinhGiaRowIndex = rowIndex;
+    const row = filteredData[rowIndex];
+    currentTinhGiaRow = row;
+    
+    const headers = getStorageHeaders('TINH_GIA');
+    const getVal = (colName) => String(row[headers.indexOf(colName)] ?? '').trim();
+    const getNum = (colName) => parseMoney(getVal(colName));
+    const getFloat = (colName) => parseFloat(getVal(colName)) || 0;
+
+    document.getElementById('tg_rowIndex').value = rowIndex;
+    document.getElementById('tg_ten_sp').value = getVal('ten_sp');
+    document.getElementById('tg_gia_nhap_ncc').value = formatDisplayNumber(getNum('gia_nhap_ncc'));
+    
+    document.getElementById('tg_gia_đăng').value = formatDisplayNumber(getNum('gia_đăng'));
+    document.getElementById('tg_loi_nhuan_pt').value = getVal('loi_nhuan_pt').replace('%', ''); 
+    document.getElementById('tg_lai_mong_muon').value = formatDisplayNumber(getNum('lai_mong_muon'));
+    
+    document.getElementById('tg_phi_ads_pt').value = getVal('phi_ads_pt').replace('%', '') || 0;
+    document.getElementById('tg_phi_aff_pt').value = getVal('phi_aff_pt').replace('%', '') || 0;
+    document.getElementById('tg_phi_co_dinh_pt').value = getVal('11_phi_co_dinh').replace('%', '') || 11;
+    document.getElementById('tg_phi_giao_dich_pt').value = getVal('6_phi_giao_dich').replace('%', '') || 6;
+    document.getElementById('tg_xtra_pt').value = getVal('5.5_xtra').replace('%', '') || 5.5;
+    document.getElementById('tg_thue_pt').value = getVal('1.5_thue').replace('%', '') || 1.5;
+
+    recalculateTinhGia();
+
+    document.getElementById('tinhGiaModal').classList.add('active');
+}
+
+function closeTinhGiaForm() {
+    document.getElementById('tinhGiaModal').classList.remove('active');
+    currentTinhGiaRow = null;
+}
+
+function formatCurrencyInput(input) {
+    let val = input.value.replace(/\D/g, '');
+    if (val !== '') {
+        input.value = formatDisplayNumber(parseInt(val, 10));
+    } else {
+        input.value = '0';
+    }
+}
+
+function getTgInputVal(id) {
+    return document.getElementById(id).value;
+}
+
+function getTgInputNum(id) {
+    return parseMoney(getTgInputVal(id));
+}
+
+function getTgInputFloat(id) {
+    return parseFloat(getTgInputVal(id)) || 0;
+}
+
+function setQuickLoiNhuan(pt) {
+    document.getElementById('tg_loi_nhuan_pt').value = pt;
+    handleTinhGiaInput('loi_nhuan_pt');
+}
+
+function handleTinhGiaInput(source) {
+    if (tinhGiaRecalculating) return;
+    recalculateTinhGia(source);
+}
+
+function recalculateTinhGia(source = null) {
+    tinhGiaRecalculating = true;
+    
+    try {
+        const headers = getStorageHeaders('TINH_GIA');
+        const giaBan = parseMoney(currentTinhGiaRow[headers.indexOf('gia_ban')] ?? '');
+        
+        let rAds = getTgInputFloat('tg_phi_ads_pt') / 100;
+        let rAff = getTgInputFloat('tg_phi_aff_pt') / 100;
+        let rCd = getTgInputFloat('tg_phi_co_dinh_pt') / 100;
+        let rGd = getTgInputFloat('tg_phi_giao_dich_pt') / 100;
+        let rXt = getTgInputFloat('tg_xtra_pt') / 100;
+        let rTh = getTgInputFloat('tg_thue_pt') / 100;
+        
+        const phiHaTang = 3000;
+        const phiPiship = 2700;
+        const CFix = phiHaTang + phiPiship + giaBan;
+        const RSum = rAds + rAff + rCd + rGd + rTh;
+        
+        let giaDang = getTgInputNum('tg_gia_đăng');
+        let laiMongMuon = getTgInputNum('tg_lai_mong_muon');
+        let loiNhuanPt = getTgInputFloat('tg_loi_nhuan_pt') / 100;
+
+        if (source === 'lai_mong_muon') {
+            let p1 = (laiMongMuon + CFix) / (1 - RSum - rXt);
+            let xtra1 = p1 * rXt;
+            if (xtra1 <= 50000) {
+                giaDang = Math.round(p1);
+            } else {
+                let p2 = (laiMongMuon + CFix + 50000) / (1 - RSum);
+                giaDang = Math.round(p2);
+            }
+            if (giaDang < 0 || isNaN(giaDang) || !isFinite(giaDang)) giaDang = 0;
+            loiNhuanPt = giaDang > 0 ? laiMongMuon / giaDang : 0;
+            document.getElementById('tg_gia_đăng').value = formatDisplayNumber(giaDang);
+            document.getElementById('tg_loi_nhuan_pt').value = (loiNhuanPt * 100).toFixed(2);
+            
+        } else if (source === 'loi_nhuan%') {
+            let p1 = CFix / (1 - RSum - loiNhuanPt - rXt);
+            let xtra1 = p1 * rXt;
+            if (xtra1 <= 50000) {
+                giaDang = Math.round(p1);
+            } else {
+                let p2 = (CFix + 50000) / (1 - RSum - loiNhuanPt);
+                giaDang = Math.round(p2);
+            }
+            if (giaDang < 0 || isNaN(giaDang) || !isFinite(giaDang)) giaDang = 0;
+            laiMongMuon = Math.round(giaDang * loiNhuanPt);
+            document.getElementById('tg_gia_đăng').value = formatDisplayNumber(giaDang);
+            document.getElementById('tg_lai_mong_muon').value = formatDisplayNumber(laiMongMuon);
+            
+        } else if (source === 'gia_đăng' || source === 'phi' || source === null) {
+            let xtra = Math.min(giaDang * rXt, 50000);
+            let phiCoDinh = giaDang * rCd;
+            let phiGiaoDich = giaDang * rGd;
+            let thue = giaDang * rTh;
+            let phiAds = giaDang * rAds;
+            let phiAff = giaDang * rAff;
+            
+            laiMongMuon = giaDang - phiAds - phiAff - phiCoDinh - phiGiaoDich - xtra - thue - phiHaTang - phiPiship - giaBan;
+            loiNhuanPt = giaDang > 0 ? laiMongMuon / giaDang : 0;
+            
+            document.getElementById('tg_lai_mong_muon').value = formatDisplayNumber(Math.round(laiMongMuon));
+            document.getElementById('tg_loi_nhuan_pt').value = (loiNhuanPt * 100).toFixed(2);
+        }
+        
+        let xtra = Math.min(giaDang * rXt, 50000);
+        let phiCoDinh = Math.round(giaDang * rCd);
+        let phiGiaoDich = Math.round(giaDang * rGd);
+        let thue = Math.round(giaDang * rTh);
+        let phiAds = Math.round(giaDang * rAds);
+        let phiAff = Math.round(giaDang * rAff);
+        
+        document.getElementById('tg_phi_co_dinh_val').innerText = formatDisplayNumber(phiCoDinh);
+        document.getElementById('tg_phi_giao_dich_val').innerText = formatDisplayNumber(phiGiaoDich);
+        document.getElementById('tg_xtra_val').innerText = formatDisplayNumber(Math.round(xtra));
+        document.getElementById('tg_thue_val').innerText = formatDisplayNumber(thue);
+        document.getElementById('tg_phi_ads_val').innerText = formatDisplayNumber(phiAds);
+        document.getElementById('tg_phi_aff_val').innerText = formatDisplayNumber(phiAff);
+        
+        let tongChiPhi = phiCoDinh + phiGiaoDich + Math.round(xtra) + thue + phiHaTang + phiPiship + phiAds + phiAff + giaBan;
+        
+        document.getElementById('tg_tong_chi_phi').innerText = formatDisplayNumber(tongChiPhi);
+        document.getElementById('tg_loi_nhuan_val').innerText = formatDisplayNumber(Math.round(laiMongMuon));
+        document.getElementById('tg_ty_suat_val').innerText = (loiNhuanPt * 100).toFixed(2) + '%';
+        
+    } finally {
+        tinhGiaRecalculating = false;
+    }
+}
+
+async function saveTinhGia(event) {
+    event.preventDefault();
+    if (currentTinhGiaRowIndex === -1 || !currentTinhGiaRow) return;
+    
+    const headers = getStorageHeaders('TINH_GIA');
+    const newRow = [...currentTinhGiaRow];
+    
+    const setVal = (col, val) => {
+        const idx = headers.indexOf(col);
+        if (idx !== -1) newRow[idx] = val;
+    };
+    
+    setVal('gia_đăng', getTgInputNum('tg_gia_đăng'));
+    setVal('loi_nhuan%', getTgInputFloat('tg_loi_nhuan_pt') + '%');
+    setVal('lai_mong_muon', getTgInputNum('tg_lai_mong_muon'));
+    
+    setVal('phi_ads_%', getTgInputFloat('tg_phi_ads_pt') + '%');
+    setVal('phi_aff_%', getTgInputFloat('tg_phi_aff_pt') + '%');
+    setVal('11%_phi_co_dinh', getTgInputFloat('tg_phi_co_dinh_pt') + '%');
+    setVal('phi_co_dinh', parseMoney(document.getElementById('tg_phi_co_dinh_val').innerText));
+    setVal('6%_phi_giao_dich', getTgInputFloat('tg_phi_giao_dich_pt') + '%');
+    setVal('phi_giao_dich', parseMoney(document.getElementById('tg_phi_giao_dich_val').innerText));
+    setVal('5.5% xtra', getTgInputFloat('tg_xtra_pt') + '%');
+    setVal('xtra', parseMoney(document.getElementById('tg_xtra_val').innerText));
+    setVal('1,5%_thue', getTgInputFloat('tg_thue_pt') + '%');
+    setVal('thue', parseMoney(document.getElementById('tg_thue_val').innerText));
+    setVal('phi_ha_tang3.000_₫', 3000);
+    setVal('phi_piship', 2700);
+
+    const sheetRow = getDataSheetRow(row);
+    if (!sheetRow) {
+        alert('Khng xc d?nh du?c dng c?a s?n ph?m ny trn sheet TINH_GIA.');
+        return;
+    }
+
+    document.getElementById('loading').style.display = 'flex';
+    document.querySelector('#loading p').innerText = 'Dang luu gia...';
+    
+    try {
+        await writeRecordRow(newRow, sheetRow);
+        closeTinhGiaForm();
+        await fetchData();
+        filterTable();
+    } catch (err) {
+        console.error(err);
+        alert("L?i khi luu d? li?u tnh gi: " + err.message);
+    } finally {
+        document.getElementById('loading').style.display = 'none';
+    }
+}
+function handleInlineTinhGiaInput(rowIndex, inputElement) {
+    const tr = inputElement.closest('tr');
+    const header = inputElement.dataset.header;
+    const isCurrency = ['gia_đăng', 'lai_mong_muon'].includes(header);
+    
+    if (isCurrency) {
+        let val = inputElement.value.replace(/\D/g, '');
+        if (val !== '') {
+            inputElement.value = formatDisplayNumber(parseInt(val, 10));
+        } else {
+            inputElement.value = '0';
+        }
+    }
+
+    const row = filteredData[rowIndex];
+    const headers = getStorageHeaders('TINH_GIA');
+    const giaBan = parseMoney(row[headers.indexOf('gia_ban')] ?? '');
+    
+    const getTrFloat = (hdr) => {
+        const el = tr.querySelector('[data-header="' + hdr + '"]');
+        return el ? (parseFloat(String(el.value).replace('%', '').replace(',', '.')) || 0) : 0;
+    };
+    const getTrNum = (hdr) => {
+        const el = tr.querySelector('[data-header="' + hdr + '"]');
+        return el ? parseMoney(el.value) : 0;
+    };
+    
+    let rAds = getTrFloat('phi_ads_%') / 100;
+    let rAff = getTrFloat('phi_aff_%') / 100;
+    let rCd = getTrFloat('11%_phi_co_dinh') / 100;
+    let rGd = getTrFloat('6%_phi_giao_dich') / 100;
+    let rXt = getTrFloat('5.5% xtra') / 100;
+    let rTh = getTrFloat('1,5%_thue') / 100;
+    
+    const phiHaTang = 3000;
+    const phiPiship = 2700;
+    const CFix = phiHaTang + phiPiship + giaBan;
+    const RSum = rAds + rAff + rCd + rGd + rTh;
+    
+    let giaDang = getTrNum('gia_đăng');
+    let laiMongMuon = getTrNum('lai_mong_muon');
+    let loiNhuanPt = getTrFloat('loi_nhuan%') / 100;
+
+    let source = header;
+
+    const setTdVal = (hdr, val) => {
+        const td = tr.querySelector(`td[data-col="${hdr}"]`);
+        if (td) td.innerText = formatDisplayNumber(Math.round(val));
+    };
+
+    if (source === 'lai_mong_muon') {
+        let p1 = (laiMongMuon + CFix) / (1 - RSum - rXt);
+        let xtra1 = p1 * rXt;
+        if (xtra1 <= 50000) {
+            giaDang = Math.round(p1);
+        } else {
+            let p2 = (laiMongMuon + CFix + 50000) / (1 - RSum);
+            giaDang = Math.round(p2);
+        }
+        if (giaDang < 0 || isNaN(giaDang) || !isFinite(giaDang)) giaDang = 0;
+        loiNhuanPt = giaDang > 0 ? laiMongMuon / giaDang : 0;
+        
+        tr.querySelector('[data-header="gia_đăng"]').value = formatDisplayNumber(giaDang);
+        tr.querySelector('[data-header="loi_nhuan%"]').value = +(loiNhuanPt * 100).toFixed(2) + '%';
+        
+    } else if (source === 'loi_nhuan%') {
+        let p1 = CFix / (1 - RSum - loiNhuanPt - rXt);
+        let xtra1 = p1 * rXt;
+        if (xtra1 <= 50000) {
+            giaDang = Math.round(p1);
+        } else {
+            let p2 = (CFix + 50000) / (1 - RSum - loiNhuanPt);
+            giaDang = Math.round(p2);
+        }
+        if (giaDang < 0 || isNaN(giaDang) || !isFinite(giaDang)) giaDang = 0;
+        laiMongMuon = Math.round(giaDang * loiNhuanPt);
+        
+        tr.querySelector('[data-header="gia_đăng"]').value = formatDisplayNumber(giaDang);
+        tr.querySelector('[data-header="lai_mong_muon"]').value = formatDisplayNumber(laiMongMuon);
+        
+    } else if (source === 'gia_đăng' || source.includes('phi_') || source.includes('xtra') || source.includes('thue')) {
+        let xtra = Math.min(giaDang * rXt, 50000);
+        let phiCoDinh = giaDang * rCd;
+        let phiGiaoDich = giaDang * rGd;
+        let thue = giaDang * rTh;
+        let phiAds = giaDang * rAds;
+        let phiAff = giaDang * rAff;
+        
+        laiMongMuon = giaDang - phiAds - phiAff - phiCoDinh - phiGiaoDich - xtra - thue - phiHaTang - phiPiship - giaBan;
+        loiNhuanPt = giaDang > 0 ? laiMongMuon / giaDang : 0;
+        
+        tr.querySelector('[data-header="lai_mong_muon"]').value = formatDisplayNumber(Math.round(laiMongMuon));
+        tr.querySelector('[data-header="loi_nhuan%"]').value = +(loiNhuanPt * 100).toFixed(2) + '%';
+    }
+
+    // Luôn luôn tính toán lại các phí để hiển thị realtime lên bảng
+    let finalXtra = Math.min(giaDang * rXt, 50000);
+    let finalPhiCoDinh = giaDang * rCd;
+    let finalPhiGiaoDich = giaDang * rGd;
+    let finalThue = giaDang * rTh;
+    setTdVal('phi_co_dinh', finalPhiCoDinh);
+    setTdVal('phi_giao_dich', finalPhiGiaoDich);
+    setTdVal('xtra', finalXtra);
+    setTdVal('thue', finalThue);
+
+}
+
+async function saveInlineTinhGia(rowIndex, btnElement) {
+    const tr = btnElement.closest('tr');
+    const row = filteredData[rowIndex];
+    if (!row) return;
+
+    const isBtn = btnElement && btnElement.tagName === 'BUTTON';
+    if (isBtn) btnElement.innerText = 'Đang lưu...';
+
+    const headers = getStorageHeaders('TINH_GIA');
+    const newRow = [...row];
+    
+    const setVal = (col, val) => {
+        const idx = headers.indexOf(col);
+        if (idx !== -1) newRow[idx] = val;
+    };
+
+    const getTrFloat = (hdr) => {
+        const el = tr.querySelector('[data-header="' + hdr + '"]');
+        return el ? (parseFloat(String(el.value).replace('%', '').replace(',', '.')) || 0) : 0;
+    };
+    const getTrNum = (hdr) => {
+        const el = tr.querySelector('[data-header="' + hdr + '"]');
+        return el ? parseMoney(el.value) : 0;
+    };
+
+    let giaDang = getTrNum('gia_đăng');
+    let rAds = getTrFloat('phi_ads_%') / 100;
+    let rAff = getTrFloat('phi_aff_%') / 100;
+    let rCd = getTrFloat('11%_phi_co_dinh') / 100;
+    let rGd = getTrFloat('6%_phi_giao_dich') / 100;
+    let rXt = getTrFloat('5.5% xtra') / 100;
+    let rTh = getTrFloat('1,5%_thue') / 100;
+
+    let xtra = Math.min(giaDang * rXt, 50000);
+    let phiCoDinh = Math.round(giaDang * rCd);
+    let phiGiaoDich = Math.round(giaDang * rGd);
+    let thue = Math.round(giaDang * rTh);
+    
+    setVal('gia_đăng', giaDang);
+    setVal('loi_nhuan%', getTrFloat('loi_nhuan%') + '%');
+    setVal('lai_mong_muon', getTrNum('lai_mong_muon'));
+    
+    setVal('phi_ads_%', getTrFloat('phi_ads_%') + '%');
+    setVal('phi_aff_%', getTrFloat('phi_aff_%') + '%');
+    setVal('11%_phi_co_dinh', getTrFloat('11%_phi_co_dinh') + '%');
+    setVal('phi_co_dinh', phiCoDinh);
+    setVal('6%_phi_giao_dich', getTrFloat('6%_phi_giao_dich') + '%');
+    setVal('phi_giao_dich', phiGiaoDich);
+    setVal('5.5% xtra', getTrFloat('5.5% xtra') + '%');
+    setVal('xtra', Math.round(xtra));
+    setVal('1,5%_thue', getTrFloat('1,5%_thue') + '%');
+    setVal('thue', thue);
+    setVal('phi_ha_tang3.000_₫', 3000);
+    setVal('phi_piship', 2700);
+
+    const sheetRow = getDataSheetRow(row);
+    if (!sheetRow) {
+        alert('Không xác định được dòng của sản phẩm này trên sheet TINH_GIA.');
+        if (isBtn) {
+            btnElement.innerText = 'Lưu';
+            btnElement.disabled = false;
+        }
+        return;
+    }
+
+    try {
+        await writeRecordRow(newRow, sheetRow, 7);
+        
+        // Update local cache
+        const allDataIdx = allData.findIndex(r => r._sheetRow === sheetRow);
+        if (allDataIdx !== -1) {
+            allData[allDataIdx] = newRow;
+            newRow._sheetRow = sheetRow;
+        }
+        filteredData[rowIndex] = newRow;
+
+        if (isBtn) {
+            btnElement.innerText = '✅ Đã Lưu';
+            btnElement.classList.replace('primary', 'success');
+            setTimeout(() => {
+                btnElement.innerText = 'Lưu';
+                btnElement.classList.replace('success', 'primary');
+                btnElement.disabled = false;
+            }, 2000);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Lỗi khi lưu dữ liệu tính giá: " + err.message);
+        if (isBtn) {
+            btnElement.innerText = 'Lưu';
+            btnElement.disabled = false;
+        }
+    }
+}
+
+
+
+
+function setInlineQuickGiaDang(rowIndex, btnElement) {
+    const tr = btnElement.closest('tr');
+    const input = tr.querySelector('[data-header="gia_đăng"]');
+    const row = filteredData[rowIndex];
+    const headers = getStorageHeaders('TINH_GIA');
+    const giaThapNhat = parseMoney(String(row[headers.indexOf('gia_thap_nhat')] ?? ''));
+    
+    if (input && giaThapNhat > 0) {
+        input.value = formatDisplayNumber(giaThapNhat);
+        handleInlineTinhGiaInput(rowIndex, input);
+        saveInlineTinhGia(rowIndex, tr);
+    }
+}
+
+function setInlineQuickLoiNhuan(rowIndex, btnElement, pt) {
+    const tr = btnElement.closest('tr');
+    const input = tr.querySelector('[data-header="loi_nhuan%"]');
+    if (input) {
+        input.value = pt;
+        handleInlineTinhGiaInput(rowIndex, input);
+        saveInlineTinhGia(rowIndex, tr);
+    }
+}
+
+
+
+
+
+
+
+function setInlineQuickFees(rowIndex, btnElement) {
+    const tr = btnElement.closest('tr');
+    const updateInput = (header, val) => {
+        const input = tr.querySelector('[data-header="' + header + '"]');
+        if (input) {
+            input.value = val;
+            handleInlineTinhGiaInput(rowIndex, input);
+        }
+    };
+    
+    updateInput('11%_phi_co_dinh', '11%');
+    updateInput('6%_phi_giao_dich', '6%');
+    updateInput('5.5% xtra', '5.5%');
+    updateInput('1,5%_thue', '1.5%');
+    
+    saveInlineTinhGia(rowIndex, tr);
+}
+
+
+
+
 
