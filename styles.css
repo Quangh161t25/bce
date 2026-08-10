@@ -333,6 +333,41 @@
             border-bottom: 2px solid var(--border);
         }
 
+        th.sortable-header {
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.15s, color 0.15s;
+        }
+
+        th.sortable-header:hover {
+            background: #e2e8f0;
+            color: var(--primary);
+        }
+
+        th.sortable-header.sort-active {
+            background: #e0e7ff;
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .sort-arrow {
+            display: inline-block;
+            font-size: 0.75rem;
+            margin-left: 4px;
+            transition: transform 0.15s;
+        }
+
+        .sort-arrow.default {
+            opacity: 0.35;
+        }
+
+        .sort-arrow.desc,
+        .sort-arrow.asc {
+            opacity: 1;
+            font-weight: 900;
+            color: var(--primary);
+        }
+
         td {
             padding: 10px 15px;
             border-bottom: 1px solid var(--border);
