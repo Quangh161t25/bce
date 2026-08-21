@@ -38,11 +38,6 @@ sR2Sh8e3h3Knd6j1tceRIFU=
             priceCols: [3, 4, 5, 6],
             imgCol: 10
         },
-        'DH_HOAN': {
-            range: 'DH_HOAN!A2:K',
-            headers: ['gian', 'tinh_trang', 'ngay', 'mdh', 'mvd', 'ly_do', 'mdh_tra', 'mvd_tra', 'ghi_chu', 'trang_thai', 'ngay_tai_len'],
-            priceCols: []
-        },
         'TINH_GIA': {
             range: 'TINH_GIA!A2:V',
             headers: ['id_sp_con', 'id_sp', 'ten_sp', 'gia_nhap', 'gia_ban', 'gia_đong_goi', 'gia_thap_nhat', 'loi_nhuan%', 'lai_mong_muon', 'gia_đăng', 'phi_ads_%', 'phi_aff_%', '11%_phi_co_dinh', 'phi_co_dinh', '6%_phi_giao_dich', 'phi_giao_dich', '5.5% xtra', 'xtra', '1,5%_thue', 'thue', 'phi_ha_tang3.000_₫', 'phi_piship'],
@@ -102,7 +97,8 @@ let allDataCache = {};
 const TAB_LABELS = {
     HOA_DON: 'HÓA ĐƠN',
     DS_SP: 'DS SP',
-    DH_HOAN: 'ĐƠN TRẢ',
+    TINH_GIA: 'TÍNH GIÁ',
+    SP_GIAM_GIA: 'SP GIẢM GIÁ',
     NHAP_XUAT: 'NHẬP XUẤT',
     TON_KHO: 'TỒN KHO',
     WEB_SP: 'WEB SP'
@@ -114,10 +110,6 @@ const ID_PREFIXES = {
     NHAP_XUAT: 'NX',
     TON_KHO: 'TK'
 };
-
-let selectedReturnOrderIds = new Set();
-let returnStatusByOrderCache = null;
-let returnStatusByMvdCache = null;
 
 async function getAccessToken() {
     if (accessToken && Date.now() < tokenExpiry - 300000) return accessToken;
@@ -149,49 +141,54 @@ async function switchTab(tabName, force = false) {
                      allData && allData.length > 0;
 
     document.getElementById('tableWrapper').style.display = 'block';
-    document.getElementById('pagination').style.display = 'flex';
     document.getElementById('headerActions').style.display = 'flex';
     document.getElementById('pageTitle').innerText = 'Hệ thống';
     const uploadBtn = document.getElementById('uploadBtn');
     const addBtn = document.getElementById('addBtn');
     const truongFilter = document.getElementById('truongFilter');
-    const returnOrderControls = document.getElementById('returnOrderControls');
-    const changeUploadDateBtn = document.getElementById('changeUploadDateBtn');
-    const newUploadDateLabel = document.getElementById('newUploadDateLabel');
-    const isReturnOrderModule = currentTab === 'DH_HOAN';
-    const isStoreDataModule = currentTab === 'NHAP_XUAT' || currentTab === 'TON_KHO';
+    const storeFilter = document.getElementById('storeFilter');
     if (uploadBtn) {
-        uploadBtn.innerHTML = `<i data-lucide="upload" style="width:18px;"></i> ${isReturnOrderModule ? 'Thêm từ Excel' : `Tải ${currentTab} Lên`}`;
+        uploadBtn.innerHTML = `<i data-lucide="upload" style="width:18px;"></i> Tải ${currentTab} Lên`;
         uploadBtn.style.display = 'flex';
         lucide.createIcons();
     }
-    if (addBtn) addBtn.style.display = isReturnOrderModule ? 'none' : 'flex';
-    if (changeUploadDateBtn && newUploadDateLabel) {
-        changeUploadDateBtn.style.display = isReturnOrderModule ? 'flex' : 'none';
-        newUploadDateLabel.style.display = isReturnOrderModule ? 'flex' : 'none';
-    }
+    if (addBtn) addBtn.style.display = 'flex';
     if (truongFilter) {
         truongFilter.style.display = 'none';
         lucide.createIcons();
     }
-    if (returnOrderControls) {
-        returnOrderControls.style.display = isReturnOrderModule ? 'flex' : 'none';
+    if (storeFilter) {
+        storeFilter.style.display = (currentTab === 'WEB_SP' || currentTab === 'SP_GIAM_GIA') ? 'flex' : 'none';
+    }
+    const updateGiaDangMinBtn = document.getElementById('updateGiaDangMinBtn');
+    if (updateGiaDangMinBtn) {
+        updateGiaDangMinBtn.style.display = (currentTab === 'TINH_GIA') ? 'inline-flex' : 'none';
+    }
+    const quickCustomBox = document.getElementById('quickCustomButtonsBox');
+    if (quickCustomBox) {
+        quickCustomBox.style.display = (currentTab === 'TINH_GIA') ? 'inline-flex' : 'none';
+    }
+    const customCopyBar = document.getElementById('customCopyButtonsBar');
+    if (customCopyBar) {
+        customCopyBar.style.display = (currentTab === 'TINH_GIA') ? 'flex' : 'none';
+        if (currentTab === 'TINH_GIA') renderCustomButtonsManager();
     }
     const dsSpFilters = document.getElementById('dsSpFilters');
     if (dsSpFilters) {
-        dsSpFilters.style.display = (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') ? 'flex' : 'none';
+        dsSpFilters.style.display = (currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'WEB_SP') ? 'flex' : 'none';
     }
     document.getElementById('searchInput').value = '';
     selectedOrderIds.clear();
-    selectedReturnOrderIds.clear();
     selectedProductIds.clear();
     if (typeof updateProductBatchControls === 'function') updateProductBatchControls();
     resetFilters();
     currentPage = 1;
-    if (isReturnOrderModule) await fetchThongTinStoreNames();
-    if (isReturnOrderModule) setReturnStoreOptions();
     
     if (canReuse) {
+        if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'WEB_SP') {
+            generateDsSpPrefix1Buttons();
+        }
+        populateFilters();
         renderHeaders();
         filterTable();
     } else if (!force && allDataCache[currentTab] && allDataCache[currentTab].length > 0) {
@@ -200,6 +197,10 @@ async function switchTab(tabName, force = false) {
             spBoSetCache = null;
             await fetchSpBoSet();
         }
+        if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'WEB_SP') {
+            generateDsSpPrefix1Buttons();
+        }
+        populateFilters();
         renderHeaders();
         filterTable();
     } else {
@@ -345,19 +346,19 @@ async function fetchData() {
             try { await fetchSpBoSet(true); } catch (_) {}
         }
 
-        if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') { generateDsSpPrefix1Buttons(); }
+        if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'WEB_SP') { generateDsSpPrefix1Buttons(); }
         filteredData = [...allData];
         if (currentTab === 'NHAP_XUAT') {
             filteredData.sort((a, b) => parseDdMmYyyyDate(b[1]) - parseDdMmYyyyDate(a[1]));
-        }
-        if (currentTab === 'DH_HOAN') {
-            filteredData.sort((a, b) => parseDdMmYyyyDate(b[2]) - parseDdMmYyyyDate(a[2]));
         }
         if (currentTab === 'DS_SP' || currentTab === 'SP_GIAM_GIA') {
             filteredData.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
         }
         if (currentTab === 'TINH_GIA') {
             filteredData.sort((a, b) => String(b[1] || '').localeCompare(String(a[1] || '')));
+        }
+        if (currentTab === 'WEB_SP') {
+            filteredData.sort((a, b) => String(b[2] || '').localeCompare(String(a[2] || ''), 'vi', { numeric: true, sensitivity: 'base' }));
         }
         populateFilters();
         renderHeaders();
@@ -372,18 +373,20 @@ async function fetchData() {
 }
 function renderHeaders() {
     const head = document.getElementById('tableHead');
-    const selectHeader = currentTab === 'DH_HOAN'
-            ? `<th class="select-col"><input type="checkbox" onchange="toggleAllReturnOrders(this.checked)" title="Chọn tất cả đơn trả"></th>`
-            : (currentTab === 'TINH_GIA' || currentTab === 'DS_SP')
-                ? `<th class="select-col"><input type="checkbox" id="selectAllProductsCb" onchange="toggleAllVisibleProducts(this.checked)" title="Chọn tất cả sản phẩm đang lọc"></th>`
-                : '';
+    const selectHeader = (currentTab === 'TINH_GIA' || currentTab === 'DS_SP')
+        ? `<th class="select-col"><input type="checkbox" id="selectAllProductsCb" onchange="toggleAllVisibleProducts(this.checked)" title="Chọn tất cả sản phẩm đang lọc"></th>`
+        : '';
     head.innerHTML = `<tr>${selectHeader}${getDisplayHeaders().map(h => {
         const isSorted = currentSortCol === h;
         const sortIndicator = isSorted
             ? (currentSortDir === 'desc' ? ' <span class="sort-arrow desc">▼</span>' : (currentSortDir === 'asc' ? ' <span class="sort-arrow asc">▲</span>' : ' <span class="sort-arrow default">↕</span>'))
             : ' <span class="sort-arrow default">↕</span>';
         const activeClass = isSorted ? ' sort-active' : '';
-        return `<th class="sortable-header${activeClass}" onclick="handleHeaderSort('${escapeHtml(escapeJsString(h))}')" title="Bấm để sắp xếp (Lớn tới Nhỏ -> Nhỏ tới Lớn -> Mặc định)">${escapeHtml(h.toUpperCase())}${sortIndicator}</th>`;
+        const isSku = (h === 'sku' || h === 'id_sp_con' || h === 'id_sp');
+        const isTenSp = (h === 'ten_sp' || h === 'ten_san_pham');
+        const isMoTa = (h === 'mo_ta' || h === 'noi_dung');
+        const colClass = isSku ? ' col-sku' : (isTenSp ? ' col-ten-sp' : (isMoTa ? ' col-mo-ta' : ''));
+        return `<th data-col="${escapeHtml(h)}" class="sortable-header${activeClass}${colClass}" onclick="handleHeaderSort('${escapeHtml(escapeJsString(h))}')" title="Bấm để sắp xếp">${escapeHtml(h.toUpperCase())}${sortIndicator}</th>`;
     }).join('')}</tr>`;
 }
 
@@ -413,7 +416,7 @@ function getRowSortValue(row, headerName, storageHeaders, tabName) {
     if (headerName === 'ngay_h') return rawVal;
     if (headerName === 'ngay') {
         if (tabName === 'HOA_DON') return parseHoaDonDate(rawVal);
-        if (tabName === 'NHAP_XUAT' || tabName === 'DH_HOAN') return parseDdMmYyyyDate(rawVal);
+        if (tabName === 'NHAP_XUAT') return parseDdMmYyyyDate(rawVal);
         const time = new Date(String(rawVal).trim()).getTime();
         return Number.isNaN(time) ? 0 : time;
     }
@@ -496,35 +499,6 @@ function getNhapXuatSummaryRows(rows = allData) {
         }
     });
     return [...summaries.values()];
-}
-
-function getReturnOrderKey(row) {
-    return String(row?._sheetRow || row?.[2] || '').trim();
-}
-
-function getReturnStatusClass(status) {
-    const value = String(status || '').trim().toLocaleUpperCase('vi');
-    if (value === 'HỦY') return 'return-status-cancel';
-    if (value === 'HOÀN') return 'return-status-refund';
-    if (value === 'TRẢ') return 'return-status-return';
-    return '';
-}
-
-function toggleReturnOrderSelection(rowKey, checked) {
-    const key = String(rowKey || '').trim();
-    if (!key) return;
-    if (checked) selectedReturnOrderIds.add(key);
-    else selectedReturnOrderIds.delete(key);
-}
-
-function toggleAllReturnOrders(checked) {
-    filteredData.forEach(row => {
-        const key = getReturnOrderKey(row);
-        if (!key) return;
-        if (checked) selectedReturnOrderIds.add(key);
-        else selectedReturnOrderIds.delete(key);
-    });
-    renderTable();
 }
 
 function colName(index) {
@@ -611,36 +585,39 @@ function setStoreFilterOptions(values) {
     if (uniqueValues.includes(currentValue)) select.value = currentValue;
 }
 
-function setReturnStoreOptions() {
-    const select = document.getElementById('returnStoreSelect');
-    if (!select) return;
-    const currentValue = select.value;
-    select.innerHTML = `<option value="">Chọn gian...</option>${thongTinStoreNames
-        .map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
-        .join('')}`;
-    if (thongTinStoreNames.includes(currentValue)) select.value = currentValue;
-}
-
 function populateFilters() {
-    // Thu thập các giá trị của cột 'truong' (index 1) để đưa vào datalist Lọc theo Trường
     const truongValues = allData.map(row => String(row[1] || '').trim()).filter(Boolean);
     setDatalistOptions('truongOptions', truongValues);
-    setStoreFilterOptions(currentTab === 'DON_HANG'
-        ? [...thongTinStoreNames, ...allData.map(row => String(row[DON_HANG_INDEX.gian_hang] || '').trim())]
-        : thongTinStoreNames);
+    if (currentTab === 'WEB_SP') {
+        const gianValues = allData.map(row => String(row[1] || '').trim()).filter(Boolean);
+        setStoreFilterOptions(gianValues);
+    } else if (currentTab === 'SP_GIAM_GIA') {
+        const gianValues = allData.map(row => String(row[8] || '').trim()).filter(Boolean);
+        setStoreFilterOptions(gianValues);
+    } else if (currentTab === 'DON_HANG') {
+        setStoreFilterOptions([...thongTinStoreNames, ...allData.map(row => String(row[DON_HANG_INDEX.gian_hang] || '').trim())]);
+    } else {
+        setStoreFilterOptions(thongTinStoreNames);
+    }
     if (currentTab === 'HOA_DON') {
         setDatalistOptions('nccOptions', allData.map(row => String(row[2] || '').trim()).filter(Boolean));
     }
 }
 
 function resetFilters() {
-    ['truongFilter', 'storeFilter', 'orderDateFrom', 'orderDateTo', 'orderMdhFilter', 'orderMvdFilter', 'orderTinhTrangFilter', 'orderTrangThaiFilter', 'orderProfitFilter', 'returnDateFrom', 'returnDateTo'].forEach(id => {
+    ['truongFilter', 'storeFilter', 'orderDateFrom', 'orderDateTo', 'orderMdhFilter', 'orderMvdFilter', 'orderTinhTrangFilter', 'orderTrangThaiFilter', 'orderProfitFilter'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
     if (typeof syncOrderStatusFilterButtons === 'function') syncOrderStatusFilterButtons();
     currentDsSpPrefix1Filter = '';
     currentDsSpPrefix2Filter = '';
+    document.querySelectorAll('#dsSpPrefix1Buttons button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.prefix === '');
+    });
+    document.querySelectorAll('#dsSpPrefix2Buttons button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.prefix === '');
+    });
 }
 
 function getDataSheetRow(row) {
@@ -856,14 +833,26 @@ async function fetchDsSpNameMap() {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Không Ä‘á» c Ä‘Æ°á»£c tÃªn sản phẩm tá»« sheet DS_SP.');
+        throw new Error(err.error?.message || 'Không đọc được tên sản phẩm từ sheet DS_SP.');
     }
     const data = await res.json();
     dsSpNameMapCache = new Map();
     (data.values || []).forEach(row => {
+        const idSpCon = String(row[0] || '').trim().toUpperCase();
         const idSp = String(row[1] || '').trim().toUpperCase();
         const name = String(row[2] || '').trim();
-        if (idSp) dsSpNameMapCache.set(idSp, name);
+        if (!name) return;
+        if (idSp) {
+            dsSpNameMapCache.set(idSp, name);
+            if (idSp.length >= 4) dsSpNameMapCache.set(idSp.slice(0, 4), name);
+        }
+        if (idSpCon) {
+            dsSpNameMapCache.set(idSpCon, name);
+            dsSpNameMapCache.set(idSpCon.slice(0, 14), name);
+            if (idSpCon.length >= 4 && !dsSpNameMapCache.has(idSpCon.slice(0, 4))) {
+                dsSpNameMapCache.set(idSpCon.slice(0, 4), name);
+            }
+        }
     });
     return dsSpNameMapCache;
 }
@@ -888,128 +877,6 @@ async function fetchDsSpOptions() {
         dsSpOptionsCache.push({ id: idSp, name: String(row[2] || '').trim(), gia_nhap: parseMoney(row[3]), gia_ban: parseMoney(row[4]) });
     });
     return dsSpOptionsCache;
-}
-
-let returnDataByOrderCache = null;
-async function fetchReturnStatusByOrderMap(force = false) {
-    if (returnStatusByOrderCache && !force) return returnStatusByOrderCache;
-    const token = await getAccessToken();
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DH_HOAN!A2:K`, {
-        headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Không Ä‘á» c Ä‘Æ°á»£c sheet DH_HOAN.');
-    }
-    const data = await res.json();
-    returnStatusByOrderCache = new Map();
-    returnStatusByMvdCache = new Map();
-    returnDataByOrderCache = new Map();
-    (data.values || []).forEach(row => {
-        const store = String(row[0] || '').trim().toLowerCase();
-        const status = String(row[1] || '').trim().toLocaleUpperCase('vi');
-        const orderId = String(row[3] || '').trim();
-        const mvd = String(row[4] || '').trim();
-        const mvdTra = String(row[7] || '').trim();
-        if (store && orderId && status) {
-            returnStatusByOrderCache.set(`${store}::${orderId}`, status);
-            if (!returnDataByOrderCache.has(orderId)) {
-                returnDataByOrderCache.set(orderId, { status, mvd_tra: mvdTra || mvd });
-            }
-        }
-        if (store && mvd && status) {
-            const matches = returnStatusByMvdCache.get(mvd) || [];
-            matches.push({ store, status });
-            returnStatusByMvdCache.set(mvd, matches);
-        }
-    });
-    return returnStatusByOrderCache;
-}
-
-async function deleteSelectedOrders() {
-    if (currentTab === 'DH_HOAN') {
-        await deleteSelectedReturnOrders();
-        return;
-    }
-    try {
-        // ... (remaining logic)
-    } catch (err) {
-        console.error(err);
-        alert('Không xóa được đơn hàng: ' + err.message);
-    } finally {
-        document.getElementById('loading').style.display = 'none';
-    }
-}
-
-async function deleteSelectedReturnOrders() {
-    const selectedKeys = [...selectedReturnOrderIds];
-    if (!selectedKeys.length) {
-        alert('Vui lòng tick chá» n Ä‘Æ¡n trả cáº§n xÃ³a.');
-        return;
-    }
-    const rowsToDelete = allData.filter(row => selectedKeys.includes(getReturnOrderKey(row)));
-    if (!rowsToDelete.length) {
-        alert('Không tÃ¬m tháº¥y dòng Ä‘Æ¡n trả Ä‘Ã£ chá» n.');
-        return;
-    }
-    if (!confirm(`Xóa ${rowsToDelete.length} dòng đơn trả đã chọn?`)) return;
-
-    document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Ä ang xÃ³a Ä‘Æ¡n trả Ä‘Ã£ chá» n...';
-    try {
-        await deleteSheetRows('DH_HOAN', rowsToDelete.map(getDataSheetRow));
-        selectedReturnOrderIds.clear();
-        if (typeof clearTabCaches === 'function') clearTabCaches();
-        await fetchData();
-        filterTable();
-        alert(`Đã xóa ${rowsToDelete.length} dòng đơn trả.`);
-    } catch (err) {
-        console.error(err);
-        alert('Không xóa được đơn trả: ' + err.message);
-    } finally {
-        document.getElementById('loading').style.display = 'none';
-    }
-}
-
-async function changeSelectedReturnOrderUploadDate() {
-    const selectedKeys = [...selectedReturnOrderIds];
-    if (!selectedKeys.length) {
-        alert('Vui lòng tick chá» n Ä‘Æ¡n trả cáº§n Ä‘á»•i ngày tải lÃªn.');
-        return;
-    }
-    const isoDate = document.getElementById('newUploadDateInput')?.value;
-    if (!isoDate) {
-        alert('Vui lòng chá» n ngày má»›i á»Ÿ Ã´ Ä á»•i ngày.');
-        return;
-    }
-    const newDate = formatDateDdMmYyyy(isoDate);
-
-    const rowsToUpdate = allData.filter(row => selectedKeys.includes(getReturnOrderKey(row)));
-    if (!rowsToUpdate.length) {
-        alert('Không tÃ¬m tháº¥y dòng Ä‘Æ¡n trả Ä‘Ã£ chá» n.');
-        return;
-    }
-
-    const DH_HOAN_UPLOAD_DATE_INDEX = 10;
-
-    rowsToUpdate.forEach(row => {
-        row[DH_HOAN_UPLOAD_DATE_INDEX] = newDate;
-    });
-
-    document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Ä ang Ä‘á»•i ngày tải lÃªn...';
-    try {
-        const items = rowsToUpdate.map(row => ({ row, sheetRow: getDataSheetRow(row) }));
-        await batchWriteRecordRows(items);
-        await fetchData();
-        filterTable();
-        alert(`Đã đổi ngày tải lên cho ${rowsToUpdate.length} dòng đơn trả.`);
-    } catch (err) {
-        console.error(err);
-        alert('Không Ä‘á»•i Ä‘Æ°á»£c ngày tải lÃªn: ' + err.message);
-    } finally {
-        document.getElementById('loading').style.display = 'none';
-    }
 }
 
 async function quickUpdateOrderStatus(orderId, newStatus) {
@@ -1065,7 +932,7 @@ async function quickUpdateOrderHoanHang(orderId, newStatus) {
     recalculateDonHangRows(targets.map(r => r));
 
     document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = `Đang cập nhật trạng thái hoàn hàng...`;
+    document.querySelector('#loading p').innerText = 'Đang cập nhật trạng thái hoàn hàng...';
     try {
         const items = targets.map(row => ({ row, sheetRow: getDataSheetRow(row) }));
         await batchWriteRecordRows(items);
@@ -1108,6 +975,216 @@ function setOptionButtonValue(button, value) {
     group.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
 }
 
+let _activeImageTargetInputId = null;
+
+function selectFormSkuValue(inputId, skuCode) {
+    const inputEl = document.getElementById(inputId);
+    if (!inputEl) return;
+    const cleanSku = String(skuCode || '').trim().slice(0, 14);
+    inputEl.value = cleanSku;
+
+    const labelEl = inputEl.closest('label') || inputEl.parentElement;
+    if (labelEl) {
+        labelEl.querySelectorAll('.sku-option-pill').forEach(btn => {
+            btn.classList.toggle('active', btn.textContent.includes(cleanSku));
+        });
+    }
+
+    onSkuInputChanged(inputEl);
+    updateDsSpSuggestedName();
+}
+
+function getSkuSuggestionsList() {
+    const list = [];
+    const seen = new Set();
+
+    const addSku = (code, name) => {
+        const rawStr = String(code || '').trim();
+        const cleanName = String(name || '').trim();
+        if (!rawStr) return;
+        const parts = rawStr.split(/[|,,]/).map(s => s.trim().slice(0, 14)).filter(Boolean);
+        parts.forEach(cleanCode => {
+            const key = cleanCode.toUpperCase();
+            if (seen.has(key)) {
+                const existing = list.find(item => item.code.toUpperCase() === key);
+                if (existing && !existing.name && cleanName) {
+                    existing.name = cleanName;
+                }
+                return;
+            }
+            seen.add(key);
+            list.push({ code: cleanCode, name: cleanName });
+        });
+    };
+
+    if (Array.isArray(allData)) {
+        allData.forEach(row => {
+            if (currentTab === 'WEB_SP') {
+                addSku(row[2], row[4]);
+            } else if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'SP_BO') {
+                addSku(row[0], row[2]);
+                addSku(row[1], row[2]);
+            }
+        });
+    }
+
+    if (typeof allDataCache === 'object') {
+        Object.keys(allDataCache).forEach(tabKey => {
+            const rows = allDataCache[tabKey];
+            if (Array.isArray(rows)) {
+                rows.forEach(row => {
+                    if (tabKey === 'WEB_SP') {
+                        addSku(row[2], row[4]);
+                    } else if (tabKey === 'DS_SP' || tabKey === 'TINH_GIA' || tabKey === 'SP_BO') {
+                        addSku(row[0], row[2]);
+                        addSku(row[1], row[2]);
+                    }
+                });
+            }
+        });
+    }
+
+    return list;
+}
+
+function updateSkuDatalistOptions() {
+    let datalist = document.getElementById('skuSuggestOptions');
+    if (!datalist) {
+        datalist = document.createElement('datalist');
+        datalist.id = 'skuSuggestOptions';
+        document.body.appendChild(datalist);
+    }
+    const skus = getSkuSuggestionsList();
+    datalist.innerHTML = skus.map(item => `<option value="${escapeHtml(item.code)}">${escapeHtml(item.name ? item.code + ' — ' + item.name : item.code)}</option>`).join('');
+}
+
+function getDsSpProductName(skuVal) {
+    if (!skuVal) return '';
+    const cleanSku = String(skuVal).trim().toUpperCase();
+    const prefix4 = cleanSku.slice(0, 4);
+    if (!prefix4 || prefix4.length < 4) return '';
+
+    // Check dsSpNameMapCache
+    if (dsSpNameMapCache) {
+        if (dsSpNameMapCache.has(prefix4)) return dsSpNameMapCache.get(prefix4);
+        if (dsSpNameMapCache.has(cleanSku)) return dsSpNameMapCache.get(cleanSku);
+    }
+
+    // Direct search in DS_SP sheet data matching ID_SP (col index 1)
+    const dsRows = (currentTab === 'DS_SP' ? allData : null) || allDataCache['DS_SP'] || [];
+    if (Array.isArray(dsRows)) {
+        for (const row of dsRows) {
+            const idSp = String(row[1] || '').trim().toUpperCase(); // ID_SP
+            const name = String(row[2] || '').trim(); // TEN_SP
+            if (idSp === prefix4 && name) return name;
+        }
+        for (const row of dsRows) {
+            const idSpCon = String(row[0] || '').trim().toUpperCase();
+            const name = String(row[2] || '').trim();
+            if (idSpCon.startsWith(prefix4) && name) return name;
+        }
+    }
+
+    return '';
+}
+
+async function updateDsSpSuggestedName() {
+    const suggestedInput = document.getElementById('dsSpSuggestedNameInput');
+    if (!suggestedInput) return;
+
+    const form = suggestedInput.closest('#formFields') || document;
+    const skuInput = form.querySelector('[data-field="sku"]') || form.querySelector('[data-field="id_sp_con"]') || form.querySelector('[data-field="id_sp"]');
+    const skuVal = String(skuInput?.value || '').trim();
+
+    if (!skuVal) {
+        suggestedInput.value = '';
+        suggestedInput.placeholder = 'Chưa chọn SKU...';
+        return;
+    }
+
+    try {
+        await fetchDsSpNameMap();
+    } catch (e) {
+        console.error('Failed to load DS_SP name map:', e);
+    }
+
+    const matchedName = getDsSpProductName(skuVal);
+    if (matchedName) {
+        suggestedInput.value = matchedName;
+    } else {
+        const prefix4 = skuVal.slice(0, 4).toUpperCase();
+        suggestedInput.value = '';
+        suggestedInput.placeholder = `(Không tìm thấy SKU mã '${prefix4}' trong DS_SP)`;
+    }
+}
+
+function copyDsSpNameToTenSp(tenSpInputId) {
+    const suggestedInput = document.getElementById('dsSpSuggestedNameInput');
+    const tenSpInput = document.getElementById(tenSpInputId);
+    if (suggestedInput && tenSpInput && suggestedInput.value) {
+        tenSpInput.value = suggestedInput.value;
+    }
+}
+
+function onSkuInputChanged(inputEl) {
+    updateDsSpSuggestedName();
+}
+
+function updateFormImgGallery(inputId) {
+    const inputEl = document.getElementById(inputId);
+    const galleryEl = document.getElementById('gallery_' + inputId);
+    if (!inputEl || !galleryEl) return;
+    const rawVal = String(inputEl.value || '').trim();
+    const urls = rawVal.split(/[|,,]/).map(s => s.trim()).filter(s => s.startsWith('http://') || s.startsWith('https://'));
+    if (urls.length === 0) {
+        galleryEl.innerHTML = '<span style="color:#94a3b8; font-size:12px; font-weight:500;">Chưa có ảnh. Bấm nút "🖼️ Tìm / Thêm Ảnh" ở trên để chọn thêm ảnh.</span>';
+        return;
+    }
+    galleryEl.innerHTML = urls.map((url, idx) => `
+        <div class="form-img-card" title="${escapeHtml(url)}">
+            <img src="${escapeHtml(url)}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2240%22 height=%2240%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%2394a3b8%22 stroke-width=%222%22><rect width=%2218%22 height=%2218%22 x=%223%22 y=%223%22 rx=%222%22/><circle cx=%229%22 cy=%229%22 r=%222%22/><path d=%22m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21%22/></svg>'">
+            <button type="button" class="remove-btn" onclick="removeFormImgUrl('${inputId}', ${idx})" title="Xóa ảnh này">✕</button>
+        </div>
+    `).join('');
+}
+
+function removeFormImgUrl(inputId, removeIdx) {
+    const inputEl = document.getElementById(inputId);
+    if (!inputEl) return;
+    const rawVal = String(inputEl.value || '').trim();
+    const urls = rawVal.split(/[|,,]/).map(s => s.trim()).filter(Boolean);
+    urls.splice(removeIdx, 1);
+    inputEl.value = urls.join(' | ');
+    updateFormImgGallery(inputId);
+}
+
+function openImageSearchForField(inputId) {
+    _activeImageTargetInputId = inputId;
+    const inputEl = document.getElementById(inputId);
+    const form = inputEl?.closest('#formFields');
+    const tenSpInput = form?.querySelector('[data-field="ten_sp"]') || form?.querySelector('[data-field="ten_san_pham"]');
+    const query = tenSpInput?.value || '';
+
+    _imgSearchRowIndex = null;
+    _imgSearchSelectedUrl = null;
+    const queryInput = document.getElementById('imgSearchQuery');
+    const directInput = document.getElementById('imgDirectUrlInput');
+    if (queryInput) queryInput.value = query;
+    if (directInput) directInput.value = '';
+
+    document.getElementById('imgSearchResults').innerHTML = document.getElementById('imgSearchPlaceholder').outerHTML;
+    document.getElementById('imgSearchFooter').style.display = 'none';
+    document.getElementById('imgSearchSubtitle').textContent = query ? `Sản phẩm: "${query}"` : 'Thêm / Tìm ảnh';
+
+    const modal = document.getElementById('imgSearchModal');
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    if (query) {
+        setTimeout(searchProductImages, 150);
+    }
+}
+
 function renderFormFields(rowOrGroup = null) {
     const container = document.getElementById('formFields');
     const row = rowOrGroup;
@@ -1121,8 +1198,65 @@ function renderFormFields(rowOrGroup = null) {
             return `<input id="formField_${idx}" data-field="${header}" type="hidden" value="${escapeHtml(idValue)}">`;
         }
 
-        if (header === 'ghi_chu' || header === 'noi_dung') {
-            return `<label><span>${header.toUpperCase()}</span><textarea id="formField_${idx}" data-field="${header}" rows="4">${value}</textarea></label>`;
+        if (['anh', 'anh_phan_loai', 'anh_mota'].includes(header)) {
+            return `
+            <div class="form-img-container">
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>${header.toUpperCase()} (Phân cách ảnh bởi dấu | )</span>
+                    <button type="button" onclick="openImageSearchForField('formField_${idx}')" style="padding:4px 12px; background:linear-gradient(135deg,#4f46e5,#7c3aed); color:#fff; border:none; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">🖼️ Tìm / Thêm Ảnh</button>
+                </label>
+                <input id="formField_${idx}" data-field="${header}" type="text" value="${value}" placeholder="Link ảnh cách nhau bởi dấu | (vd: url1 | url2)..." oninput="updateFormImgGallery('formField_${idx}')">
+                <div class="form-img-gallery" id="gallery_formField_${idx}"></div>
+            </div>`;
+        }
+
+        if (header === 'sku' || header === 'id_sp_con' || header === 'id_sp') {
+            const rawSkuStr = String(rawValue || '').trim();
+            const skuParts = rawSkuStr.split(/[|,,]/).map(s => s.trim().slice(0, 14)).filter(Boolean);
+            const displayValue = skuParts.length > 0 ? skuParts[0] : value;
+            
+            let pillButtonsHtml = '';
+            if (skuParts.length > 0) {
+                pillButtonsHtml = `<div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;">
+                    ${skuParts.map((part, pIdx) => `
+                        <button type="button" class="sku-option-pill ${pIdx === 0 ? 'active' : ''}" 
+                            onclick="selectFormSkuValue('formField_${idx}', '${escapeHtml(part)}')">
+                            📌 ${escapeHtml(part)}
+                        </button>
+                    `).join('')}
+                </div>`;
+            }
+
+            return `
+            <label>
+                <span>${header.toUpperCase()} (Chọn SKU 14 ký tự)</span>
+                <input id="formField_${idx}" data-field="${header}" type="text" value="${escapeHtml(displayValue)}" list="skuSuggestOptions" autocomplete="off" oninput="onSkuInputChanged(this)" placeholder="Nhập hoặc chọn SKU 14 ký tự...">
+                ${pillButtonsHtml}
+            </label>`;
+        }
+
+        if (header === 'ten_sp' || header === 'ten_san_pham') {
+            const extraDsSpBox = (currentTab === 'WEB_SP') ? `
+                <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; padding:8px 12px; display:grid; gap:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-size:11px; font-weight:700; color:#0369a1;">📌 TÊN SP TỪ DS_SP (So sánh 4 ký tự SKU với ID_SP)</span>
+                        <button type="button" onclick="copyDsSpNameToTenSp('formField_${idx}')" style="padding:2px 8px; background:#0284c7; color:#fff; border:none; border-radius:5px; font-size:11px; font-weight:600; cursor:pointer;">📋 Dùng tên này cho TEN_SP</button>
+                    </div>
+                    <input id="dsSpSuggestedNameInput" type="text" readonly style="background:#fff; color:#0f172a; font-weight:600; font-size:13px; border:1px solid #93c5fd; padding:6px 10px; border-radius:6px;" value="" placeholder="Đang tra cứu ID_SP từ DS_SP...">
+                </div>` : '';
+
+            return `
+            <div style="display:grid; gap:8px;">
+                <label>
+                    <span>TEN_SP</span>
+                    <input id="formField_${idx}" data-field="${header}" type="text" value="${value}">
+                </label>
+                ${extraDsSpBox}
+            </div>`;
+        }
+
+        if (header === 'ghi_chu' || header === 'noi_dung' || header === 'mo_ta') {
+            return `<label class="full-width-field"><span>${header.toUpperCase()}</span><textarea id="formField_${idx}" data-field="${header}" rows="3">${value}</textarea></label>`;
         }
 
         if (header === 'truong') {
@@ -1181,6 +1315,14 @@ async function openRecordForm(rowIndex = null) {
     } else {
         document.getElementById('formFields').oninput = null;
     }
+    updateSkuDatalistOptions();
+    updateDsSpSuggestedName();
+    const storageHeaders = getStorageHeaders();
+    storageHeaders.forEach((h, idx) => {
+        if (['anh', 'anh_phan_loai', 'anh_mota'].includes(h)) {
+            updateFormImgGallery(`formField_${idx}`);
+        }
+    });
     title.innerText = row ? `Sửa ${TAB_LABELS[currentTab] || currentTab}` : `Thêm mới ${TAB_LABELS[currentTab] || currentTab}`;
     modal.classList.add('active');
     document.getElementById('formField_1')?.focus();
@@ -1503,11 +1645,32 @@ function renderTable() {
                 ? formatDisplayNumber(cell)
                 : cell;
             const displayValue = displayCell;
-            const classNames = [];
-            const cellClass = classNames.length ? ` class="${classNames.join(' ')}"` : '';
-            
-            
-            return `<td${cellClass} data-col="${header}">${escapeHtml(displayValue || '')}</td>`;
+
+            const isSku = (header === 'sku' || header === 'id_sp_con' || header === 'id_sp');
+            const isTenSp = (header === 'ten_sp' || header === 'ten_san_pham');
+            const isMoTa = (header === 'mo_ta' || header === 'noi_dung');
+
+            if (isSku || isTenSp || isMoTa) {
+                const colClass = isSku ? 'col-sku' : (isTenSp ? 'col-ten-sp' : 'col-mo-ta');
+                let extraPills = '';
+                if (currentTab === 'TINH_GIA' && (header === 'ten_sp' || header === 'ten_san_pham')) {
+                    const idSpConVal = String(row[0] || '').trim();
+                    const tenSpVal = String(row[2] || '').trim();
+                    const btnList = getSavedCustomButtons();
+                    if (btnList.length > 0) {
+                        extraPills = `<div style="display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; gap:4px; margin-top:5px;">
+                            ${btnList.map(bText => `
+                                <button type="button" class="copy-pill-btn" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe; border-radius:4px; font-size:11px; font-weight:700; padding:2px 6px; cursor:pointer; display:inline-flex; align-items:center; gap:3px; transition:all 0.15s; white-space:nowrap;" onclick="event.stopPropagation(); executeCustomCopy('${escapeJsString(idSpConVal)}', '${escapeJsString(bText)}', '${escapeJsString(tenSpVal)}', this)" title="Bấm để copy: ${escapeHtml(formatCustomCopyText(idSpConVal, bText, tenSpVal))}">
+                                    📋 ${escapeHtml(bText)}
+                                </button>
+                            `).join('')}
+                        </div>`;
+                    }
+                }
+                return `<td class="${colClass}" data-col="${header}"><div class="multiline-cell-wrapper" title="${escapeHtml(displayValue || '')}">${escapeHtml(displayValue || '')}</div>${extraPills}</td>`;
+            }
+
+            return `<td data-col="${header}">${escapeHtml(displayValue || '')}</td>`;
         }).join('');
 
         const editAction = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
@@ -1515,11 +1678,9 @@ function renderTable() {
             : currentTab === 'TINH_GIA'
                 ? ` ondblclick="event.stopPropagation()"`
                 : ` ondblclick="openRecordForm(${start + rowIndex})"`;
-        const selectCell = currentTab === 'DH_HOAN'
-                ? `<td class="select-col"><input type="checkbox" ${selectedReturnOrderIds.has(getReturnOrderKey(row)) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="toggleReturnOrderSelection('${escapeHtml(escapeJsString(getReturnOrderKey(row)))}', this.checked)"></td>`
-                : (currentTab === 'TINH_GIA' || currentTab === 'DS_SP')
-                    ? `<td class="select-col" onclick="event.stopPropagation()"><input type="checkbox" class="product-select-cb" data-sp-id="${escapeHtml(escapeJsString(getRowProductId(row)))}" ${selectedProductIds.has(getRowProductId(row)) ? 'checked' : ''} onchange="toggleProductSelection('${escapeHtml(escapeJsString(getRowProductId(row)))}', this.checked)"></td>`
-                    : '';
+        const selectCell = (currentTab === 'TINH_GIA' || currentTab === 'DS_SP')
+            ? `<td class="select-col" onclick="event.stopPropagation()"><input type="checkbox" class="product-select-cb" data-sp-id="${escapeHtml(escapeJsString(getRowProductId(row)))}" ${selectedProductIds.has(getRowProductId(row)) ? 'checked' : ''} onchange="toggleProductSelection('${escapeHtml(escapeJsString(getRowProductId(row)))}', this.checked)"></td>`
+            : '';
         const imgSearchCell = currentTab === 'DS_SP'
             ? `<td onclick="event.stopPropagation()" style="white-space:nowrap;padding:0 8px;"><button onclick="event.stopPropagation(); openImageSearch(${start + rowIndex})" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:7px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;">🔍</button></td>`
             : '';
@@ -1580,31 +1741,32 @@ function filterTable() {
             : row.some(cell => String(cell).toLowerCase().includes(t))
         );
         const matchesTruong = !truong || String(row[1] || '').toLowerCase().includes(truong);
-        const matchesStore = !['DON_HANG', 'DON_HANG_CHI_TIET'].includes(currentTab) || !store || String(row[DON_HANG_INDEX.gian_hang] || '').toLowerCase().includes(store);
-        if (currentTab === 'DH_HOAN') {
-            const returnStore = (document.getElementById('returnStoreSelect')?.value || '').toLowerCase();
-            const returnTinhTrang = (document.getElementById('returnStatusSelect')?.value || '').toLowerCase();
-            const returnDateFrom = document.getElementById('returnDateFrom')?.value || '';
-            const returnDateTo = document.getElementById('returnDateTo')?.value || '';
-            const returnDateFromTime = returnDateFrom ? new Date(`${returnDateFrom}T00:00:00`).getTime() : 0;
-            const returnDateToTime = returnDateTo ? new Date(`${returnDateTo}T23:59:59`).getTime() : 0;
-            const returnTime = parseDdMmYyyyDate(row[2]);
-            const matchesReturnStore = !returnStore || String(row[0] || '').toLowerCase() === returnStore;
-            const matchesReturnTinhTrang = !returnTinhTrang || String(row[1] || '').toLowerCase() === returnTinhTrang;
-            const matchesReturnFrom = !returnDateFromTime || returnTime >= returnDateFromTime;
-            const matchesReturnTo = !returnDateToTime || returnTime <= returnDateToTime;
-            return matchesSearch && matchesReturnStore && matchesReturnTinhTrang && matchesReturnFrom && matchesReturnTo;
-        }
+
         if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') {
             const idCon = String(row[0] || '').trim().toUpperCase();
             const idSp = String(row[1] || '').trim().toUpperCase();
             if (spBoSetCache && ((idCon && spBoSetCache.has(idCon)) || (idSp && !idCon && spBoSetCache.has(idSp)))) return false;
-            const tenSp = String(row[1] || '').toUpperCase();
-            const matchesDsSpPrefix1 = !currentDsSpPrefix1Filter || tenSp.startsWith(currentDsSpPrefix1Filter);
-            const matchesDsSpPrefix2 = !currentDsSpPrefix2Filter || tenSp.startsWith(currentDsSpPrefix2Filter);
-            return matchesSearch && matchesDsSpPrefix1 && matchesDsSpPrefix2 && matchesTruong && matchesStore;
+            if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return false;
+            const code = String(row[1] || '').toUpperCase();
+            const matchesDsSpPrefix1 = !currentDsSpPrefix1Filter || code.startsWith(currentDsSpPrefix1Filter);
+            const matchesDsSpPrefix2 = !currentDsSpPrefix2Filter || code.startsWith(currentDsSpPrefix2Filter);
+            return matchesSearch && matchesDsSpPrefix1 && matchesDsSpPrefix2 && matchesTruong;
         }
-        if (!['DON_HANG', 'DON_HANG_CHI_TIET'].includes(currentTab)) return matchesSearch && matchesTruong && matchesStore;
+
+        if (currentTab === 'WEB_SP') {
+            const matchesStore = !store || String(row[1] || '').trim().toLowerCase() === store.trim().toLowerCase();
+            const skuCode = String(row[2] || '').trim().toUpperCase();
+            const matchesPrefix1 = !currentDsSpPrefix1Filter || skuCode.startsWith(currentDsSpPrefix1Filter);
+            const matchesPrefix2 = !currentDsSpPrefix2Filter || skuCode.startsWith(currentDsSpPrefix2Filter);
+            return matchesSearch && matchesStore && matchesPrefix1 && matchesPrefix2 && matchesTruong;
+        }
+
+        if (currentTab === 'SP_GIAM_GIA') {
+            const matchesStore = !store || String(row[8] || '').trim().toLowerCase() === store.trim().toLowerCase();
+            return matchesSearch && matchesStore && matchesTruong;
+        }
+
+        if (!['DON_HANG', 'DON_HANG_CHI_TIET'].includes(currentTab)) return matchesSearch && matchesTruong;
         const orderTime = parseDonHangDateTime(row[DON_HANG_INDEX.ngay_h]);
         const matchesDateFrom = !dateFromTime || orderTime >= dateFromTime;
         const matchesDateTo = !dateToTime || orderTime <= dateToTime;
@@ -1616,12 +1778,12 @@ function filterTable() {
         const matchesProfit = !profitFilter
             || (profitFilter === 'negative' && profit < 0)
             || (profitFilter === 'positive' && profit > 0);
-        return matchesSearch && matchesStore && matchesDateFrom && matchesDateTo && matchesMdh && matchesMvd && matchesTinhTrang && matchesTrangThai && matchesProfit;
+        return matchesSearch && matchesDateFrom && matchesDateTo && matchesMdh && matchesMvd && matchesTinhTrang && matchesTrangThai && matchesProfit;
     });
+
     if (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') {
         filteredData.sort((a, b) => parseDonHangDateTime(b[DON_HANG_INDEX.ngay_h]) - parseDonHangDateTime(a[DON_HANG_INDEX.ngay_h]));
         updateDonHangSummary();
-        
     }
     if (currentTab === 'HOA_DON') {
         filteredData.sort((a, b) => parseHoaDonDate(b[1]) - parseHoaDonDate(a[1]));
@@ -1629,14 +1791,14 @@ function filterTable() {
     if (currentTab === 'NHAP_XUAT') {
         filteredData.sort((a, b) => parseDdMmYyyyDate(b[1]) - parseDdMmYyyyDate(a[1]));
     }
-    if (currentTab === 'DH_HOAN') {
-        filteredData.sort((a, b) => parseDdMmYyyyDate(b[2]) - parseDdMmYyyyDate(a[2]));
-    }
-    if (currentTab === 'DS_SP') {
+    if (currentTab === 'DS_SP' || currentTab === 'SP_GIAM_GIA') {
         filteredData.sort((a, b) => String(b[0] || '').localeCompare(String(a[0] || '')));
     }
     if (currentTab === 'TINH_GIA') {
         filteredData.sort((a, b) => String(b[1] || '').localeCompare(String(a[1] || '')));
+    }
+    if (currentTab === 'WEB_SP') {
+        filteredData.sort((a, b) => String(b[2] || '').localeCompare(String(a[2] || ''), 'vi', { numeric: true, sensitivity: 'base' }));
     }
     applyHeaderSort();
     currentPage = 1;
@@ -1670,6 +1832,14 @@ function setOrderQuickDateFilter(type) {
 let currentDsSpPrefix1Filter = '';
 let currentDsSpPrefix2Filter = '';
 
+function getRowPrefixCode(row) {
+    if (!row) return '';
+    if (currentTab === 'WEB_SP') {
+        return String(row[2] || '').trim().toUpperCase();
+    }
+    return String(row[1] || '').trim().toUpperCase();
+}
+
 function setDsSpPrefix1Filter(prefix) {
     currentDsSpPrefix1Filter = prefix;
     currentDsSpPrefix2Filter = ''; // Reset 2nd level filter
@@ -1690,11 +1860,12 @@ function setDsSpPrefix2Filter(prefix) {
 }
 
 function generateDsSpPrefix1Buttons() {
-    if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA') return;
+    if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
     const prefixes = new Set();
     allData.forEach(row => {
-        const idSp = String(row[1] || '').trim().toUpperCase();
-        if (idSp.length >= 1) prefixes.add(idSp.substring(0, 1));
+        if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return;
+        const code = getRowPrefixCode(row);
+        if (code.length >= 1) prefixes.add(code.substring(0, 1));
     });
     
     const sortedPrefixes = Array.from(prefixes).sort();
@@ -1710,12 +1881,13 @@ function generateDsSpPrefix1Buttons() {
 }
 
 function generateDsSpPrefix2Buttons(prefix1) {
-    if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA') return;
+    if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
     const prefixes = new Set();
     allData.forEach(row => {
-        const idSp = String(row[1] || '').trim().toUpperCase();
-        if ((!prefix1 || idSp.startsWith(prefix1)) && idSp.length >= 2) {
-            prefixes.add(idSp.substring(0, 2));
+        if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return;
+        const code = getRowPrefixCode(row);
+        if ((!prefix1 || code.startsWith(prefix1)) && code.length >= 2) {
+            prefixes.add(code.substring(0, 2));
         }
     });
     
@@ -2031,90 +2203,6 @@ function normalizeTextValue(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
-function buildReturnOrderRows(rows) {
-    const selectedStore = String(document.getElementById('returnStoreSelect')?.value || '').trim();
-    const selectedTinhTrang = String(document.getElementById('returnStatusSelect')?.value || '').trim();
-    if (!selectedStore) throw new Error('Vui lòng chọn gian trước khi thêm Excel.');
-    if (!selectedTinhTrang) throw new Error('Vui lòng chọn tình trạng trước khi thêm Excel.');
-
-    const existingOrderIds = new Set(allData.map(row => String(row[3] || '').trim()).filter(Boolean));
-    const seenOrderIds = new Set();
-    const HEADERS = {
-        orderId: 'Mã đơn hàng',
-        waybill: 'Mã vận đơn',
-        orderDate: 'Ngày đặt hàng',
-        cancelReason: 'Lý do hủy',
-        returnReason: 'Lý do Trả hàng/Hoàn tiền',
-        claimId: 'Mã số khiếu nại',
-        returnWaybill: 'Mã vận đơn trả hàng',
-        returnRefundStatus: 'Trạng thái Trả hàng/Hoàn tiền',
-        deliveryWaybill: 'Mã vận đơn giao hàng',
-        refunded: 'Đã hoàn tiền cho Người mua',
-        returning: 'Người mua đang trả hàng'
-    };
-    return rows.map(source => {
-        const type = selectedTinhTrang.toLocaleUpperCase('vi');
-        if (type === 'TRẢ') {
-            const refundStatus = normalizeTextValue(getExcelCell(source, HEADERS.returnRefundStatus));
-            if (refundStatus !== HEADERS.refunded && refundStatus !== HEADERS.returning) return null;
-        }
-        const orderId = String(getExcelCell(source, HEADERS.orderId) || '').trim();
-        if (!orderId || existingOrderIds.has(orderId) || seenOrderIds.has(orderId)) return null;
-        seenOrderIds.add(orderId);
-        const reason = type === 'HỦY'
-            ? String(getExcelCell(source, HEADERS.cancelReason) || '').trim()
-            : type === 'TRẢ'
-                ? String(getExcelCell(source, HEADERS.returnReason) || getExcelCell(source, HEADERS.cancelReason) || '').trim()
-                : '';
-        const claimId = type === 'TRẢ' ? String(getExcelCell(source, HEADERS.claimId) || '').trim() : '';
-        const returnWaybill = type === 'TRẢ' ? String(getExcelCell(source, HEADERS.returnWaybill) || '').trim() : '';
-        const waybill = type === 'TRẢ'
-            ? String(getExcelCell(source, HEADERS.deliveryWaybill) || getExcelCell(source, HEADERS.waybill) || '').trim()
-            : String(getExcelCell(source, HEADERS.waybill) || '').trim();
-        const uploadDate = formatDateDdMmYyyy(toIsoDateInput(new Date()));
-        return [
-            selectedStore,
-            selectedTinhTrang,
-            getDateOnly(formatExcelDateTime(getExcelCell(source, HEADERS.orderDate))),
-            orderId,
-            waybill,
-            reason,
-            claimId,
-            returnWaybill,
-            '',
-            '',
-            uploadDate
-        ];
-    }).filter(Boolean);
-}
-
-function readReturnOrderExcelRows(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array', nodim: true });
-                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-                expandWorksheetRef(worksheet);
-                const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-                const headers = (matrix[0] || []).map(normalizeExcelHeader);
-                const rows = matrix.slice(1).map(values => {
-                    const row = {};
-                    headers.forEach((header, index) => {
-                        if (!(header in row)) row[header] = values[index] ?? '';
-                    });
-                    return row;
-                });
-                resolve(buildReturnOrderRows(rows));
-            } catch (err) {
-                reject(err);
-            }
-        };
-        reader.onerror = () => reject(new Error(`Không thể đọc file ${file.name}`));
-        reader.readAsArrayBuffer(file);
-    });
-}
-
 function truncateExcelNumericCellsInRow(row) {
     if (!Array.isArray(row)) return row;
     return row.map(cell => {
@@ -2131,17 +2219,11 @@ async function processFiles(files) {
     }
 
     const fileNames = excelFiles.map(f => f.name).join(", ");
-        if (currentTab === 'DH_HOAN' && (!String(document.getElementById('returnStoreSelect')?.value || '').trim() || !String(document.getElementById('returnStatusSelect')?.value || '').trim())) {
-        alert('Vui lòng chọn gian và tình trạng trước khi thêm Excel.');
-        return;
-    }
     const confirmMessage = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
         ? `Dữ liệu từ ${excelFiles.length} file (${fileNames}) sẽ được đọc theo tên cột và cập nhật sheet '${currentTab}'. Tiếp tục?`
         : (currentTab === 'DS_SP' || currentTab === 'SP_GIAM_GIA')
             ? `Dữ liệu từ ${excelFiles.length} file (${fileNames}) sẽ XÓA TOÀN BỘ dữ liệu cũ trong sheet '${currentTab}' rồi ghi dữ liệu mới. Tiếp tục?`
-            : currentTab === 'DH_HOAN'
-                ? `Dữ liệu từ ${excelFiles.length} file (${fileNames}) sẽ chỉ thêm Mã đơn hàng chưa tồn tại vào sheet '${currentTab}'. Tiếp tục?`
-                : `Dữ liệu từ ${excelFiles.length} file (${fileNames}) sẽ cập nhật sheet '${currentTab}' theo id. Id đã có sẽ cập nhật, id mới sẽ thêm dòng. Tiếp tục?`;
+            : `Dữ liệu từ ${excelFiles.length} file (${fileNames}) sẽ cập nhật sheet '${currentTab}' theo id. Id đã có sẽ cập nhật, id mới sẽ thêm dòng. Tiếp tục?`;
     if (!confirm(confirmMessage)) return;
 
     document.getElementById('loading').style.display = 'flex';
@@ -2152,11 +2234,9 @@ async function processFiles(files) {
             ? readDonHangExcelRows
             : currentTab === 'DS_SP'
                 ? readDsSpExcelRows
-                : currentTab === 'DH_HOAN'
-                    ? readReturnOrderExcelRows
-                    : (currentTab === 'SP_GIAM_GIA')
-                        ? readHeaderMappedExcelRows
-                        : readExcelRows;
+                : (currentTab === 'SP_GIAM_GIA')
+                    ? readHeaderMappedExcelRows
+                    : readExcelRows;
         const rowsFromFiles = await Promise.all(excelFiles.map(reader));
         const allRowsToUpload = rowsFromFiles
             .flat()
@@ -2173,59 +2253,6 @@ async function processFiles(files) {
             await clearCurrentTabData();
             await appendRecordRows(allRowsToUpload);
             result = { updated: 0, inserted: allRowsToUpload.length, skipped: 0 };
-        } else if (currentTab === 'DH_HOAN') {
-            await appendRecordRows(allRowsToUpload);
-            result = { updated: 0, inserted: allRowsToUpload.length, skipped: 0 };
-
-            try {
-                document.querySelector('#loading p').innerText = `Đang đồng bộ tình trạng về DON_HANG...`;
-                const token = await getAccessToken();
-                const dhRange = CONFIG.tabs['DON_HANG'].range;
-                const req = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${dhRange}`, { headers: { Authorization: `Bearer ${token}` } });
-                const dhData = await req.json();
-                const dhRows = (dhData.values || []).map((r, i) => { const clone = [...r]; clone._sheetRow = i + 2; return clone; });
-
-                const updates = [];
-                allRowsToUpload.forEach(hoanRow => {
-                    const mdh = String(hoanRow[3] || '').replace(/^'/, '').trim().toLocaleUpperCase('vi');
-                    const newStatus = String(hoanRow[1] || '').trim().toLocaleUpperCase('vi');
-                    if (!mdh || !newStatus) return;
-
-                    const targets = dhRows.filter(r => String(r[DON_HANG_INDEX.mdh] || '').replace(/^'/, '').trim().toLocaleUpperCase('vi') === mdh && String(r[DON_HANG_INDEX.tinh_trang] || '').trim().toLocaleUpperCase('vi') !== newStatus);
-                    if (targets.length) {
-                        targets.forEach(r => r[DON_HANG_INDEX.tinh_trang] = newStatus);
-                        recalculateDonHangRows(targets);
-                        targets.forEach(r => updates.push({ row: r, sheetRow: r._sheetRow }));
-                    }
-                });
-
-                if (updates.length > 0) {
-                    const endCol = colName(CONFIG.tabs['DON_HANG'].headers.length - 1);
-                    const batchData = updates.map(item => ({
-                        range: `DON_HANG!A${item.sheetRow}:${endCol}${item.sheetRow}`,
-                        values: [CONFIG.tabs['DON_HANG'].headers.map((_, idx) => String(item.row[idx] ?? '').trim())]
-                    }));
-                    const batchRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values:batchUpdate`, {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ valueInputOption: 'RAW', data: batchData })
-                    });
-                    if (!batchRes.ok) {
-                        console.error("Lỗi đồng bộ DON_HANG:", await batchRes.text());
-                    } else {
-                        rangeDataCache[dhRange] = dhRows.map(r => {
-                            const arr = [...r];
-                            delete arr._sheetRow;
-                            return arr;
-                        });
-                        delete allDataCache['DON_HANG'];
-                        delete allDataCache['DON_HANG_CHI_TIET'];
-                    }
-                }
-            } catch (err) {
-                console.error("Lỗi khi đồng bộ về DON_HANG:", err);
-            }
-
         } else {
             result = await upsertRecordRows(allRowsToUpload);
         }
@@ -2233,9 +2260,7 @@ async function processFiles(files) {
             ? `Đã thêm mới ${result.inserted} đơn hàng vào sheet '${currentTab}'. Bỏ qua ${result.skipped} dòng có mã đơn hàng trùng.`
             : currentTab === 'DS_SP'
                 ? `Đã xóa dữ liệu cũ và ghi mới ${result.inserted} dòng vào sheet '${currentTab}'.`
-                : currentTab === 'DH_HOAN'
-                    ? `Đã thêm mới ${result.inserted} dòng đơn trả vào sheet '${currentTab}'.`
-                    : `Đã cập nhật ${result.updated} dòng và thêm mới ${result.inserted} dòng vào sheet '${currentTab}'.`);
+                : `Đã cập nhật ${result.updated} dòng và thêm mới ${result.inserted} dòng vào sheet '${currentTab}'.`);
         try { localStorage.setItem(XNK_TT_TAB_STORAGE_KEY, currentTab); } catch (_) { }
         await fetchData();
         filterTable();
@@ -2731,10 +2756,12 @@ function setInlineQuickGiaDang(rowIndex, btnElement) {
     const headers = getStorageHeaders('TINH_GIA');
     const giaThapNhat = parseMoney(String(row[headers.indexOf('gia_thap_nhat')] ?? ''));
     
-    if (input && giaThapNhat > 0) {
-        input.value = formatDisplayNumber(giaThapNhat);
+    if (giaThapNhat > 0) {
+        if (input) input.value = formatDisplayNumber(giaThapNhat);
         handleInlineTinhGiaInput(rowIndex, input);
         saveInlineTinhGia(rowIndex, tr);
+    } else {
+        setInlineQuickLoiNhuan(rowIndex, btnElement, 10);
     }
 }
 
@@ -3201,44 +3228,66 @@ async function copySelectedToSpBo() {
 }
 
 async function batchUpdateGiaDangToMin() {
-    if (currentTab !== 'TINH_GIA' || selectedProductIds.size === 0) return;
-    
-    const itemsToUpdate = [];
-    let skippedZero = 0;
-    
-    allData.forEach(row => {
-        const prodId = getRowProductId(row);
-        if (selectedProductIds.has(prodId)) {
-            const giaThapNhat = parseMoney(String(row[6] ?? ''));
-            if (giaThapNhat > 0) {
-                const newRow = [...row];
-                newRow[9] = giaThapNhat;
-                if (row._sheetRow) newRow._sheetRow = row._sheetRow;
-                const calculatedRow = recalculateTinhGiaRowData(newRow);
-                itemsToUpdate.push({ row: calculatedRow, sheetRow: getDataSheetRow(row) });
-            } else {
-                skippedZero++;
+    if (currentTab !== 'TINH_GIA') return;
+
+    const headers = getStorageHeaders('TINH_GIA');
+    const minPriceColIdx = headers.indexOf('gia_thap_nhat');
+    const listPriceColIdx = headers.indexOf('gia_dang');
+
+    const targetRows = [];
+    if (selectedProductIds.size > 0) {
+        allData.forEach(row => {
+            const prodId = getRowProductId(row);
+            if (selectedProductIds.has(prodId)) {
+                targetRows.push(row);
             }
-        }
-    });
-    
-    if (itemsToUpdate.length === 0) {
-        alert('Không có sản phẩm nào có Giá thấp nhất hợp lệ (lớn hơn 0) trong danh sách được chọn.');
+        });
+    } else {
+        targetRows.push(...filteredData);
+    }
+
+    if (targetRows.length === 0) {
+        alert('Không có sản phẩm nào trong danh sách để cập nhật.');
         return;
     }
+
+    const itemsToUpdate = [];
+    let minCount = 0;
+    let tenPercentCount = 0;
+
+    targetRows.forEach(row => {
+        const giaThapNhat = parseMoney(String(row[minPriceColIdx !== -1 ? minPriceColIdx : 6] ?? ''));
+        if (giaThapNhat > 0) {
+            const newRow = [...row];
+            newRow[listPriceColIdx !== -1 ? listPriceColIdx : 9] = giaThapNhat;
+            if (row._sheetRow) newRow._sheetRow = row._sheetRow;
+            const calculatedRow = recalculateTinhGiaRowData(newRow);
+            itemsToUpdate.push({ row: calculatedRow, sheetRow: getDataSheetRow(row) });
+            minCount++;
+        } else {
+            const calculatedRow = recalculateTinhGiaRowByProfitRate(row, 0.10);
+            if (row._sheetRow) calculatedRow._sheetRow = row._sheetRow;
+            itemsToUpdate.push({ row: calculatedRow, sheetRow: getDataSheetRow(row) });
+            tenPercentCount++;
+        }
+    });
+
+    const scopeText = selectedProductIds.size > 0 
+        ? `${selectedProductIds.size} sản phẩm đã chọn` 
+        : `tất cả ${targetRows.length} sản phẩm đang hiển thị`;
     
-    let msg = `Bạn có chắc muốn cập nhật Giá đăng = Giá thấp nhất cho ${itemsToUpdate.length} sản phẩm?`;
-    if (skippedZero > 0) {
-        msg += `\n(Có ${skippedZero} sản phẩm bị bỏ qua do Giá thấp nhất = 0 hoặc chưa có giá).`;
-    }
+    let msg = `Bạn có chắc muốn tính lại và cập nhật Giá đăng cho ${scopeText}?\n\n` +
+        `• ${minCount} SP có Giá thấp nhất (> 0) ➔ Giá đăng = Giá thấp nhất\n` +
+        `• ${tenPercentCount} SP chưa có Giá thấp nhất (= 0) ➔ Điền Lợi nhuận = 10% để tính Giá đăng`;
+
     if (!confirm(msg)) return;
-    
+
     document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = `Đang đồng bộ Giá Đăng = Giá Thấp Nhất cho ${itemsToUpdate.length} sản phẩm...`;
-    
+    document.querySelector('#loading p').innerText = `Đang tính toán & đồng bộ Giá đăng cho ${itemsToUpdate.length} sản phẩm...`;
+
     try {
         await batchWriteRecordRows(itemsToUpdate);
-        
+
         itemsToUpdate.forEach(item => {
             const idx = allData.findIndex(r => r._sheetRow === item.sheetRow);
             if (idx !== -1) {
@@ -3246,16 +3295,16 @@ async function batchUpdateGiaDangToMin() {
                 item.row._sheetRow = item.sheetRow;
             }
         });
-        
+
         selectedProductIds.clear();
         const selectAllCb = document.getElementById('selectAllProductsCb');
         if (selectAllCb) selectAllCb.checked = false;
         updateProductBatchControls();
-        
+
         filterTable();
-        alert(`Đã cập nhật Giá Đăng = Giá Thấp Nhất thành công cho ${itemsToUpdate.length} sản phẩm!`);
+        alert(`Đã cập nhật thành công Giá đăng cho ${itemsToUpdate.length} sản phẩm!\n- ${minCount} SP bằng Giá thấp nhất\n- ${tenPercentCount} SP tính theo Lợi nhuận 10%`);
     } catch (err) {
-        console.error('Lỗi khi cập nhật Giá đăng = Giá thấp nhất:', err);
+        console.error('Lỗi khi cập nhật Giá đăng = Giá thấp nhất / Lợi nhuận 10%:', err);
         alert('Không thể cập nhật: ' + err.message);
     } finally {
         document.getElementById('loading').style.display = 'none';
@@ -3472,12 +3521,37 @@ function selectImage(imgUrl, cardIndex) {
 
 async function saveSelectedImage() {
     if (!_imgSearchSelectedUrl) { alert('Vui lòng chọn hoặc dán link một ảnh trước.'); return; }
+    
+    // If targeted from a form field input
+    if (_activeImageTargetInputId) {
+        const inputEl = document.getElementById(_activeImageTargetInputId);
+        if (inputEl) {
+            const currentVal = String(inputEl.value || '').trim();
+            if (currentVal && !currentVal.includes(_imgSearchSelectedUrl)) {
+                inputEl.value = currentVal + ' | ' + _imgSearchSelectedUrl;
+            } else {
+                inputEl.value = _imgSearchSelectedUrl;
+            }
+            updateFormImgGallery(_activeImageTargetInputId);
+        }
+        _activeImageTargetInputId = null;
+        closeImgSearch();
+        return;
+    }
+
     if (_imgSearchRowIndex === null) return;
     const row = filteredData[_imgSearchRowIndex];
     if (!row) { alert('Không tìm thấy dòng sản phẩm.'); return; }
     const tabConfig = CONFIG.tabs[currentTab];
     const imgColIndex = tabConfig?.imgCol ?? 10;
-    row[imgColIndex] = _imgSearchSelectedUrl;
+
+    const existingVal = String(row[imgColIndex] || '').trim();
+    let newVal = _imgSearchSelectedUrl;
+    if (existingVal && !existingVal.includes(_imgSearchSelectedUrl)) {
+        newVal = existingVal + ' | ' + _imgSearchSelectedUrl;
+    }
+    row[imgColIndex] = newVal;
+
     const sheetRow = getDataSheetRow(row);
     if (!sheetRow || sheetRow < 2) { alert('Không xác định được hàng trong sheet. Vui lòng load lại dữ liệu và thử lại.'); return; }
     const colLetter = String.fromCharCode(65 + imgColIndex);
@@ -3486,7 +3560,7 @@ async function saveSelectedImage() {
         const token = await getAccessToken();
         const res = await fetch(
             `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${encodeURIComponent(targetRange)}?valueInputOption=RAW`,
-            { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ values: [[_imgSearchSelectedUrl]] }) }
+            { method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ values: [[newVal]] }) }
         );
         if (!res.ok) throw new Error(await res.text());
         filterTable();
@@ -3495,4 +3569,146 @@ async function saveSelectedImage() {
     } catch (err) {
         alert('Lỗi khi lưu ảnh vào Google Sheet: ' + err.message);
     }
+}
+
+
+const CUSTOM_BUTTONS_KEY = 'bce_custom_copy_buttons';
+
+function getSavedCustomButtons() {
+    try {
+        const raw = localStorage.getItem(CUSTOM_BUTTONS_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch (_) {}
+    return ['GDD'];
+}
+
+function saveCustomButtonsList(btnList) {
+    localStorage.setItem(CUSTOM_BUTTONS_KEY, JSON.stringify(btnList));
+    renderCustomButtonsManager();
+    renderTable();
+}
+
+function addCustomCopyButton() {
+    const input1 = document.getElementById('quickCustomButtonInput');
+    const input2 = document.getElementById('newCustomButtonInput');
+    
+    const val1 = String(input1?.value || '').trim();
+    const val2 = String(input2?.value || '').trim();
+    const raw = (val1 + ' ' + val2).trim();
+    if (!raw) return;
+
+    const newItems = raw.split(/[,;|\n]+/).map(s => s.trim().replace(/^-+|-+$/g, '')).filter(Boolean);
+    if (!newItems.length) return;
+
+    const list = getSavedCustomButtons();
+    let addedCount = 0;
+    newItems.forEach(val => {
+        if (!list.includes(val)) {
+            list.push(val);
+            addedCount++;
+        }
+    });
+    
+    if (addedCount > 0) {
+        saveCustomButtonsList(list);
+    }
+
+    if (input1) input1.value = '';
+    if (input2) input2.value = '';
+}
+
+function removeCustomCopyButton(btnText) {
+    let list = getSavedCustomButtons();
+    list = list.filter(b => b !== btnText);
+    saveCustomButtonsList(list);
+}
+
+function renderCustomButtonsManager() {
+    const list = getSavedCustomButtons();
+    const tagHtml = list.map(btnText => `
+        <span class="custom-btn-tag" style="display:inline-flex; align-items:center; gap:4px; padding:3px 8px; background:#e0e7ff; color:#4338ca; border:1px solid #c7d2fe; border-radius:14px; font-size:12px; font-weight:700;">
+            ${escapeHtml(btnText)}
+            <button type="button" onclick="removeCustomCopyButton('${escapeJsString(btnText)}')" style="background:none; border:none; color:#ef4444; font-size:12px; font-weight:900; cursor:pointer; padding:0 2px; line-height:1;" title="Xóa nút này">✕</button>
+        </span>
+    `).join('');
+
+    const container1 = document.getElementById('customButtonsList');
+    if (container1) container1.innerHTML = tagHtml;
+    const container2 = document.getElementById('quickCustomButtonsList');
+    if (container2) container2.innerHTML = tagHtml;
+}
+
+function formatCustomCopyText(idSpCon, btnText, tenSp) {
+    let cleanId = String(idSpCon || '').trim().replace(/-+$/, '');
+    let cleanBtn = String(btnText || '').trim().replace(/^-+|-+$/g, '');
+    let cleanName = String(tenSp || '').trim().replace(/^-+/, '');
+
+    let parts = [cleanId];
+    if (cleanBtn) parts.push(cleanBtn);
+    parts.push('00-001');
+    if (cleanName) parts.push(cleanName);
+
+    return parts.join('-');
+}
+
+function showToastNotification(msg) {
+    let toast = document.getElementById('bceToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'bceToast';
+        toast.className = 'bce-toast-notification';
+        document.body.appendChild(toast);
+    }
+    toast.innerText = msg;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+    
+    if (window._toastTimeout) clearTimeout(window._toastTimeout);
+    window._toastTimeout = setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+    }, 3000);
+}
+
+function executeCustomCopy(idSpCon, btnText, tenSp, btnEl) {
+    const textToCopy = formatCustomCopyText(idSpCon, btnText, tenSp);
+    const showSuccess = () => {
+        showToastNotification('📋 Đã copy: ' + textToCopy);
+        if (btnEl) {
+            const origHtml = btnEl.innerHTML;
+            btnEl.innerHTML = '✅ ' + escapeHtml(btnText);
+            btnEl.style.background = '#86efac';
+            btnEl.style.borderColor = '#22c55e';
+            btnEl.style.color = '#14532d';
+            setTimeout(() => {
+                btnEl.innerHTML = origHtml;
+                btnEl.style.background = '#e0e7ff';
+                btnEl.style.borderColor = '#c7d2fe';
+                btnEl.style.color = '#3730a3';
+            }, 1000);
+        }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy).then(showSuccess).catch(() => {
+            fallbackCopyText(textToCopy);
+            showSuccess();
+        });
+    } else {
+        fallbackCopyText(textToCopy);
+        showSuccess();
+    }
+}
+
+function fallbackCopyText(textToCopy) {
+    const input = document.createElement('textarea');
+    input.value = textToCopy;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand('copy');
+    document.body.removeChild(input);
+    showToastNotification('📋 Đã copy: ' + textToCopy);
 }

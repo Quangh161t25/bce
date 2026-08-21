@@ -596,13 +596,21 @@
 
         .modal-mask {
             position: fixed;
-            inset: 0;
+            top: 0;
+            bottom: 0;
+            left: var(--sidebar-width, 260px);
+            right: 0;
             background: rgba(15, 23, 42, 0.45);
             display: none;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 16px 20px;
             z-index: 1100;
+            transition: left 0.2s ease;
+        }
+
+        body.sidebar-collapsed .modal-mask {
+            left: 64px;
         }
 
         .modal-mask.active {
@@ -610,14 +618,18 @@
         }
 
         .modal {
-            width: min(1040px, calc(100vw - 320px));
+            width: 100%;
+            height: calc(100vh - 32px);
+            max-width: 100%;
             background: #fff;
-            border-radius: 8px;
+            border-radius: 12px;
             border: 1px solid var(--border);
             box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
-            padding: 18px;
+            padding: 20px 24px;
             display: grid;
-            gap: 14px;
+            grid-template-rows: auto 1fr auto;
+            gap: 16px;
+            overflow: hidden;
         }
 
         .modal-header {
@@ -643,19 +655,268 @@
         .form-fields {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-            max-height: min(62vh, 620px);
-            overflow: auto;
-            padding-right: 4px;
+            gap: 16px 20px;
+            max-height: 100%;
+            overflow-y: auto;
+            padding-right: 8px;
         }
 
         .form-fields label:has(textarea),
+        .form-fields .full-width-field,
         .form-fields input[type="hidden"] {
             grid-column: 1 / -1;
         }
 
         body.sidebar-collapsed .modal {
-            width: min(1040px, calc(100vw - 152px));
+            width: 100%;
+        }
+
+        /* Multiple Image Gallery Styles */
+        .table-img-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            max-width: 320px;
+        }
+
+        .table-img-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f8fafc;
+            padding: 2px 6px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            transition: transform 0.15s, border-color 0.15s;
+        }
+
+        .table-img-item:hover {
+            transform: scale(1.05);
+            border-color: #4f46e5;
+        }
+
+        .table-img-item img {
+            width: 32px;
+            height: 32px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+
+        .form-img-container {
+            display: grid;
+            gap: 8px;
+            grid-column: 1 / -1;
+        }
+
+        .form-img-gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 12px;
+            background: #f8fafc;
+            border: 1.5px dashed #cbd5e1;
+            border-radius: 10px;
+            min-height: 60px;
+            align-items: center;
+        }
+
+        .form-img-card {
+            position: relative;
+            width: 76px;
+            height: 76px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid #e2e8f0;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            transition: transform 0.15s, border-color 0.15s;
+        }
+
+        .form-img-card:hover {
+            transform: scale(1.05);
+            border-color: #4f46e5;
+        }
+
+        .form-img-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .form-img-card .remove-btn {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 20px;
+            height: 20px;
+            background: rgba(239, 68, 68, 0.95);
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            font-size: 11px;
+            font-weight: 900;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+
+        .form-img-card .remove-btn:hover {
+            background: #dc2626;
+            transform: scale(1.1);
+        }
+
+        /* SKU Option Pill Styles */
+        .sku-option-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 12px;
+            background: #f1f5f9;
+            color: #334155;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .sku-option-pill:hover {
+            background: #e0e7ff;
+            border-color: #4f46e5;
+            color: #4f46e5;
+        }
+
+        .sku-option-pill.active {
+            background: #4f46e5;
+            color: #ffffff;
+            border-color: #4f46e5;
+            box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+        }
+
+        /* Narrow Column & 3-Line Wrap Styles for SKU, TEN_SP, MO_TA */
+        th.col-sku,
+        td.col-sku,
+        th[data-col="sku"],
+        th[data-col="id_sp_con"],
+        th[data-col="id_sp"],
+        td[data-col="sku"],
+        td[data-col="id_sp_con"],
+        td[data-col="id_sp"] {
+            width: 140px;
+            min-width: 120px;
+            max-width: 150px;
+        }
+
+        th.col-ten-sp,
+        td.col-ten-sp,
+        th[data-col="ten_sp"],
+        th[data-col="ten_san_pham"],
+        td[data-col="ten_sp"],
+        td[data-col="ten_san_pham"] {
+            width: 220px;
+            min-width: 180px;
+            max-width: 260px;
+        }
+
+        th.col-mo-ta,
+        td.col-mo-ta,
+        th[data-col="mo_ta"],
+        th[data-col="noi_dung"],
+        td[data-col="mo_ta"],
+        td[data-col="noi_dung"] {
+            width: 240px;
+            min-width: 200px;
+            max-width: 300px;
+        }
+
+        .multiline-cell-wrapper,
+        .sku-cell-wrapper {
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            line-height: 1.35;
+            max-height: 4.1em;
+            font-size: 0.83rem;
+        }
+
+        /* Custom Copy Pill Button Styles for TINH_GIA */
+        .copy-pill-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 8px;
+            background: #e0e7ff;
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .copy-pill-btn:hover {
+            background: #4f46e5;
+            color: #ffffff;
+            border-color: #4f46e5;
+            box-shadow: 0 2px 5px rgba(79, 70, 229, 0.3);
+        }
+
+        /* Toast notification */
+        .bce-toast-notification {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #0f172a;
+            color: #ffffff;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+            z-index: 99999;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            max-width: 420px;
+            word-break: break-all;
+        }
+
+        /* SKU Suggestion Item Styles */
+        .sku-suggest-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 12px;
+            border-bottom: 1px solid #f1f5f9;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .sku-suggest-item:hover {
+            background: #eef2ff;
+        }
+
+        .sku-suggest-code {
+            font-weight: 700;
+            color: #1e1b4b;
+            font-size: 13px;
+        }
+
+        .sku-suggest-name {
+            font-size: 11px;
+            color: #64748b;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         @media (max-width: 900px) {
