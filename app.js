@@ -60,6 +60,12 @@ sR2Sh8e3h3Knd6j1tceRIFU=
             displayHeaders: ['id', 'gian', 'sku', 'phan_loai', 'ten_sp', 'nganh_hang', 'mo_ta', 'anh', 'anh_mota', 'anh_phan_loai', 'link_video', 'gia', 'gia_khuyen_mai', 'id_shopee', 'link_shopee'],
             priceCols: [11, 12],
             imgCol: 7
+        },
+        'DH': {
+            range: 'DH!A2:Y',
+            headers: ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'sku', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don'],
+            displayHeaders: ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don'],
+            priceCols: [5, 6, 7, 8, 9, 10, 11, 12, 13, 19, 20]
         }
     }
 };
@@ -95,6 +101,7 @@ let dsSpOptionsCache = null;
 let rangeDataCache = {};
 let allDataCache = {};
 const TAB_LABELS = {
+    'DH': 'Đơn Hàng DH',
     HOA_DON: 'HÓA ĐƠN',
     DS_SP: 'DS SP',
     TINH_GIA: 'TÍNH GIÁ',
@@ -149,10 +156,10 @@ async function switchTab(tabName, force = false) {
     const storeFilter = document.getElementById('storeFilter');
     if (uploadBtn) {
         uploadBtn.innerHTML = `<i data-lucide="upload" style="width:18px;"></i> Tải ${currentTab} Lên`;
-        uploadBtn.style.display = 'flex';
+        uploadBtn.style.display = (currentTab === 'DH') ? 'none' : 'flex';
         lucide.createIcons();
     }
-    if (addBtn) addBtn.style.display = 'flex';
+    if (addBtn) addBtn.style.display = (currentTab === 'DH') ? 'none' : 'flex';
     if (truongFilter) {
         truongFilter.style.display = 'none';
         lucide.createIcons();
@@ -177,6 +184,14 @@ async function switchTab(tabName, force = false) {
     if (dsSpFilters) {
         dsSpFilters.style.display = (currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'WEB_SP') ? 'flex' : 'none';
     }
+    const dhFilterBar = document.getElementById('dhFilterBar');
+    if (dhFilterBar) {
+        dhFilterBar.style.display = (currentTab === 'DH') ? 'flex' : 'none';
+    }
+    const dhSummaryStatsBar = document.getElementById('dhSummaryStatsBar');
+    if (dhSummaryStatsBar) {
+        dhSummaryStatsBar.style.display = (currentTab === 'DH') ? 'grid' : 'none';
+    }
     document.getElementById('searchInput').value = '';
     selectedOrderIds.clear();
     selectedProductIds.clear();
@@ -196,6 +211,9 @@ async function switchTab(tabName, force = false) {
         if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') {
             spBoSetCache = null;
             await fetchSpBoSet();
+            if (currentTab === 'TINH_GIA') {
+                await fetchSpShopeeData();
+            }
         }
         if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'WEB_SP') {
             generateDsSpPrefix1Buttons();
@@ -205,6 +223,9 @@ async function switchTab(tabName, force = false) {
         filterTable();
     } else {
         await fetchData();
+        if (currentTab === 'TINH_GIA') {
+            await fetchSpShopeeData();
+        }
     }
 }
 
@@ -223,10 +244,11 @@ async function reloadCurrentTab() {
     if (range) delete rangeDataCache[range];
     delete allDataCache[currentTab];
     await fetchData();
-    filterTable();
     if (currentTab === 'TINH_GIA') {
+        await fetchSpShopeeData(true);
         await recalculateVisibleTinhGiaRows();
     }
+    filterTable();
 }
 
 let hhBhMvdSetCache = null;
@@ -243,6 +265,133 @@ async function fetchHhBhMvdSet(force = false) {
         hhBhMvdSetCache = new Set();
     }
     return hhBhMvdSetCache;
+}
+
+let spShopeeDataCache = null;
+let spShopeeGianMapCache = null;
+let isFetchingSpShopee = false;
+
+async function fetchSpShopeeData(force = false) {
+    if (spShopeeDataCache && spShopeeDataCache.length > 0 && !force) return spShopeeDataCache;
+    if (isFetchingSpShopee) return [];
+    isFetchingSpShopee = true;
+    try {
+        const token = await getAccessToken();
+        let targetSheetTitle = null;
+        const metaRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}?fields=sheets(properties(title))`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (metaRes.ok) {
+            const metaData = await metaRes.json();
+            const titles = (metaData.sheets || []).map(s => s.properties?.title).filter(Boolean);
+            targetSheetTitle = titles.find(t => t.toLowerCase().includes('sp_shopee') || t.toLowerCase().includes('shopee'));
+            if (!targetSheetTitle) {
+                targetSheetTitle = titles.find(t => t.toLowerCase().includes('web_sp') || t.toLowerCase().includes('ds_sp'));
+            }
+        }
+        if (!targetSheetTitle) targetSheetTitle = 'sp_shopee';
+
+        const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${encodeURIComponent(targetSheetTitle + '!A2:Z')}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            spShopeeDataCache = data.values || [];
+            spShopeeGianMapCache = null;
+            if (currentTab === 'TINH_GIA') {
+                renderTable();
+            }
+        } else {
+            spShopeeDataCache = [];
+            spShopeeGianMapCache = null;
+        }
+    } catch (err) {
+        console.warn('Lỗi khi tải sp_shopee:', err);
+        spShopeeDataCache = [];
+        spShopeeGianMapCache = null;
+    } finally {
+        isFetchingSpShopee = false;
+    }
+    return spShopeeDataCache;
+}
+
+function buildSpShopeeGianMap() {
+    if (!spShopeeDataCache || !spShopeeDataCache.length) return new Map();
+    const map = new Map();
+
+    spShopeeDataCache.forEach(r => {
+        if (!Array.isArray(r) || !r.length) return;
+
+        let gianVal = String(r[11] || '').trim().toUpperCase();
+        if (!gianVal) {
+            const btnList = typeof getSavedCustomButtons === 'function' ? getSavedCustomButtons() : [];
+            for (const bText of btnList) {
+                const normB = bText.trim().toUpperCase();
+                if (r.some(cell => String(cell || '').trim().toUpperCase() === normB)) {
+                    gianVal = normB;
+                    break;
+                }
+            }
+        }
+
+        if (!gianVal) return;
+
+        if (!map.has(gianVal)) {
+            map.set(gianVal, new Set());
+        }
+        const set = map.get(gianVal);
+
+        r.forEach(cell => {
+            const str = String(cell || '').trim().toUpperCase();
+            if (!str || str.length < 2) return;
+
+            if (str.length <= 35) set.add(str);
+            if (str.length >= 4) {
+                set.add(str.substring(0, 4));
+            }
+
+            const parts = str.split(/[\s\-_\/,\.]+/);
+            parts.forEach(p => {
+                if (p.length >= 3 && p.length <= 15) {
+                    set.add(p);
+                    if (p.length >= 4) set.add(p.substring(0, 4));
+                }
+            });
+        });
+    });
+
+    return map;
+}
+
+function isBtnInSpShopee(btnText, row) {
+    if (!spShopeeDataCache || !spShopeeDataCache.length) {
+        fetchSpShopeeData();
+        return false;
+    }
+    const normBtn = String(btnText || '').trim().toUpperCase();
+    if (!normBtn) return false;
+
+    const valF = String(row[1] || row[5] || '').trim().toUpperCase();
+    const valE = String(row[0] || row[4] || '').trim().toUpperCase();
+    const rawIdSp = valF ? valF : valE;
+    if (!rawIdSp) return false;
+
+    const prefixF4 = valF.substring(0, 4);
+    const prefixE4 = valE.substring(0, 4);
+
+    if (!spShopeeGianMapCache) {
+        spShopeeGianMapCache = buildSpShopeeGianMap();
+    }
+
+    for (const [gianKey, idSet] of spShopeeGianMapCache.entries()) {
+        if (gianKey === normBtn || gianKey.includes(normBtn) || normBtn.includes(gianKey)) {
+            if (idSet.has(prefixF4) || idSet.has(prefixE4) || idSet.has(valF) || idSet.has(valE) || idSet.has(rawIdSp)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 async function fetchSheetDataWithFallback(tabName) {
@@ -286,14 +435,15 @@ async function fetchSheetDataWithFallback(tabName) {
                 await new Promise(r => setTimeout(r, waitSec * 1000));
                 continue;
             }
-            if (res.ok && data && Array.isArray(data.values)) {
+            if (res.ok && data) {
+                const valuesArr = Array.isArray(data.values) ? data.values : [];
                 try {
                     localStorage.setItem(cacheKey, JSON.stringify({
                         timestamp: Date.now(),
-                        values: data.values
+                        values: valuesArr
                     }));
                 } catch (_) { /* ignore quota full */ }
-                return data.values;
+                return valuesArr;
             }
             break;
         } catch (err) {
@@ -330,6 +480,9 @@ async function fetchData() {
     try {
         if (currentTab === 'SP_GIAM_GIA') {
             await ensureSpGiamGiaSheetExists();
+        }
+        if (currentTab === 'DH') {
+            await ensureDhSheetExists();
         }
         
         const rawRows = await fetchSheetDataWithFallback(currentTab);
@@ -386,7 +539,9 @@ function renderHeaders() {
         const isTenSp = (h === 'ten_sp' || h === 'ten_san_pham');
         const isMoTa = (h === 'mo_ta' || h === 'noi_dung');
         const colClass = isSku ? ' col-sku' : (isTenSp ? ' col-ten-sp' : (isMoTa ? ' col-mo-ta' : ''));
-        return `<th data-col="${escapeHtml(h)}" class="sortable-header${activeClass}${colClass}" onclick="handleHeaderSort('${escapeHtml(escapeJsString(h))}')" title="Bấm để sắp xếp">${escapeHtml(h.toUpperCase())}${sortIndicator}</th>`;
+        const isNum = isNumericDisplayHeader(h);
+        const textAlignStyle = isNum ? ' style="text-align: right;"' : '';
+        return `<th data-col="${escapeHtml(h)}" class="sortable-header${activeClass}${colClass}"${textAlignStyle} onclick="handleHeaderSort('${escapeHtml(escapeJsString(h))}')" title="Bấm để sắp xếp">${escapeHtml(h.toUpperCase())}${sortIndicator}</th>`;
     }).join('')}</tr>`;
 }
 
@@ -656,7 +811,7 @@ async function batchWriteRecordRows(items) {
     const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values:batchUpdate`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ valueInputOption: 'RAW', data })
+        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data })
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -1659,25 +1814,33 @@ function renderTable() {
                     const btnList = getSavedCustomButtons();
                     if (btnList.length > 0) {
                         extraPills = `<div style="display:flex; flex-direction:row; flex-wrap:wrap; align-items:center; gap:4px; margin-top:5px;">
-                            ${btnList.map(bText => `
-                                <button type="button" class="copy-pill-btn" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe; border-radius:4px; font-size:11px; font-weight:700; padding:2px 6px; cursor:pointer; display:inline-flex; align-items:center; gap:3px; transition:all 0.15s; white-space:nowrap;" onclick="event.stopPropagation(); executeCustomCopy('${escapeJsString(idSpConVal)}', '${escapeJsString(bText)}', '${escapeJsString(tenSpVal)}', this)" title="Bấm để copy: ${escapeHtml(formatCustomCopyText(idSpConVal, bText, tenSpVal))}">
+                            ${btnList.map(bText => {
+                                const isMatch = isBtnInSpShopee(bText, row);
+                                const btnBg = isMatch ? '#10b981' : '#e0e7ff';
+                                const btnColor = isMatch ? '#ffffff' : '#3730a3';
+                                const btnBorder = isMatch ? '#059669' : '#c7d2fe';
+                                return `<button type="button" class="copy-pill-btn" style="background:${btnBg}; color:${btnColor}; border:1px solid ${btnBorder}; border-radius:4px; font-size:11px; font-weight:700; padding:2px 6px; cursor:pointer; display:inline-flex; align-items:center; gap:3px; transition:all 0.15s; white-space:nowrap;" onclick="event.stopPropagation(); executeCustomCopy('${escapeJsString(idSpConVal)}', '${escapeJsString(bText)}', '${escapeJsString(tenSpVal)}', this)" title="Bấm để copy: ${escapeHtml(formatCustomCopyText(idSpConVal, bText, tenSpVal))}">
                                     📋 ${escapeHtml(bText)}
-                                </button>
-                            `).join('')}
+                                </button>`;
+                            }).join('')}
                         </div>`;
                     }
                 }
                 return `<td class="${colClass}" data-col="${header}"><div class="multiline-cell-wrapper" title="${escapeHtml(displayValue || '')}">${escapeHtml(displayValue || '')}</div>${extraPills}</td>`;
             }
 
-            return `<td data-col="${header}">${escapeHtml(displayValue || '')}</td>`;
+            const isNumCell = isNumericDisplayHeader(header);
+            const cellStyle = isNumCell ? ' style="text-align: right;"' : '';
+            return `<td data-col="${header}"${cellStyle}>${escapeHtml(displayValue || '')}</td>`;
         }).join('');
 
-        const editAction = (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
-            ? ` ondblclick="openDonHangDetail('${escapeHtml(escapeJsString(getRowId(row)))}')"`
-            : currentTab === 'TINH_GIA'
-                ? ` ondblclick="event.stopPropagation()"`
-                : ` ondblclick="openRecordForm(${start + rowIndex})"`;
+        const editAction = (currentTab === 'DH')
+            ? ` ondblclick="openDhDetail('${escapeHtml(escapeJsString(String(row[3] || '')))}')"`
+            : (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET')
+                ? ` ondblclick="openDonHangDetail('${escapeHtml(escapeJsString(getRowId(row)))}')"`
+                : currentTab === 'TINH_GIA'
+                    ? ` ondblclick="event.stopPropagation()"`
+                    : ` ondblclick="openRecordForm(${start + rowIndex})"`;
         const selectCell = (currentTab === 'TINH_GIA' || currentTab === 'DS_SP')
             ? `<td class="select-col" onclick="event.stopPropagation()"><input type="checkbox" class="product-select-cb" data-sp-id="${escapeHtml(escapeJsString(getRowProductId(row)))}" ${selectedProductIds.has(getRowProductId(row)) ? 'checked' : ''} onchange="toggleProductSelection('${escapeHtml(escapeJsString(getRowProductId(row)))}', this.checked)"></td>`
             : '';
@@ -1766,6 +1929,25 @@ function filterTable() {
             return matchesSearch && matchesStore && matchesTruong;
         }
 
+        if (currentTab === 'DH') {
+            const selectedGianList = Array.from(selectedDhGianSet).map(g => g.toLowerCase());
+            const startDateStr = document.getElementById('dhStartDateInput')?.value || '';
+            const endDateStr = document.getElementById('dhEndDateInput')?.value || '';
+            const startDateTime = startDateStr ? new Date(startDateStr + "T00:00:00").getTime() : 0;
+            const endDateTime = endDateStr ? new Date(endDateStr + "T23:59:59").getTime() : 0;
+
+            const rowGian = String(row[0] || '').trim().toLowerCase();
+            const matchesGian = selectedGianList.length === 0 || selectedGianList.includes(rowGian);
+
+            const orderDateObj = parseDhDate(row[2]) || parseDhDate(row[1]);
+            const orderTime = orderDateObj ? orderDateObj.getTime() : 0;
+
+            const matchesStartDate = !startDateTime || (orderTime && orderTime >= startDateTime);
+            const matchesEndDate = !endDateTime || (orderTime && orderTime <= endDateTime);
+
+            return matchesSearch && matchesGian && matchesStartDate && matchesEndDate;
+        }
+
         if (!['DON_HANG', 'DON_HANG_CHI_TIET'].includes(currentTab)) return matchesSearch && matchesTruong;
         const orderTime = parseDonHangDateTime(row[DON_HANG_INDEX.ngay_h]);
         const matchesDateFrom = !dateFromTime || orderTime >= dateFromTime;
@@ -1781,6 +1963,16 @@ function filterTable() {
         return matchesSearch && matchesDateFrom && matchesDateTo && matchesMdh && matchesMvd && matchesTinhTrang && matchesTrangThai && matchesProfit;
     });
 
+    if (currentTab === 'DH') {
+        populateDhGianFilter();
+        filteredData = getDhSummaryRows(filteredData);
+        filteredData.sort((a, b) => {
+            const dateA = parseDhDate(a[2]) || parseDhDate(a[1]) || new Date(0);
+            const dateB = parseDhDate(b[2]) || parseDhDate(b[1]) || new Date(0);
+            return dateB.getTime() - dateA.getTime();
+        });
+        updateDhSummaryStats();
+    }
     if (currentTab === 'DON_HANG' || currentTab === 'DON_HANG_CHI_TIET') {
         filteredData.sort((a, b) => parseDonHangDateTime(b[DON_HANG_INDEX.ngay_h]) - parseDonHangDateTime(a[DON_HANG_INDEX.ngay_h]));
         updateDonHangSummary();
@@ -3711,4 +3903,554 @@ function fallbackCopyText(textToCopy) {
     document.execCommand('copy');
     document.body.removeChild(input);
     showToastNotification('📋 Đã copy: ' + textToCopy);
+}
+
+
+let editingDhRows = [];
+
+function getDhSummaryRows(rawRows) {
+    if (!Array.isArray(rawRows)) return [];
+    const orderMap = new Map();
+    rawRows.forEach(row => {
+        const mdh = String(row[3] || '').trim();
+        if (!mdh) return;
+        if (!orderMap.has(mdh)) {
+            const masterRow = [...row];
+            masterRow._itemsCount = 1;
+            orderMap.set(mdh, masterRow);
+        } else {
+            const masterRow = orderMap.get(mdh);
+            masterRow._itemsCount = (masterRow._itemsCount || 1) + 1;
+        }
+    });
+    return Array.from(orderMap.values());
+}
+
+function openDhDetail(mdh) {
+    const cleanMdh = String(mdh || '').trim();
+    if (!cleanMdh) return;
+
+    editingDhRows = allData.filter(r => String(r[3] || '').trim() === cleanMdh && r._sheetRow);
+    if (!editingDhRows.length) {
+        alert('Không tìm thấy dữ liệu chi tiết cho đơn hàng ' + cleanMdh);
+        return;
+    }
+
+    const firstRow = editingDhRows[0];
+    document.getElementById('dhDetailTitle').innerText = 'Chi Tiết Đơn Hàng DH: ' + cleanMdh;
+    document.getElementById('dhDetailItemsCount').innerText = editingDhRows.length;
+
+    const generalHeaders = ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don', 'tinh_trang', 'trang_thai'];
+    const financeHeaders = ['tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan'];
+    const dhConfig = CONFIG.tabs['DH'];
+
+    const renderInputRow = (hdr, isFinance = false) => {
+        const idx = dhConfig.headers.indexOf(hdr);
+        const val = firstRow[idx] ?? '';
+        if (hdr === 'tinh_trang') {
+            return `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+                <span style="font-size:12px; font-weight:700; color:#334155; min-width:105px; text-transform:uppercase; white-space:nowrap;">tinh_trang</span>
+                <input data-dh-hdr="tinh_trang" type="hidden" value="${escapeHtml(String(val))}">
+                <div id="dhDetailTinhTrangButtons" style="display:flex; align-items:center; gap:6px; flex:1; flex-wrap:wrap;">
+                    <button type="button" class="dh-status-btn" data-val="HỦY" onclick="setDhDetailTinhTrang('HỦY', this)" style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; transition:all 0.15s;">HỦY</button>
+                    <button type="button" class="dh-status-btn" data-val="HOÀN" onclick="setDhDetailTinhTrang('HOÀN', this)" style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; transition:all 0.15s;">HOÀN</button>
+                    <button type="button" class="dh-status-btn" data-val="TRẢ" onclick="setDhDetailTinhTrang('TRẢ', this)" style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; transition:all 0.15s;">TRẢ</button>
+                    <button type="button" class="dh-status-btn" data-val="XONG" onclick="setDhDetailTinhTrang('XONG', this)" style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; transition:all 0.15s;">XONG</button>
+                </div>
+            </div>`;
+        }
+        if (hdr === 'trang_thai') {
+            return `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+                <span style="font-size:12px; font-weight:700; color:#334155; min-width:105px; text-transform:uppercase; white-space:nowrap;">trang_thai</span>
+                <input data-dh-hdr="trang_thai" type="hidden" value="${escapeHtml(String(val))}">
+                <div id="dhDetailTrangThaiButtons" style="display:flex; align-items:center; gap:6px; flex:1; flex-wrap:wrap;">
+                    <button type="button" class="dh-trangthai-btn" data-val="HỦY" onclick="setDhDetailTrangThai('HỦY', this)" style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; transition:all 0.15s;">HỦY</button>
+                    <button type="button" class="dh-trangthai-btn" data-val="HOÀN TRẢ" onclick="setDhDetailTrangThai('HOÀN TRẢ', this)" style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; transition:all 0.15s;">HOÀN TRẢ</button>
+                    <button type="button" class="dh-trangthai-btn" data-val="HOÀN THÀNH" onclick="setDhDetailTrangThai('HOÀN THÀNH', this)" style="padding:5px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; border:1px solid #cbd5e1; transition:all 0.15s;">HOÀN THÀNH</button>
+                </div>
+            </div>`;
+        }
+        const isNumeric = dhConfig.priceCols.includes(idx);
+        const displayVal = isNumeric ? formatDisplayNumber(val) : val;
+        const isReadOnly = ['mdh', 'doanh_thu', 'loi_nhuan', 'tien_sp'].includes(hdr);
+        const onInputAttr = isFinance && !isReadOnly ? 'oninput="recalculateDhFinancials()"' : '';
+        const isLoiNhuan = hdr === 'loi_nhuan';
+        const alignRight = isFinance || isNumeric;
+        return `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
+            <span style="font-size:12px; font-weight:700; color:${isLoiNhuan ? '#15803d' : '#334155'}; min-width:105px; text-transform:uppercase; white-space:nowrap;">${hdr}</span>
+            <input data-dh-hdr="${hdr}" type="text" value="${escapeHtml(String(displayVal))}" ${isReadOnly ? 'readonly' : ''} ${onInputAttr} style="flex:1; min-width:0; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700; font-size:13px; text-align:${alignRight ? 'right' : 'left'}; color:${isLoiNhuan ? '#16a34a' : '#0f172a'}; ${isReadOnly ? 'background:#f1f5f9; cursor:not-allowed;' : ''}">
+        </div>`;
+    };
+
+    const fieldsHtml = `
+        <div style="background:#f8fafc; padding:16px; border:1px solid #cbd5e1; border-radius:10px; display:flex; flex-direction:column; gap:10px; width:100%;">
+            <div style="font-weight:700; color:#1e293b; border-bottom:2px solid #cbd5e1; padding-bottom:6px; font-size:0.95rem;">📌 THÔNG TIN ĐƠN HÀNG</div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                ${generalHeaders.map(hdr => renderInputRow(hdr, false)).join('')}
+            </div>
+        </div>
+        <div style="background:#f0fdf4; padding:16px; border:1px solid #bbf7d0; border-radius:10px; display:flex; flex-direction:column; gap:10px; width:100%;">
+            <div style="font-weight:700; color:#15803d; border-bottom:2px solid #86efac; padding-bottom:6px; font-size:0.95rem;">💰 THÔNG TIN TÀI CHÍNH</div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                ${financeHeaders.map(hdr => renderInputRow(hdr, true)).join('')}
+            </div>
+        </div>
+    `;
+    document.getElementById('dhDetailFields').innerHTML = fieldsHtml;
+
+    const tinhTrangVal = firstRow[dhConfig.headers.indexOf('tinh_trang')] || 'XONG';
+    const trangThaiVal = firstRow[dhConfig.headers.indexOf('trang_thai')] || 'HOÀN THÀNH';
+
+    updateDhDetailStatusButtonStyles('tinh_trang', tinhTrangVal);
+    updateDhDetailStatusButtonStyles('trang_thai', trangThaiVal);
+
+    // Render items
+    const slgIdx = dhConfig.headers.indexOf('slg');
+    const donGiaIdx = dhConfig.headers.indexOf('don_gia');
+    const skuIdx = dhConfig.headers.indexOf('sku');
+    const idSpIdx = dhConfig.headers.indexOf('id_sp');
+
+    const itemsHtml = editingDhRows.map((r, i) => {
+        const slgRaw = String(r[slgIdx] ?? '').trim();
+        const slg = slgRaw === '' ? 0 : (parseInt(slgRaw) >= 0 ? parseInt(slgRaw) : 0);
+        const donGia = parseMoney(r[donGiaIdx] || 0);
+        const subtotal = slg * donGia;
+        return `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:8px 14px; text-align:left; font-weight:600;">${i + 1}</td>
+            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="sku" type="text" value="${escapeHtml(String(r[skuIdx] ?? ''))}" style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
+            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="id_sp" type="text" value="${escapeHtml(String(r[idSpIdx] ?? ''))}" style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
+            <td style="padding:8px 14px; text-align:center;"><input data-dh-item-idx="${i}" data-dh-item-hdr="slg" type="number" min="0" value="${escapeHtml(String(slg))}" style="width:65px; text-align:center; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;" oninput="updateDhItemSubtotal(${i})"></td>
+            <td style="padding:8px 14px; text-align:right;"><input data-dh-item-idx="${i}" data-dh-item-hdr="don_gia" type="text" value="${escapeHtml(String(formatDisplayNumber(donGia)))}" style="width:120px; text-align:right; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;" oninput="updateDhItemSubtotal(${i})"></td>
+            <td style="padding:8px 14px; text-align:right; font-weight:700; color:#0f172a;"><span id="dhSubtotal_${i}">${formatDisplayNumber(subtotal)}</span></td>
+        </tr>
+    `;
+    }).join('');
+    document.getElementById('dhDetailItemsBody').innerHTML = itemsHtml;
+
+    recalculateDhFinancials();
+
+    const modal = document.getElementById('dhDetailModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function setDhDetailTinhTrang(val, btnElement) {
+    const hiddenInput = document.querySelector('[data-dh-hdr="tinh_trang"]');
+    if (hiddenInput) hiddenInput.value = val;
+
+    updateDhDetailStatusButtonStyles('tinh_trang', val);
+
+    if (val === 'HỦY') {
+        setDhDetailTrangThai('HỦY');
+    } else if (val === 'HOÀN' || val === 'TRẢ') {
+        setDhDetailTrangThai('HOÀN TRẢ');
+    } else if (val === 'XONG' || val === 'HOÀN THÀNH') {
+        setDhDetailTrangThai('HOÀN THÀNH');
+    }
+
+    recalculateDhFinancials();
+}
+
+function setDhDetailTrangThai(val, btnElement) {
+    const hiddenInput = document.querySelector('[data-dh-hdr="trang_thai"]');
+    if (hiddenInput) hiddenInput.value = val;
+
+    updateDhDetailStatusButtonStyles('trang_thai', val);
+}
+
+function updateDhDetailStatusButtonStyles(hdr, selectedVal) {
+    const selector = hdr === 'tinh_trang' ? '#dhDetailTinhTrangButtons button' : '#dhDetailTrangThaiButtons button';
+    const normSelected = String(selectedVal || '').trim().toUpperCase();
+
+    document.querySelectorAll(selector).forEach(btn => {
+        const btnVal = String(btn.dataset.val || '').trim().toUpperCase();
+        const isMatch = (btnVal === normSelected) || (btnVal === 'XONG' && normSelected === 'HOÀN THÀNH') || (btnVal === 'HOÀN THÀNH' && normSelected === 'XONG');
+
+        if (btnVal === 'HỦY') {
+            btn.style.background = isMatch ? '#dc2626' : '#fef2f2';
+            btn.style.color = isMatch ? '#ffffff' : '#dc2626';
+            btn.style.borderColor = '#fca5a5';
+        } else if (btnVal === 'HOÀN' || btnVal === 'TRẢ' || btnVal === 'HOÀN TRẢ') {
+            btn.style.background = isMatch ? '#d97706' : '#fffbeb';
+            btn.style.color = isMatch ? '#ffffff' : '#d97706';
+            btn.style.borderColor = '#fde68a';
+        } else {
+            btn.style.background = isMatch ? '#16a34a' : '#f0fdf4';
+            btn.style.color = isMatch ? '#ffffff' : '#16a34a';
+            btn.style.borderColor = '#86efac';
+        }
+    });
+}
+
+function recalculateDhFinancials() {
+    const tinhTrangInput = document.querySelector('[data-dh-hdr="tinh_trang"]');
+    const tinhTrangVal = String(tinhTrangInput?.value || '').trim().toUpperCase();
+
+    const isCanceled = (tinhTrangVal === 'HỦY');
+    const isReturnedOrRefunded = ['HOÀN', 'TRẢ', 'HOÀN TRẢ'].includes(tinhTrangVal);
+
+    const tongTien = parseMoney(document.querySelector('[data-dh-hdr="tong_tien"]')?.value || '0');
+    const phiVc = parseMoney(document.querySelector('[data-dh-hdr="phi_vc"]')?.value || '0');
+    const phuPhi = parseMoney(document.querySelector('[data-dh-hdr="phu_phi"]')?.value || '0');
+    const thue = parseMoney(document.querySelector('[data-dh-hdr="thue"]')?.value || '0');
+    const phiKhac = parseMoney(document.querySelector('[data-dh-hdr="phi_khac"]')?.value || '0');
+
+    let tienSp = 0;
+    if (!isCanceled && !isReturnedOrRefunded) {
+        const allSubtotalSpans = document.querySelectorAll('[id^="dhSubtotal_"]');
+        allSubtotalSpans.forEach(span => {
+            tienSp += parseMoney(span.innerText || '0');
+        });
+    }
+
+    const tienSpInput = document.querySelector('[data-dh-hdr="tien_sp"]');
+    if (tienSpInput) {
+        tienSpInput.value = formatDisplayNumber(tienSp);
+    }
+
+    let doanhThu = 0;
+    if (!isCanceled) {
+        doanhThu = tongTien - (phiVc + phuPhi + thue + phiKhac);
+    }
+
+    const loiNhuan = doanhThu - tienSp;
+
+    const doanhThuInput = document.querySelector('[data-dh-hdr="doanh_thu"]');
+    if (doanhThuInput) {
+        doanhThuInput.value = formatDisplayNumber(doanhThu);
+    }
+
+    const loiNhuanInput = document.querySelector('[data-dh-hdr="loi_nhuan"]');
+    if (loiNhuanInput) {
+        loiNhuanInput.value = formatDisplayNumber(loiNhuan);
+        loiNhuanInput.style.color = loiNhuan < 0 ? '#dc2626' : '#16a34a';
+    }
+}
+
+function updateDhItemSubtotal(itemIndex) {
+    const slgInput = document.querySelector(`[data-dh-item-idx="${itemIndex}"][data-dh-item-hdr="slg"]`);
+    const donGiaInput = document.querySelector(`[data-dh-item-idx="${itemIndex}"][data-dh-item-hdr="don_gia"]`);
+    const subtotalSpan = document.getElementById(`dhSubtotal_${itemIndex}`);
+
+    const slgRaw = slgInput?.value?.trim();
+    const slg = (slgRaw !== undefined && slgRaw !== '' && !isNaN(slgRaw)) ? Math.max(0, parseInt(slgRaw)) : 0;
+    const donGia = parseMoney(donGiaInput?.value || 0);
+    const subtotal = slg * donGia;
+    if (subtotalSpan) {
+        subtotalSpan.innerText = formatDisplayNumber(subtotal);
+    }
+
+    recalculateDhFinancials();
+}
+
+function handleDhModalBackdropClick(event) {
+    if (event.target && event.target.id === 'dhDetailModal') {
+        closeDhDetail();
+    }
+}
+
+function closeDhDetail() {
+    const modal = document.getElementById('dhDetailModal');
+    if (modal) {
+        modal.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+    editingDhRows = [];
+}
+
+async function saveDhDetail() {
+    if (!editingDhRows.length) return;
+    const dhConfig = CONFIG.tabs['DH'];
+    
+    // Read input values
+    const generalInputs = document.querySelectorAll('#dhDetailFields [data-dh-hdr]');
+    const updatedFields = {};
+    generalInputs.forEach(inp => {
+        const hdr = inp.dataset.dhHdr;
+        const idx = dhConfig.headers.indexOf(hdr);
+        let val = inp.value.trim();
+        if (dhConfig.priceCols.includes(idx)) {
+            val = parseMoney(val);
+        }
+        updatedFields[idx] = val;
+    });
+
+    const itemsToUpdate = [];
+    const skuIdx = dhConfig.headers.indexOf('sku');
+    const idSpIdx = dhConfig.headers.indexOf('id_sp');
+    const slgIdx = dhConfig.headers.indexOf('slg');
+    const donGiaIdx = dhConfig.headers.indexOf('don_gia');
+    const thanhTienIdx = dhConfig.headers.indexOf('thanh_tien');
+
+    editingDhRows.forEach((r, i) => {
+        const newRow = [...r];
+        Object.keys(updatedFields).forEach(idx => {
+            newRow[idx] = updatedFields[idx];
+        });
+
+        // Read item specific inputs
+        const skuInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="sku"]`);
+        const idSpInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="id_sp"]`);
+        const slgInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="slg"]`);
+        const donGiaInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="don_gia"]`);
+
+        if (skuInput && skuIdx !== -1) newRow[skuIdx] = skuInput.value.trim();
+        if (idSpInput && idSpIdx !== -1) newRow[idSpIdx] = idSpInput.value.trim();
+        const slgVal = slgInput ? slgInput.value.trim() : '';
+        if (slgIdx !== -1) newRow[slgIdx] = (slgVal === '' || isNaN(slgVal)) ? 0 : Math.max(0, parseInt(slgVal));
+        if (donGiaInput && donGiaIdx !== -1) newRow[donGiaIdx] = parseMoney(donGiaInput.value);
+        if (thanhTienIdx !== -1) newRow[thanhTienIdx] = (newRow[slgIdx] ?? 0) * (newRow[donGiaIdx] ?? 0); // thanh_tien
+
+        if (r._sheetRow) newRow._sheetRow = r._sheetRow;
+        itemsToUpdate.push({ row: newRow, sheetRow: getDataSheetRow(r) });
+    });
+
+    document.getElementById('loading').style.display = 'flex';
+    document.querySelector('#loading p').innerText = 'Đang lưu thông tin đơn hàng DH...';
+    try {
+        await batchWriteRecordRows(itemsToUpdate);
+        itemsToUpdate.forEach(item => {
+            const idx = allData.findIndex(r => r._sheetRow === item.sheetRow);
+            if (idx !== -1) {
+                allData[idx] = item.row;
+                item.row._sheetRow = item.sheetRow;
+            }
+            if (allDataCache['DH']) {
+                const cIdx = allDataCache['DH'].findIndex(r => r._sheetRow === item.sheetRow);
+                if (cIdx !== -1) {
+                    allDataCache['DH'][cIdx] = item.row;
+                    item.row._sheetRow = item.sheetRow;
+                }
+            }
+        });
+        closeDhDetail();
+        filterTable();
+        showToastNotification('✅ Đã lưu thông tin đơn hàng DH thành công!');
+    } catch (err) {
+        console.error('Lỗi khi lưu đơn hàng DH:', err);
+        alert('Không thể lưu: ' + err.message);
+    } finally {
+        document.getElementById('loading').style.display = 'none';
+    }
+}
+
+async function ensureDhSheetExists() {
+    try {
+        const token = await getAccessToken();
+        const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}?fields=sheets.properties`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const titles = (data.sheets || []).map(s => s.properties.title);
+        if (!titles.includes('DH')) {
+            const addSheetRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}:batchUpdate`, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    requests: [{
+                        addSheet: {
+                            properties: { title: 'DH' }
+                        }
+                    }]
+                })
+            });
+            if (addSheetRes.ok) {
+                const headers = CONFIG.tabs['DH'].headers;
+                await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DH!A1:Y1?valueInputOption=USER_ENTERED`, {
+                    method: 'PUT',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        values: [headers]
+                    })
+                });
+            }
+        }
+    } catch (err) {
+        console.warn('Lỗi kiểm tra/tạo sheet DH:', err);
+    }
+}
+
+
+function parseDhDate(val) {
+    if (val === undefined || val === null || val === '') return null;
+    const str = String(val).trim();
+    if (!str) return null;
+
+    if (!isNaN(str) && Number(str) > 30000 && Number(str) < 70000) {
+        const serial = Number(str);
+        const utc_days = Math.floor(serial - 25569);
+        const dateObj = new Date(utc_days * 86400 * 1000);
+        if (!isNaN(dateObj.getTime())) return dateObj;
+    }
+
+    const dmyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dmyMatch) {
+        const day = parseInt(dmyMatch[1], 10);
+        const month = parseInt(dmyMatch[2], 10) - 1;
+        const year = parseInt(dmyMatch[3], 10);
+        const dateObj = new Date(year, month, day);
+        if (!isNaN(dateObj.getTime())) return dateObj;
+    }
+
+    const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (isoMatch) {
+        const year = parseInt(isoMatch[1], 10);
+        const month = parseInt(isoMatch[2], 10) - 1;
+        const day = parseInt(isoMatch[3], 10);
+        const dateObj = new Date(year, month, day);
+        if (!isNaN(dateObj.getTime())) return dateObj;
+    }
+
+    const fallbackDate = new Date(str);
+    if (!isNaN(fallbackDate.getTime())) return fallbackDate;
+
+    return null;
+}
+
+let selectedDhGianSet = new Set();
+
+function toggleDhGianFilter(gianName, btnElement) {
+    if (selectedDhGianSet.has(gianName)) {
+        selectedDhGianSet.delete(gianName);
+    } else {
+        selectedDhGianSet.add(gianName);
+    }
+    
+    populateDhGianFilter();
+    filterTable();
+}
+
+function populateDhGianFilter() {
+    const container = document.getElementById('dhGianButtonsContainer');
+    if (!container || !allData || !allData.length) return;
+
+    const gianSet = new Set();
+    allData.forEach(row => {
+        const gian = String(row[0] || '').trim();
+        if (gian && gian.toUpperCase() !== 'GIAN') gianSet.add(gian);
+    });
+
+    const sortedGian = Array.from(gianSet).sort();
+    
+    let buttonsHtml = '';
+    sortedGian.forEach(g => {
+        const isSelected = selectedDhGianSet.has(g);
+        const bg = isSelected ? '#4f46e5' : '#ffffff';
+        const color = isSelected ? '#ffffff' : '#334155';
+        const border = isSelected ? '#4338ca' : '#cbd5e1';
+        const weight = isSelected ? '700' : '600';
+        const shadow = isSelected ? '0 2px 4px rgba(79, 70, 229, 0.25)' : 'none';
+
+        buttonsHtml += `<button type="button" class="quick-btn dh-gian-btn" style="height: 34px; padding: 4px 12px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 6px; font-weight: ${weight}; font-size: 13px; cursor: pointer; transition: all 0.15s; box-shadow: ${shadow};" onclick="toggleDhGianFilter('${escapeHtml(escapeJsString(g))}', this)">🏬 ${escapeHtml(g)}</button>`;
+    });
+
+    container.innerHTML = buttonsHtml;
+}
+
+function updateDhSummaryStats() {
+    const totalOrdersSpan = document.getElementById('dhStatTotalOrders');
+    const totalRevenueSpan = document.getElementById('dhStatTotalRevenue');
+    const totalProfitSpan = document.getElementById('dhStatTotalProfit');
+
+    if (!totalOrdersSpan || !totalRevenueSpan || !totalProfitSpan) return;
+
+    const totalOrders = filteredData.length;
+    let totalRevenue = 0;
+    let totalProfit = 0;
+
+    filteredData.forEach(row => {
+        totalRevenue += parseMoney(row[10] || 0); // doanh_thu
+        totalProfit += parseMoney(row[13] || 0);   // loi_nhuan
+    });
+
+    totalOrdersSpan.innerText = formatDisplayNumber(totalOrders);
+    totalRevenueSpan.innerText = formatDisplayNumber(totalRevenue) + ' đ';
+    totalProfitSpan.innerText = formatDisplayNumber(totalProfit) + ' đ';
+
+    totalProfitSpan.style.color = totalProfit < 0 ? '#dc2626' : '#6b21a8';
+}
+
+function setDhQuickDateRange(type, btnElement) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const day = now.getDate();
+    const dayOfWeek = now.getDay();
+
+    let start = null;
+    let end = null;
+
+    const formatDateInput = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dt = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dt}`;
+    };
+
+    if (type === 'today') {
+        start = new Date(year, month, day);
+        end = new Date(year, month, day);
+    } else if (type === 'this_week') {
+        const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        start = new Date(year, month, day + diffToMon);
+        end = new Date(start);
+        end.setDate(start.getDate() + 6);
+    } else if (type === 'this_month') {
+        start = new Date(year, month, 1);
+        end = new Date(year, month + 1, 0);
+    } else if (type === 'last_week') {
+        const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        start = new Date(year, month, day + diffToMon - 7);
+        end = new Date(start);
+        end.setDate(start.getDate() + 6);
+    } else if (type === 'last_month') {
+        start = new Date(year, month - 1, 1);
+        end = new Date(year, month, 0);
+    }
+
+    const startDateInput = document.getElementById('dhStartDateInput');
+    const endDateInput = document.getElementById('dhEndDateInput');
+
+    if (start && startDateInput) startDateInput.value = formatDateInput(start);
+    if (end && endDateInput) endDateInput.value = formatDateInput(end);
+
+    document.querySelectorAll('#dhQuickDateButtons button').forEach(btn => {
+        btn.style.background = '#e2e8f0';
+        btn.style.color = '#334155';
+    });
+    if (btnElement) {
+        btnElement.style.background = '#4f46e5';
+        btnElement.style.color = '#ffffff';
+    }
+
+    filterTable();
+}
+
+function clearDhFilters() {
+    selectedDhGianSet.clear();
+    const startDateInput = document.getElementById('dhStartDateInput');
+    const endDateInput = document.getElementById('dhEndDateInput');
+    const searchInput = document.getElementById('searchInput');
+
+    if (startDateInput) startDateInput.value = '';
+    if (endDateInput) endDateInput.value = '';
+    if (searchInput) searchInput.value = '';
+
+    document.querySelectorAll('#dhQuickDateButtons button').forEach(btn => {
+        btn.style.background = '#e2e8f0';
+        btn.style.color = '#334155';
+    });
+
+    populateDhGianFilter();
+    filterTable();
 }

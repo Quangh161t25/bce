@@ -47,6 +47,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({'items': items}).encode('utf-8'))
             return
         else:
+            if self.path == '/' or self.path == '':
+                self.path = '/index.html'
             super().do_GET()
 
 if __name__ == '__main__':
