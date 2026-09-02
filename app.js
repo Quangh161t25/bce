@@ -2081,82 +2081,35 @@ function getPrefixBaseFilteredRows() {
     });
 }
 
-function updateDsSpPrefixButtonCounts() {
+function generateDsSpPrefix1Buttons() {
     if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
     const baseRows = getPrefixBaseFilteredRows();
+    const prefixCounts = new Map();
 
-    const p1Counts = new Map();
     baseRows.forEach(row => {
         const code = getRowPrefixCode(row);
         if (code.length >= 1) {
             const p1 = code.substring(0, 1);
-            p1Counts.set(p1, (p1Counts.get(p1) || 0) + 1);
+            prefixCounts.set(p1, (prefixCounts.get(p1) || 0) + 1);
         }
     });
 
-    const container1 = document.getElementById('dsSpPrefix1Buttons');
-    if (container1) {
-        container1.querySelectorAll('button').forEach(btn => {
-            const p = btn.dataset.prefix;
-            const cnt = p === '' ? baseRows.length : (p1Counts.get(p) || 0);
-            let sub = btn.querySelector('.prefix-sub-count');
-            if (!sub) {
-                sub = document.createElement('sub');
-                sub.className = 'prefix-sub-count';
-                btn.appendChild(sub);
-            }
-            sub.textContent = cnt;
-            btn.style.opacity = (p !== '' && cnt === 0 && currentDsSpPrefix1Filter !== p) ? '0.35' : '1';
-        });
-    }
+    const sortedPrefixes = Array.from(prefixCounts.entries())
+        .filter(([_, cnt]) => cnt > 0)
+        .sort((a, b) => {
+            if (b[1] !== a[1]) return b[1] - a[1];
+            return a[0].localeCompare(b[0]);
+        })
+        .map(entry => entry[0]);
 
-    const p2Counts = new Map();
-    let p2Total = 0;
-    baseRows.forEach(row => {
-        const code = getRowPrefixCode(row);
-        if (!currentDsSpPrefix1Filter || code.startsWith(currentDsSpPrefix1Filter)) {
-            p2Total++;
-            if (code.length >= 2) {
-                const p2 = code.substring(0, 2);
-                p2Counts.set(p2, (p2Counts.get(p2) || 0) + 1);
-            }
-        }
-    });
-
-    const container2 = document.getElementById('dsSpPrefix2Buttons');
-    if (container2) {
-        container2.querySelectorAll('button').forEach(btn => {
-            const p = btn.dataset.prefix;
-            const cnt = p === '' ? p2Total : (p2Counts.get(p) || 0);
-            let sub = btn.querySelector('.prefix-sub-count');
-            if (!sub) {
-                sub = document.createElement('sub');
-                sub.className = 'prefix-sub-count';
-                btn.appendChild(sub);
-            }
-            sub.textContent = cnt;
-            btn.style.opacity = (p !== '' && cnt === 0 && currentDsSpPrefix2Filter !== p) ? '0.35' : '1';
-        });
-    }
-}
-
-function generateDsSpPrefix1Buttons() {
-    if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
-    const prefixes = new Set();
-    allData.forEach(row => {
-        if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return;
-        const code = getRowPrefixCode(row);
-        if (code.length >= 1) prefixes.add(code.substring(0, 1));
-    });
-
-    const sortedPrefixes = Array.from(prefixes).sort();
     const container = document.getElementById('dsSpPrefix1Buttons');
     if (!container) return;
 
     container.innerHTML = `
-        <button type="button" class="${!currentDsSpPrefix1Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix1Filter('')">Tất cả <sub class="prefix-sub-count">0</sub></button>
+        <button type="button" class="${!currentDsSpPrefix1Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix1Filter('')">Tất cả <sub class="prefix-sub-count">${baseRows.length}</sub></button>
         ${sortedPrefixes.map(p => {
-            return `<button type="button" class="${currentDsSpPrefix1Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix1Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}<sub class="prefix-sub-count">0</sub></button>`;
+            const cnt = prefixCounts.get(p) || 0;
+            return `<button type="button" class="${currentDsSpPrefix1Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix1Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}<sub class="prefix-sub-count">${cnt}</sub></button>`;
         }).join('')}
     `;
 
@@ -2165,27 +2118,43 @@ function generateDsSpPrefix1Buttons() {
 
 function generateDsSpPrefix2Buttons(prefix1) {
     if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
-    const prefixes = new Set();
-    allData.forEach(row => {
-        if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return;
+    const baseRows = getPrefixBaseFilteredRows();
+    const prefixCounts = new Map();
+    let totalCount = 0;
+
+    baseRows.forEach(row => {
         const code = getRowPrefixCode(row);
-        if ((!prefix1 || code.startsWith(prefix1)) && code.length >= 2) {
-            prefixes.add(code.substring(0, 2));
+        if (!prefix1 || code.startsWith(prefix1)) {
+            totalCount++;
+            if (code.length >= 2) {
+                const p2 = code.substring(0, 2);
+                prefixCounts.set(p2, (prefixCounts.get(p2) || 0) + 1);
+            }
         }
     });
 
-    const sortedPrefixes = Array.from(prefixes).sort();
+    const sortedPrefixes = Array.from(prefixCounts.entries())
+        .filter(([_, cnt]) => cnt > 0)
+        .sort((a, b) => {
+            if (b[1] !== a[1]) return b[1] - a[1];
+            return a[0].localeCompare(b[0]);
+        })
+        .map(entry => entry[0]);
+
     const container = document.getElementById('dsSpPrefix2Buttons');
     if (!container) return;
 
     container.innerHTML = `
-        <button type="button" class="${!currentDsSpPrefix2Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix2Filter('')">Tất cả <sub class="prefix-sub-count">0</sub></button>
+        <button type="button" class="${!currentDsSpPrefix2Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix2Filter('')">Tất cả <sub class="prefix-sub-count">${totalCount}</sub></button>
         ${sortedPrefixes.map(p => {
-            return `<button type="button" class="${currentDsSpPrefix2Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix2Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}<sub class="prefix-sub-count">0</sub></button>`;
+            const cnt = prefixCounts.get(p) || 0;
+            return `<button type="button" class="${currentDsSpPrefix2Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix2Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}<sub class="prefix-sub-count">${cnt}</sub></button>`;
         }).join('')}
     `;
+}
 
-    updateDsSpPrefixButtonCounts();
+function updateDsSpPrefixButtonCounts() {
+    generateDsSpPrefix1Buttons();
 }
 
 
