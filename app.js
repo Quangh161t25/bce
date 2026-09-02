@@ -2179,12 +2179,13 @@ function generateDsSpPrefix2Buttons(prefix1) {
     if (!container) return;
 
     container.innerHTML = `
-        <button type="button" class="${!currentDsSpPrefix2Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix2Filter('')">Tất cả <sub class="prefix-sub-count">${totalCount}</sub></button>
+        <button type="button" class="${!currentDsSpPrefix2Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix2Filter('')">Tất cả <sub class="prefix-sub-count">0</sub></button>
         ${sortedPrefixes.map(p => {
-            const cnt = prefixCounts.get(p) || 0;
-            return `<button type="button" class="${currentDsSpPrefix2Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix2Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}<sub class="prefix-sub-count">${cnt}</sub></button>`;
+            return `<button type="button" class="${currentDsSpPrefix2Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix2Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}<sub class="prefix-sub-count">0</sub></button>`;
         }).join('')}
     `;
+
+    updateDsSpPrefixButtonCounts();
 }
 
 
