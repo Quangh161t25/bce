@@ -2051,6 +2051,33 @@ function setDsSpPrefix2Filter(prefix) {
     filterTable();
 }
 
+function getPrefixBaseFilteredRows() {
+    const term = (document.getElementById('searchInput')?.value || '').toLowerCase();
+    const truong = (document.getElementById('truongFilter')?.value || '').toLowerCase();
+    const store = (document.getElementById('storeFilter')?.value || '').toLowerCase();
+    const terms = term.split(',').map(s => s.trim()).filter(Boolean);
+
+    return allData.filter(row => {
+        const matchesSearch = terms.length === 0 || terms.some(t => row.some(cell => String(cell).toLowerCase().includes(t)));
+        const matchesTruong = !truong || String(row[1] || '').toLowerCase().includes(truong);
+
+        if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') {
+            const idCon = String(row[0] || '').trim().toUpperCase();
+            const idSp = String(row[1] || '').trim().toUpperCase();
+            if (spBoSetCache && ((idCon && spBoSetCache.has(idCon)) || (idSp && !idCon && spBoSetCache.has(idSp)))) return false;
+            if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return false;
+            return matchesSearch && matchesTruong;
+        }
+
+        if (currentTab === 'WEB_SP') {
+            const matchesStore = !store || String(row[1] || '').trim().toLowerCase() === store.trim().toLowerCase();
+            return matchesSearch && matchesStore && matchesTruong;
+        }
+
+        return matchesSearch && matchesTruong;
+    });
+}
+
 function generateDsSpPrefix1Buttons(skipPrefix2 = false) {
     if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
     const baseRows = getPrefixBaseFilteredRows();
