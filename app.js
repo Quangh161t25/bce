@@ -2096,10 +2096,7 @@ function generateDsSpPrefix1Buttons() {
 
     const sortedPrefixes = Array.from(prefixCounts.entries())
         .filter(([_, cnt]) => cnt > 0)
-        .sort((a, b) => {
-            if (b[1] !== a[1]) return b[1] - a[1];
-            return a[0].localeCompare(b[0]);
-        })
+        .sort((a, b) => b[0].localeCompare(a[0], 'vi', { numeric: true, sensitivity: 'base' }))
         .map(entry => entry[0]);
 
     const container = document.getElementById('dsSpPrefix1Buttons');
@@ -2135,10 +2132,7 @@ function generateDsSpPrefix2Buttons(prefix1) {
 
     const sortedPrefixes = Array.from(prefixCounts.entries())
         .filter(([_, cnt]) => cnt > 0)
-        .sort((a, b) => {
-            if (b[1] !== a[1]) return b[1] - a[1];
-            return a[0].localeCompare(b[0]);
-        })
+        .sort((a, b) => b[0].localeCompare(a[0], 'vi', { numeric: true, sensitivity: 'base' }))
         .map(entry => entry[0]);
 
     const container = document.getElementById('dsSpPrefix2Buttons');
