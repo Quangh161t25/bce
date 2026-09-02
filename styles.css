@@ -161,20 +161,20 @@
         }
 
         .prefix-sub-count {
-            font-size: 9px;
-            font-weight: 700;
+            font-size: 10px;
+            font-weight: 800;
             margin-left: 2px;
             vertical-align: sub;
             line-height: 1;
-            color: #64748b;
+            color: #dc2626 !important;
         }
 
         .quick-date-filters button:hover .prefix-sub-count {
-            color: var(--primary);
+            color: #b91c1c !important;
         }
 
         .quick-date-filters button.active .prefix-sub-count {
-            color: #e0e7ff;
+            color: #ff9999 !important;
         }
 
         .profit-filter-buttons {

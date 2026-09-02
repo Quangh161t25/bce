@@ -2051,13 +2051,13 @@ function setDsSpPrefix2Filter(prefix) {
     filterTable();
 }
 
-function generateDsSpPrefix1Buttons() {
+function generateDsSpPrefix1Buttons(skipPrefix2 = false) {
     if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
+    const baseRows = getPrefixBaseFilteredRows();
     const prefixCounts = new Map();
     let totalCount = 0;
 
-    allData.forEach(row => {
-        if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return;
+    baseRows.forEach(row => {
         const code = getRowPrefixCode(row);
         totalCount++;
         if (code.length >= 1) {
@@ -2078,16 +2078,18 @@ function generateDsSpPrefix1Buttons() {
         }).join('')}
     `;
 
-    generateDsSpPrefix2Buttons(currentDsSpPrefix1Filter);
+    if (!skipPrefix2) {
+        generateDsSpPrefix2Buttons(currentDsSpPrefix1Filter);
+    }
 }
 
 function generateDsSpPrefix2Buttons(prefix1) {
     if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
+    const baseRows = getPrefixBaseFilteredRows();
     const prefixCounts = new Map();
     let totalCount = 0;
 
-    allData.forEach(row => {
-        if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return;
+    baseRows.forEach(row => {
         const code = getRowPrefixCode(row);
         if (!prefix1 || code.startsWith(prefix1)) {
             totalCount++;
