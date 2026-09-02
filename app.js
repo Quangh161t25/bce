@@ -2053,43 +2053,61 @@ function setDsSpPrefix2Filter(prefix) {
 
 function generateDsSpPrefix1Buttons() {
     if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
-    const prefixes = new Set();
+    const prefixCounts = new Map();
+    let totalCount = 0;
+
     allData.forEach(row => {
         if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return;
         const code = getRowPrefixCode(row);
-        if (code.length >= 1) prefixes.add(code.substring(0, 1));
+        totalCount++;
+        if (code.length >= 1) {
+            const p1 = code.substring(0, 1);
+            prefixCounts.set(p1, (prefixCounts.get(p1) || 0) + 1);
+        }
     });
-    
-    const sortedPrefixes = Array.from(prefixes).sort();
+
+    const sortedPrefixes = Array.from(prefixCounts.keys()).sort();
     const container = document.getElementById('dsSpPrefix1Buttons');
     if (!container) return;
-    
+
     container.innerHTML = `
-        <button type="button" class="${!currentDsSpPrefix1Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix1Filter('')">Tất cả</button>
-        ${sortedPrefixes.map(p => `<button type="button" class="${currentDsSpPrefix1Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix1Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}</button>`).join('')}
+        <button type="button" class="${!currentDsSpPrefix1Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix1Filter('')">Tất cả <sub class="prefix-sub-count">${totalCount}</sub></button>
+        ${sortedPrefixes.map(p => {
+            const cnt = prefixCounts.get(p) || 0;
+            return `<button type="button" class="${currentDsSpPrefix1Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix1Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}<sub class="prefix-sub-count">${cnt}</sub></button>`;
+        }).join('')}
     `;
-    
+
     generateDsSpPrefix2Buttons(currentDsSpPrefix1Filter);
 }
 
 function generateDsSpPrefix2Buttons(prefix1) {
     if (currentTab !== 'DS_SP' && currentTab !== 'TINH_GIA' && currentTab !== 'WEB_SP') return;
-    const prefixes = new Set();
+    const prefixCounts = new Map();
+    let totalCount = 0;
+
     allData.forEach(row => {
         if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) return;
         const code = getRowPrefixCode(row);
-        if ((!prefix1 || code.startsWith(prefix1)) && code.length >= 2) {
-            prefixes.add(code.substring(0, 2));
+        if (!prefix1 || code.startsWith(prefix1)) {
+            totalCount++;
+            if (code.length >= 2) {
+                const p2 = code.substring(0, 2);
+                prefixCounts.set(p2, (prefixCounts.get(p2) || 0) + 1);
+            }
         }
     });
-    
-    const sortedPrefixes = Array.from(prefixes).sort();
+
+    const sortedPrefixes = Array.from(prefixCounts.keys()).sort();
     const container = document.getElementById('dsSpPrefix2Buttons');
     if (!container) return;
-    
+
     container.innerHTML = `
-        <button type="button" class="${!currentDsSpPrefix2Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix2Filter('')">Tất cả</button>
-        ${sortedPrefixes.map(p => `<button type="button" class="${currentDsSpPrefix2Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix2Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}</button>`).join('')}
+        <button type="button" class="${!currentDsSpPrefix2Filter ? 'active' : ''}" data-prefix="" onclick="setDsSpPrefix2Filter('')">Tất cả <sub class="prefix-sub-count">${totalCount}</sub></button>
+        ${sortedPrefixes.map(p => {
+            const cnt = prefixCounts.get(p) || 0;
+            return `<button type="button" class="${currentDsSpPrefix2Filter === p ? 'active' : ''}" data-prefix="${escapeHtml(p)}" onclick="setDsSpPrefix2Filter('${escapeHtml(escapeJsString(p))}')">${escapeHtml(p)}<sub class="prefix-sub-count">${cnt}</sub></button>`;
+        }).join('')}
     `;
 }
 
