@@ -600,6 +600,7 @@ function renderHeaders() {
         const isSku = (h === 'sku' || h === 'id_sp_con' || h === 'id_sp');
         const isTenSp = (h === 'ten_sp' || h === 'ten_san_pham');
         const isMoTa = (h === 'mo_ta' || h === 'noi_dung');
+        const colClass = isSku ? ' col-sku' : (isTenSp ? ' col-ten-sp' : (isMoTa ? ' col-mo-ta' : ''));
         const isNum = isNumericDisplayHeader(h);
         const textAlignStyle = isNum ? ' style="text-align: right;"' : '';
         const headerLabel = (h === 'anh') ? 'ẢNH' : h.toUpperCase();
