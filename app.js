@@ -41,7 +41,7 @@ sR2Sh8e3h3Knd6j1tceRIFU=
         'TINH_GIA': {
             range: 'TINH_GIA!A2:V',
             headers: ['id_sp_con', 'id_sp', 'ten_sp', 'gia_nhap', 'gia_ban', 'gia_đong_goi', 'gia_thap_nhat', 'loi_nhuan%', 'lai_mong_muon', 'gia_đăng', 'phi_ads_%', 'phi_aff_%', '11%_phi_co_dinh', 'phi_co_dinh', '6%_phi_giao_dich', 'phi_giao_dich', '5.5% xtra', 'xtra', '1,5%_thue', 'thue', 'phi_ha_tang3.000_₫', 'phi_piship'],
-            displayHeaders: ['id_sp_con', 'id_sp', 'ten_sp', 'gia_ban', 'gia_thap_nhat', 'loi_nhuan%', 'lai_mong_muon', 'gia_đăng', 'phi_ads_%', 'phi_aff_%', '11%_phi_co_dinh', 'phi_co_dinh', '6%_phi_giao_dich', 'phi_giao_dich', '5.5% xtra', 'xtra', '1,5%_thue', 'thue', 'phi_ha_tang3.000_₫', 'phi_piship'],
+            displayHeaders: ['id_sp_con', 'id_sp', 'anh', 'ten_sp', 'gia_ban', 'gia_thap_nhat', 'loi_nhuan%', 'lai_mong_muon', 'gia_đăng', 'phi_ads_%', 'phi_aff_%', '11%_phi_co_dinh', 'phi_co_dinh', '6%_phi_giao_dich', 'phi_giao_dich', '5.5% xtra', 'xtra', '1,5%_thue', 'thue', 'phi_ha_tang3.000_₫', 'phi_piship'],
             priceCols: [3, 4, 5, 6, 8, 9, 13, 15, 17, 19, 20, 21]
         },
         'SP_BO': {
@@ -98,6 +98,7 @@ let selectedProductIds = new Set();
 let selectedDhGianSet = new Set();
 let selectedDhTinhTrangSet = new Set();
 let selectedDhTrangThaiSet = new Set();
+let webSpImageMapCache = null;
 let spBoSetCache = null;
 let orderCostDetailsExpanded = false;
 let dsSpOptionsCache = null;
@@ -216,6 +217,7 @@ async function switchTab(tabName, force = false) {
             await fetchSpBoSet();
             if (currentTab === 'TINH_GIA') {
                 await fetchSpShopeeData();
+                fetchWebSpImageMap();
             }
         }
         if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'WEB_SP') {
@@ -228,6 +230,7 @@ async function switchTab(tabName, force = false) {
         await fetchData();
         if (currentTab === 'TINH_GIA') {
             await fetchSpShopeeData();
+            fetchWebSpImageMap();
         }
     }
 }
@@ -249,6 +252,7 @@ async function reloadCurrentTab() {
     await fetchData();
     if (currentTab === 'TINH_GIA') {
         await fetchSpShopeeData(true);
+        fetchWebSpImageMap(true);
         await recalculateVisibleTinhGiaRows();
     }
     filterTable();
@@ -364,6 +368,61 @@ function buildSpShopeeGianMap() {
     });
 
     return map;
+}
+
+let isFetchingWebSpImages = false;
+
+async function fetchWebSpImageMap(force = false) {
+    if (webSpImageMapCache && !force) return webSpImageMapCache;
+    if (isFetchingWebSpImages) return webSpImageMapCache || new Map();
+    isFetchingWebSpImages = true;
+
+    try {
+        let webRows = null;
+        if (allDataCache['WEB_SP'] && allDataCache['WEB_SP'].length) {
+            webRows = allDataCache['WEB_SP'];
+        } else if (rangeDataCache['WEB_SP!A2:O'] && rangeDataCache['WEB_SP!A2:O'].length) {
+            webRows = rangeDataCache['WEB_SP!A2:O'];
+        } else {
+            const token = await getAccessToken();
+            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/WEB_SP!C2:H`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                webRows = data.values || [];
+            }
+        }
+
+        const map = new Map();
+        if (Array.isArray(webRows)) {
+            webRows.forEach(r => {
+                if (!Array.isArray(r) || !r.length) return;
+                const sku = String(r.length >= 8 ? r[2] : (r[0] || '')).trim();
+                const rawAnh = String(r.length >= 8 ? r[7] : (r[5] || '')).trim();
+
+                if (!sku || !rawAnh) return;
+                const key = sku.substring(0, 4).toUpperCase();
+                if (!map.has(key)) {
+                    const firstImg = rawAnh.split('|')[0].trim().split(',')[0].trim();
+                    if (firstImg && (firstImg.startsWith('http://') || firstImg.startsWith('https://'))) {
+                        map.set(key, firstImg);
+                    }
+                }
+            });
+        }
+        webSpImageMapCache = map;
+        if (currentTab === 'TINH_GIA') {
+            renderTable();
+        }
+    } catch (err) {
+        console.warn('Lỗi khi tải ảnh WEB_SP:', err);
+        if (!webSpImageMapCache) webSpImageMapCache = new Map();
+    } finally {
+        isFetchingWebSpImages = false;
+    }
+
+    return webSpImageMapCache;
 }
 
 function isBtnInSpShopee(btnText, row) {
@@ -541,10 +600,10 @@ function renderHeaders() {
         const isSku = (h === 'sku' || h === 'id_sp_con' || h === 'id_sp');
         const isTenSp = (h === 'ten_sp' || h === 'ten_san_pham');
         const isMoTa = (h === 'mo_ta' || h === 'noi_dung');
-        const colClass = isSku ? ' col-sku' : (isTenSp ? ' col-ten-sp' : (isMoTa ? ' col-mo-ta' : ''));
         const isNum = isNumericDisplayHeader(h);
         const textAlignStyle = isNum ? ' style="text-align: right;"' : '';
-        return `<th data-col="${escapeHtml(h)}" class="sortable-header${activeClass}${colClass}"${textAlignStyle} onclick="handleHeaderSort('${escapeHtml(escapeJsString(h))}')" title="Bấm để sắp xếp">${escapeHtml(h.toUpperCase())}${sortIndicator}</th>`;
+        const headerLabel = (h === 'anh') ? 'ẢNH' : h.toUpperCase();
+        return `<th data-col="${escapeHtml(h)}" class="sortable-header${activeClass}${colClass}"${textAlignStyle} onclick="handleHeaderSort('${escapeHtml(escapeJsString(h))}')" title="Bấm để sắp xếp">${escapeHtml(headerLabel)}${sortIndicator}</th>`;
     }).join('')}</tr>`;
 }
 
@@ -568,6 +627,10 @@ function handleHeaderSort(headerName) {
 
 function getRowSortValue(row, headerName, storageHeaders, tabName) {
     if (!row) return '';
+    if (tabName === 'TINH_GIA' && headerName === 'anh') {
+        const idSp = String(row[1] || '').trim().substring(0, 4).toUpperCase() || String(row[0] || '').trim().substring(0, 4).toUpperCase();
+        return (webSpImageMapCache && idSp) ? (webSpImageMapCache.get(idSp) || '') : '';
+    }
     const idx = storageHeaders.indexOf(headerName);
     const rawVal = (idx >= 0 ? row[idx] : row[headerName]) ?? '';
     
@@ -1772,6 +1835,20 @@ function renderTable() {
                 return `<td>${linksHtml.join(', ')}</td>`;
             }
             if (currentTab === 'TINH_GIA') {
+                if (header === 'anh') {
+                    const idSp = String(row[1] || '').trim().substring(0, 4).toUpperCase() || String(row[0] || '').trim().substring(0, 4).toUpperCase();
+                    const imgUrl = (webSpImageMapCache && idSp) ? webSpImageMapCache.get(idSp) : '';
+                    if (imgUrl) {
+                        return `<td data-col="anh" style="text-align: center; vertical-align: middle; padding: 3px 6px;">
+                            <div style="display: flex; align-items: center; justify-content: center;">
+                                <a href="${escapeHtml(imgUrl)}" target="_blank" onclick="event.stopPropagation()" title="Bấm xem ảnh gốc">
+                                    <img src="${escapeHtml(imgUrl)}" class="table-img" style="width: 36px; height: 36px; object-fit: cover; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(2.4)'; this.style.zIndex='999'; this.style.position='relative';" onmouseout="this.style.transform='scale(1)'; this.style.zIndex='1'; this.style.position='static';" onerror="this.style.display='none'">
+                                </a>
+                            </div>
+                        </td>`;
+                    }
+                    return `<td data-col="anh" style="text-align: center; color: #cbd5e1; font-size: 14px; padding: 3px 6px;">—</td>`;
+                }
                 if (header === 'hanh_dong') {
                     return `<td><button class="btn primary" style="padding: 4px 12px; min-width: unset; height: 28px; line-height: 20px; font-size: 12px;" onclick="event.stopPropagation(); saveInlineTinhGia(${start + rowIndex}, this)">Lưu</button></td>`;
                 }
