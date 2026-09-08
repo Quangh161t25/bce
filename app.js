@@ -95,6 +95,9 @@ let editingDonHangRows = [];
 let dsSpNameMapCache = null;
 let selectedOrderIds = new Set();
 let selectedProductIds = new Set();
+let selectedDhGianSet = new Set();
+let selectedDhTinhTrangSet = new Set();
+let selectedDhTrangThaiSet = new Set();
 let spBoSetCache = null;
 let orderCostDetailsExpanded = false;
 let dsSpOptionsCache = null;
@@ -4388,10 +4391,6 @@ function parseDhDate(val) {
 
     return null;
 }
-
-let selectedDhGianSet = new Set();
-let selectedDhTinhTrangSet = new Set();
-let selectedDhTrangThaiSet = new Set();
 
 function toggleDhGianFilter(gianName, btnElement) {
     if (selectedDhGianSet.has(gianName)) {
