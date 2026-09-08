@@ -105,7 +105,7 @@ let dsSpOptionsCache = null;
 let rangeDataCache = {};
 let allDataCache = {};
 const TAB_LABELS = {
-    'DH': 'Đơn Hàng DH',
+    'DH': 'ĐH',
     HOA_DON: 'HÓA ĐƠN',
     DS_SP: 'DS SP',
     TINH_GIA: 'TÍNH GIÁ',
@@ -1878,6 +1878,21 @@ function renderTable() {
                     const displayValue = displayCell;
                     const cellClass = '';
                     return `<td${cellClass} data-col="${header}">${escapeHtml(displayValue || '')}</td>`;
+                }
+            }
+            if (currentTab === 'DH') {
+                if (header === 'gian') {
+                    const linkDonIdx = storageHeaders.indexOf('link_don');
+                    const linkDonVal = (linkDonIdx >= 0 ? String(row[linkDonIdx] || '').trim() : '');
+                    const gianVal = String(row[0] || cell || '').trim();
+                    const mdhVal = String(row[3] || '').trim();
+                    const tooltip = linkDonVal ? `Bấm để copy link đơn: ${escapeHtml(linkDonVal)}` : 'Chưa có link đơn hàng';
+
+                    return `<td data-col="gian" style="vertical-align: middle; padding: 4px 8px;" onclick="event.stopPropagation(); copyDhOrderLink('${escapeJsString(linkDonVal)}', '${escapeJsString(gianVal)}', '${escapeJsString(mdhVal)}', this)" title="${tooltip}">
+                        <span class="dh-gian-badge" style="font-weight: 700; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;">
+                            🏬 ${escapeHtml(gianVal)} <span style="font-size: 11px; opacity: 0.8;" title="Copy link đơn">📋</span>
+                        </span>
+                    </td>`;
                 }
             }
             const displayCell = isNumericDisplayHeader(header)
@@ -4058,6 +4073,39 @@ function fallbackCopyText(textToCopy) {
     showToastNotification('📋 Đã copy: ' + textToCopy);
 }
 
+function copyDhOrderLink(linkDon, gianName, mdh, cellEl) {
+    const cleanLink = String(linkDon || '').trim();
+    if (!cleanLink) {
+        showToastNotification(`⚠️ Đơn hàng ${mdh ? mdh + ' ' : ''}(Gian ${gianName || 'này'}) chưa có link đơn!`);
+        return;
+    }
+
+    const showSuccess = () => {
+        showToastNotification(`📋 Đã copy link đơn (${gianName || 'ĐH'}): ${cleanLink}`);
+        if (cellEl) {
+            const badge = cellEl.querySelector('.dh-gian-badge') || cellEl;
+            const originalBg = badge.style.background;
+            const originalColor = badge.style.color;
+            const originalBorder = badge.style.borderColor;
+            badge.style.background = '#10b981';
+            badge.style.color = '#ffffff';
+            badge.style.borderColor = '#059669';
+            setTimeout(() => {
+                badge.style.background = originalBg;
+                badge.style.color = originalColor;
+                badge.style.borderColor = originalBorder;
+            }, 700);
+        }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cleanLink).then(showSuccess).catch(() => {
+            fallbackCopyText(cleanLink);
+        });
+    } else {
+        fallbackCopyText(cleanLink);
+    }
+}
 
 let editingDhRows = [];
 
@@ -4090,7 +4138,7 @@ function openDhDetail(mdh) {
     }
 
     const firstRow = editingDhRows[0];
-    document.getElementById('dhDetailTitle').innerText = 'Chi Tiết Đơn Hàng DH: ' + cleanMdh;
+    document.getElementById('dhDetailTitle').innerText = 'Chi Tiết Đơn Hàng ĐH: ' + cleanMdh;
     document.getElementById('dhDetailItemsCount').innerText = editingDhRows.length;
 
     const generalHeaders = ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don', 'tinh_trang', 'trang_thai'];
@@ -4362,7 +4410,7 @@ async function saveDhDetail() {
     });
 
     document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Đang lưu thông tin đơn hàng DH...';
+    document.querySelector('#loading p').innerText = 'Đang lưu thông tin đơn hàng ĐH...';
     try {
         await batchWriteRecordRows(itemsToUpdate);
         itemsToUpdate.forEach(item => {
@@ -4381,9 +4429,9 @@ async function saveDhDetail() {
         });
         closeDhDetail();
         filterTable();
-        showToastNotification('✅ Đã lưu thông tin đơn hàng DH thành công!');
+        showToastNotification('✅ Đã lưu thông tin đơn hàng ĐH thành công!');
     } catch (err) {
-        console.error('Lỗi khi lưu đơn hàng DH:', err);
+        console.error('Lỗi khi lưu đơn hàng ĐH:', err);
         alert('Không thể lưu: ' + err.message);
     } finally {
         document.getElementById('loading').style.display = 'none';
