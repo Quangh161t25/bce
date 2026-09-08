@@ -764,6 +764,9 @@ function resetFilters() {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
+    if (typeof selectedDhGianSet !== 'undefined') selectedDhGianSet.clear();
+    if (typeof selectedDhTinhTrangSet !== 'undefined') selectedDhTinhTrangSet.clear();
+    if (typeof selectedDhTrangThaiSet !== 'undefined') selectedDhTrangThaiSet.clear();
     if (typeof syncOrderStatusFilterButtons === 'function') syncOrderStatusFilterButtons();
     currentDsSpPrefix1Filter = '';
     currentDsSpPrefix2Filter = '';
@@ -1931,6 +1934,9 @@ function filterTable() {
 
         if (currentTab === 'DH') {
             const selectedGianList = Array.from(selectedDhGianSet).map(g => g.toLowerCase());
+            const selectedTinhTrangList = Array.from(selectedDhTinhTrangSet).map(s => s.trim().toUpperCase());
+            const selectedTrangThaiList = Array.from(selectedDhTrangThaiSet).map(s => s.trim().toUpperCase());
+
             const startDateStr = document.getElementById('dhStartDateInput')?.value || '';
             const endDateStr = document.getElementById('dhEndDateInput')?.value || '';
             const startDateTime = startDateStr ? new Date(startDateStr + "T00:00:00").getTime() : 0;
@@ -1939,13 +1945,19 @@ function filterTable() {
             const rowGian = String(row[0] || '').trim().toLowerCase();
             const matchesGian = selectedGianList.length === 0 || selectedGianList.includes(rowGian);
 
+            const rowTinhTrang = String(row[14] || '').trim().toUpperCase();
+            const matchesTinhTrang = selectedTinhTrangList.length === 0 || selectedTinhTrangList.includes(rowTinhTrang);
+
+            const rowTrangThai = String(row[15] || '').trim().toUpperCase();
+            const matchesTrangThai = selectedTrangThaiList.length === 0 || selectedTrangThaiList.includes(rowTrangThai);
+
             const orderDateObj = parseDhDate(row[2]) || parseDhDate(row[1]);
             const orderTime = orderDateObj ? orderDateObj.getTime() : 0;
 
             const matchesStartDate = !startDateTime || (orderTime && orderTime >= startDateTime);
             const matchesEndDate = !endDateTime || (orderTime && orderTime <= endDateTime);
 
-            return matchesSearch && matchesGian && matchesStartDate && matchesEndDate;
+            return matchesSearch && matchesGian && matchesStartDate && matchesEndDate && matchesTinhTrang && matchesTrangThai;
         }
 
         if (!['DON_HANG', 'DON_HANG_CHI_TIET'].includes(currentTab)) return matchesSearch && matchesTruong;
@@ -1965,6 +1977,8 @@ function filterTable() {
 
     if (currentTab === 'DH') {
         populateDhGianFilter();
+        populateDhTinhTrangFilter();
+        populateDhTrangThaiFilter();
         filteredData = getDhSummaryRows(filteredData);
         filteredData.sort((a, b) => {
             const dateA = parseDhDate(a[2]) || parseDhDate(a[1]) || new Date(0);
@@ -4376,6 +4390,8 @@ function parseDhDate(val) {
 }
 
 let selectedDhGianSet = new Set();
+let selectedDhTinhTrangSet = new Set();
+let selectedDhTrangThaiSet = new Set();
 
 function toggleDhGianFilter(gianName, btnElement) {
     if (selectedDhGianSet.has(gianName)) {
@@ -4385,6 +4401,34 @@ function toggleDhGianFilter(gianName, btnElement) {
     }
     
     populateDhGianFilter();
+    filterTable();
+}
+
+function toggleDhTinhTrangFilter(val) {
+    if (!val) {
+        selectedDhTinhTrangSet.clear();
+    } else {
+        if (selectedDhTinhTrangSet.has(val)) {
+            selectedDhTinhTrangSet.delete(val);
+        } else {
+            selectedDhTinhTrangSet.add(val);
+        }
+    }
+    populateDhTinhTrangFilter();
+    filterTable();
+}
+
+function toggleDhTrangThaiFilter(val) {
+    if (!val) {
+        selectedDhTrangThaiSet.clear();
+    } else {
+        if (selectedDhTrangThaiSet.has(val)) {
+            selectedDhTrangThaiSet.delete(val);
+        } else {
+            selectedDhTrangThaiSet.add(val);
+        }
+    }
+    populateDhTrangThaiFilter();
     filterTable();
 }
 
@@ -4409,7 +4453,138 @@ function populateDhGianFilter() {
         const weight = isSelected ? '700' : '600';
         const shadow = isSelected ? '0 2px 4px rgba(79, 70, 229, 0.25)' : 'none';
 
-        buttonsHtml += `<button type="button" class="quick-btn dh-gian-btn" style="height: 34px; padding: 4px 12px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 6px; font-weight: ${weight}; font-size: 13px; cursor: pointer; transition: all 0.15s; box-shadow: ${shadow};" onclick="toggleDhGianFilter('${escapeHtml(escapeJsString(g))}', this)">🏬 ${escapeHtml(g)}</button>`;
+        buttonsHtml += `<button type="button" class="quick-btn dh-gian-btn" style="height: 30px; padding: 2px 10px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 6px; font-weight: ${weight}; font-size: 12px; cursor: pointer; transition: all 0.15s; box-shadow: ${shadow};" onclick="toggleDhGianFilter('${escapeHtml(escapeJsString(g))}', this)">🏬 ${escapeHtml(g)}</button>`;
+    });
+
+    container.innerHTML = buttonsHtml;
+}
+
+function populateDhTinhTrangFilter() {
+    const container = document.getElementById('dhTinhTrangButtonsContainer');
+    if (!container || !allData || !allData.length) return;
+
+    const orderMap = new Map();
+    allData.forEach(row => {
+        const mdh = String(row[3] || '').trim();
+        if (!mdh || orderMap.has(mdh)) return;
+        const st = String(row[14] || '').trim().toUpperCase();
+        orderMap.set(mdh, st);
+    });
+
+    const statusCounts = new Map();
+    orderMap.forEach(st => {
+        if (st) statusCounts.set(st, (statusCounts.get(st) || 0) + 1);
+    });
+
+    const presetList = ['HỦY', 'HOÀN', 'TRẢ', 'XONG'];
+    const allStatuses = new Set(presetList);
+    statusCounts.forEach((_, s) => {
+        if (s && s !== 'TINH_TRANG') allStatuses.add(s);
+    });
+
+    const isAllActive = selectedDhTinhTrangSet.size === 0;
+    const allBtnBg = isAllActive ? '#4f46e5' : '#ffffff';
+    const allBtnColor = isAllActive ? '#ffffff' : '#334155';
+    const allBtnBorder = isAllActive ? '#4338ca' : '#cbd5e1';
+
+    let buttonsHtml = `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${allBtnBg}; color: ${allBtnColor}; border: 1px solid ${allBtnBorder}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s;" onclick="toggleDhTinhTrangFilter('')">Tất cả <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${orderMap.size}</sub></button>`;
+
+    allStatuses.forEach(st => {
+        const cnt = statusCounts.get(st) || 0;
+        const isSelected = selectedDhTinhTrangSet.has(st);
+        let bg = '#ffffff', color = '#334155', border = '#cbd5e1', icon = '';
+
+        if (st === 'HỦY') {
+            icon = '❌ ';
+            bg = isSelected ? '#dc2626' : '#fef2f2';
+            color = isSelected ? '#ffffff' : '#dc2626';
+            border = isSelected ? '#b91c1c' : '#fca5a5';
+        } else if (st === 'HOÀN') {
+            icon = '↩️ ';
+            bg = isSelected ? '#ea580c' : '#fff7ed';
+            color = isSelected ? '#ffffff' : '#ea580c';
+            border = isSelected ? '#c2410c' : '#fed7aa';
+        } else if (st === 'TRẢ') {
+            icon = '🔄 ';
+            bg = isSelected ? '#d97706' : '#fffbeb';
+            color = isSelected ? '#ffffff' : '#d97706';
+            border = isSelected ? '#b45309' : '#fde68a';
+        } else if (st === 'XONG') {
+            icon = '✅ ';
+            bg = isSelected ? '#16a34a' : '#f0fdf4';
+            color = isSelected ? '#ffffff' : '#16a34a';
+            border = isSelected ? '#15803d' : '#bbf7d0';
+        } else {
+            bg = isSelected ? '#4f46e5' : '#ffffff';
+            color = isSelected ? '#ffffff' : '#334155';
+            border = isSelected ? '#4338ca' : '#cbd5e1';
+        }
+
+        const shadow = isSelected ? '0 2px 4px rgba(0,0,0,0.15)' : 'none';
+        buttonsHtml += `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s; box-shadow: ${shadow};" onclick="toggleDhTinhTrangFilter('${escapeHtml(escapeJsString(st))}')">${icon}${escapeHtml(st)} <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${cnt}</sub></button>`;
+    });
+
+    container.innerHTML = buttonsHtml;
+}
+
+function populateDhTrangThaiFilter() {
+    const container = document.getElementById('dhTrangThaiButtonsContainer');
+    if (!container || !allData || !allData.length) return;
+
+    const orderMap = new Map();
+    allData.forEach(row => {
+        const mdh = String(row[3] || '').trim();
+        if (!mdh || orderMap.has(mdh)) return;
+        const st = String(row[15] || '').trim().toUpperCase();
+        orderMap.set(mdh, st);
+    });
+
+    const statusCounts = new Map();
+    orderMap.forEach(st => {
+        if (st) statusCounts.set(st, (statusCounts.get(st) || 0) + 1);
+    });
+
+    const presetList = ['HỦY', 'HOÀN TRẢ', 'HOÀN THÀNH'];
+    const allStatuses = new Set(presetList);
+    statusCounts.forEach((_, s) => {
+        if (s && s !== 'TRANG_THAI') allStatuses.add(s);
+    });
+
+    const isAllActive = selectedDhTrangThaiSet.size === 0;
+    const allBtnBg = isAllActive ? '#4f46e5' : '#ffffff';
+    const allBtnColor = isAllActive ? '#ffffff' : '#334155';
+    const allBtnBorder = isAllActive ? '#4338ca' : '#cbd5e1';
+
+    let buttonsHtml = `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${allBtnBg}; color: ${allBtnColor}; border: 1px solid ${allBtnBorder}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s;" onclick="toggleDhTrangThaiFilter('')">Tất cả <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${orderMap.size}</sub></button>`;
+
+    allStatuses.forEach(st => {
+        const cnt = statusCounts.get(st) || 0;
+        const isSelected = selectedDhTrangThaiSet.has(st);
+        let bg = '#ffffff', color = '#334155', border = '#cbd5e1', icon = '';
+
+        if (st === 'HỦY') {
+            icon = '❌ ';
+            bg = isSelected ? '#dc2626' : '#fef2f2';
+            color = isSelected ? '#ffffff' : '#dc2626';
+            border = isSelected ? '#b91c1c' : '#fca5a5';
+        } else if (st === 'HOÀN TRẢ' || st === 'HOÀN') {
+            icon = '↩️ ';
+            bg = isSelected ? '#ea580c' : '#fff7ed';
+            color = isSelected ? '#ffffff' : '#ea580c';
+            border = isSelected ? '#c2410c' : '#fed7aa';
+        } else if (st === 'HOÀN THÀNH' || st === 'XONG') {
+            icon = '✅ ';
+            bg = isSelected ? '#16a34a' : '#f0fdf4';
+            color = isSelected ? '#ffffff' : '#16a34a';
+            border = isSelected ? '#15803d' : '#bbf7d0';
+        } else {
+            bg = isSelected ? '#0284c7' : '#ffffff';
+            color = isSelected ? '#ffffff' : '#0369a1';
+            border = isSelected ? '#0369a1' : '#bae6fd';
+        }
+
+        const shadow = isSelected ? '0 2px 4px rgba(0,0,0,0.15)' : 'none';
+        buttonsHtml += `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${bg}; color: ${color}; border: 1px solid ${border}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s; box-shadow: ${shadow};" onclick="toggleDhTrangThaiFilter('${escapeHtml(escapeJsString(st))}')">${icon}${escapeHtml(st)} <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${cnt}</sub></button>`;
     });
 
     container.innerHTML = buttonsHtml;
@@ -4496,6 +4671,8 @@ function setDhQuickDateRange(type, btnElement) {
 
 function clearDhFilters() {
     selectedDhGianSet.clear();
+    selectedDhTinhTrangSet.clear();
+    selectedDhTrangThaiSet.clear();
     const startDateInput = document.getElementById('dhStartDateInput');
     const endDateInput = document.getElementById('dhEndDateInput');
     const searchInput = document.getElementById('searchInput');
@@ -4510,5 +4687,7 @@ function clearDhFilters() {
     });
 
     populateDhGianFilter();
+    populateDhTinhTrangFilter();
+    populateDhTrangThaiFilter();
     filterTable();
 }
