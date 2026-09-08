@@ -64,7 +64,7 @@ sR2Sh8e3h3Knd6j1tceRIFU=
         'DH': {
             range: 'DH!A2:Y',
             headers: ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'sku', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don'],
-            displayHeaders: ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'id_sp', 'tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don'],
+            displayHeaders: ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don'],
             priceCols: [5, 6, 7, 8, 9, 10, 11, 12, 13, 19, 20]
         }
     }
@@ -1898,31 +1898,6 @@ function renderTable() {
                         <span class="dh-gian-badge" style="font-weight: 700; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;">
                             🏬 ${escapeHtml(gianVal)} <span style="font-size: 11px; opacity: 0.8;" title="Copy link đơn">📋</span>
                         </span>
-                    </td>`;
-                }
-                if (header === 'id_sp') {
-                    const idSpVal = String(cell || '').trim();
-                    const mdhVal = String(row[3] || '').trim();
-                    const itemsCount = row._itemsCount || 1;
-                    const itemsCountBadge = itemsCount > 1 
-                        ? `<span class="dh-multi-item-pill" title="Đơn có ${itemsCount} sản phẩm. Bấm để xem/sửa chi tiết từng SP." onclick="event.stopPropagation(); openDhDetail('${escapeJsString(mdhVal)}')">${itemsCount} SP</span>`
-                        : '';
-
-                    return `<td data-col="id_sp" style="vertical-align: middle; padding: 4px 6px;" onclick="event.stopPropagation()">
-                        <div style="display: inline-flex; align-items: center; gap: 4px;">
-                            <input type="text"
-                                class="dh-idsp-inline-input ${!idSpVal ? 'empty-idsp' : ''}"
-                                list="dhIdSpOptions"
-                                data-prev-val="${escapeHtml(idSpVal)}"
-                                value="${escapeHtml(idSpVal)}"
-                                placeholder="Nhập ID SP..."
-                                onclick="event.stopPropagation()"
-                                onfocus="this.select()"
-                                onkeydown="handleDhIdSpKeydown(event, ${start + rowIndex}, this)"
-                                onchange="saveInlineDhIdSp(${start + rowIndex}, this)"
-                                title="Bấm để sửa ID_SP (Enter hoặc bấm ra ngoài để lưu)">
-                            ${itemsCountBadge}
-                        </div>
                     </td>`;
                 }
             }
@@ -4138,102 +4113,122 @@ function copyDhOrderLink(linkDon, gianName, mdh, cellEl) {
     }
 }
 
-function handleDhIdSpKeydown(event, rowIndex, inputEl) {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        inputEl.blur();
-    }
-}
+let dsSpPriceMapCache = null;
+let isFetchingDsSpPriceMap = false;
 
-async function saveInlineDhIdSp(rowIndex, inputEl) {
-    const row = filteredData[rowIndex];
-    if (!row) return;
-
-    const mdh = String(row[3] || '').trim();
-    const newIdSp = String(inputEl.value || '').trim();
-    const prevIdSp = String(inputEl.dataset.prevVal ?? row[17] ?? '').trim();
-
-    if (newIdSp === prevIdSp) return;
-
-    inputEl.classList.remove('empty-idsp', 'success', 'error');
-    inputEl.classList.add('saving');
-    inputEl.disabled = true;
-
-    const dhConfig = CONFIG.tabs['DH'];
-    const idSpIdx = dhConfig.headers.indexOf('id_sp'); // 17
-
-    const matchedRows = allData.filter(r => String(r[3] || '').trim() === mdh && r._sheetRow);
-    if (!matchedRows.length) {
-        showToastNotification(`⚠️ Không tìm thấy dòng dữ liệu cho đơn ${mdh}`);
-        inputEl.classList.remove('saving');
-        inputEl.disabled = false;
-        return;
-    }
+async function getDsSpPriceMap(force = false) {
+    if (dsSpPriceMapCache && dsSpPriceMapCache.size > 0 && !force) return dsSpPriceMapCache;
+    if (isFetchingDsSpPriceMap) return dsSpPriceMapCache || new Map();
+    isFetchingDsSpPriceMap = true;
 
     try {
-        const token = await getAccessToken();
-        const updateRequests = matchedRows.map(r => {
-            const sheetRow = r._sheetRow;
-            return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DH!R${sheetRow}?valueInputOption=USER_ENTERED`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ values: [[newIdSp]] })
+        let dsSpRows = null;
+        if (allDataCache['DS_SP'] && allDataCache['DS_SP'].length) {
+            dsSpRows = allDataCache['DS_SP'];
+        } else if (rangeDataCache['DS_SP!A2:K'] && rangeDataCache['DS_SP!A2:K'].length) {
+            dsSpRows = rangeDataCache['DS_SP!A2:K'];
+        } else {
+            const token = await getAccessToken();
+            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DS_SP!A2:G`, {
+                headers: { Authorization: `Bearer ${token}` }
             });
-        });
-
-        const responses = await Promise.all(updateRequests);
-        for (const res of responses) {
-            if (!res.ok) {
-                const errJson = await res.json().catch(() => ({}));
-                throw new Error(errJson.error?.message || 'Lỗi cập nhật Google Sheets');
+            if (res.ok) {
+                const data = await res.json();
+                dsSpRows = data.values || [];
             }
         }
 
-        // Update local memory
-        matchedRows.forEach(r => {
-            r[idSpIdx] = newIdSp;
-        });
-        row[idSpIdx] = newIdSp;
-        inputEl.dataset.prevVal = newIdSp;
+        const map = new Map();
+        if (Array.isArray(dsSpRows)) {
+            dsSpRows.forEach(r => {
+                if (!Array.isArray(r) || !r.length) return;
+                const idCon = String(r[0] || '').trim().toUpperCase();
+                const idSp = String(r[1] || '').trim().toUpperCase();
+                const tenSp = String(r[2] || '').trim();
+                const giaNhap = parseMoney(r[3]);
+                const giaBan = parseMoney(r[4]);
+                const item = { idCon, idSp, tenSp, giaNhap, giaBan };
 
-        if (allDataCache['DH']) {
-            allDataCache['DH'].forEach(r => {
-                if (String(r[3] || '').trim() === mdh) {
-                    r[idSpIdx] = newIdSp;
+                if (idCon) map.set(idCon, item);
+                if (idSp && !map.has(idSp)) map.set(idSp, item);
+
+                if (idCon && idCon.length >= 4 && !map.has(idCon.slice(0, 4))) {
+                    map.set(idCon.slice(0, 4), item);
+                }
+                if (idSp && idSp.length >= 4 && !map.has(idSp.slice(0, 4))) {
+                    map.set(idSp.slice(0, 4), item);
                 }
             });
         }
-        const range = dhConfig.range;
-        if (rangeDataCache[range]) {
-            matchedRows.forEach(r => {
-                const cacheIdx = r._sheetRow - 2;
-                if (rangeDataCache[range][cacheIdx]) {
-                    rangeDataCache[range][cacheIdx][idSpIdx] = newIdSp;
-                }
-            });
-        }
+        dsSpPriceMapCache = map;
+    } catch (e) {
+        console.warn('Lỗi khi tải bảng giá DS_SP:', e);
+        if (!dsSpPriceMapCache) dsSpPriceMapCache = new Map();
+    } finally {
+        isFetchingDsSpPriceMap = false;
+    }
+    return dsSpPriceMapCache;
+}
 
-        inputEl.classList.remove('saving');
-        inputEl.disabled = false;
-        inputEl.classList.add('success');
-        if (!newIdSp) {
-            inputEl.classList.add('empty-idsp');
-        }
-        setTimeout(() => {
-            inputEl.classList.remove('success');
-        }, 1200);
+function findDsSpPrice(query) {
+    if (!query || !dsSpPriceMapCache) return null;
+    const clean = String(query).trim().toUpperCase();
+    if (!clean) return null;
 
-        const multiNote = matchedRows.length > 1 ? ` (${matchedRows.length} SP)` : '';
-        showToastNotification(`✅ Đã lưu ID SP "${newIdSp}" cho đơn ${mdh}${multiNote}`);
-    } catch (err) {
-        console.error('Lỗi khi lưu id_sp inline:', err);
-        inputEl.classList.remove('saving');
-        inputEl.disabled = false;
-        inputEl.classList.add('error');
-        alert('Không thể lưu ID SP: ' + err.message);
+    if (dsSpPriceMapCache.has(clean)) return dsSpPriceMapCache.get(clean);
+
+    const parts = clean.split(/[-_\s]+/);
+    if (parts.length > 1 && dsSpPriceMapCache.has(parts[0])) {
+        return dsSpPriceMapCache.get(parts[0]);
+    }
+
+    if (clean.length >= 4 && dsSpPriceMapCache.has(clean.slice(0, 4))) {
+        return dsSpPriceMapCache.get(clean.slice(0, 4));
+    }
+
+    return null;
+}
+
+async function handleDhDetailIdSpChange(itemIdx, inputEl) {
+    const rawVal = String(inputEl.value || '').trim();
+    if (!rawVal) return;
+
+    if (!dsSpPriceMapCache || dsSpPriceMapCache.size === 0) {
+        await getDsSpPriceMap();
+    }
+
+    const matched = findDsSpPrice(rawVal);
+    if (matched && matched.giaBan > 0) {
+        const donGiaInput = document.querySelector(`[data-dh-item-idx="${itemIdx}"][data-dh-item-hdr="don_gia"]`);
+        if (donGiaInput) {
+            donGiaInput.value = formatDisplayNumber(matched.giaBan);
+            donGiaInput.style.transition = 'all 0.2s';
+            donGiaInput.style.borderColor = '#10b981';
+            donGiaInput.style.background = '#f0fdf4';
+            setTimeout(() => {
+                donGiaInput.style.borderColor = '#cbd5e1';
+                donGiaInput.style.background = '#ffffff';
+            }, 1200);
+        }
+        updateDhItemSubtotal(itemIdx);
+        showToastNotification(`💡 Đã tự động điền đơn giá cho ${matched.idCon || matched.idSp}: ${formatDisplayNumber(matched.giaBan)} đ`);
+    }
+}
+
+async function handleDhDetailSkuChange(itemIdx, skuInputEl) {
+    const rawSku = String(skuInputEl.value || '').trim();
+    if (!rawSku) return;
+
+    const idSpInput = document.querySelector(`[data-dh-item-idx="${itemIdx}"][data-dh-item-hdr="id_sp"]`);
+    if (idSpInput && !idSpInput.value.trim()) {
+        if (!dsSpPriceMapCache || dsSpPriceMapCache.size === 0) {
+            await getDsSpPriceMap();
+        }
+        const matched = findDsSpPrice(rawSku);
+        if (matched) {
+            idSpInput.value = matched.idCon || matched.idSp;
+            await handleDhDetailIdSpChange(itemIdx, idSpInput);
+        }
     }
 }
 
@@ -4401,8 +4396,8 @@ function openDhDetail(mdh) {
         return `
         <tr style="border-bottom:1px solid #f1f5f9;">
             <td style="padding:8px 14px; text-align:left; font-weight:600;">${i + 1}</td>
-            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="sku" type="text" value="${escapeHtml(String(r[skuIdx] ?? ''))}" style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
-            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="id_sp" list="dhIdSpOptions" type="text" value="${escapeHtml(String(r[idSpIdx] ?? ''))}" style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
+            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="sku" type="text" value="${escapeHtml(String(r[skuIdx] ?? ''))}" oninput="handleDhDetailSkuChange(${i}, this)" onchange="handleDhDetailSkuChange(${i}, this)" placeholder="SKU sản phẩm..." style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
+            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="id_sp" list="dhIdSpOptions" type="text" value="${escapeHtml(String(r[idSpIdx] ?? ''))}" oninput="handleDhDetailIdSpChange(${i}, this)" onchange="handleDhDetailIdSpChange(${i}, this)" placeholder="Chọn hoặc nhập ID SP..." style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
             <td style="padding:8px 14px; text-align:center;"><input data-dh-item-idx="${i}" data-dh-item-hdr="slg" type="number" min="0" value="${escapeHtml(String(slg))}" style="width:65px; text-align:center; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;" oninput="updateDhItemSubtotal(${i})"></td>
             <td style="padding:8px 14px; text-align:right;"><input data-dh-item-idx="${i}" data-dh-item-hdr="don_gia" type="text" value="${escapeHtml(String(formatDisplayNumber(donGia)))}" style="width:120px; text-align:right; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;" oninput="updateDhItemSubtotal(${i})"></td>
             <td style="padding:8px 14px; text-align:right; font-weight:700; color:#0f172a;"><span id="dhSubtotal_${i}">${formatDisplayNumber(subtotal)}</span></td>
@@ -4412,6 +4407,25 @@ function openDhDetail(mdh) {
     document.getElementById('dhDetailItemsBody').innerHTML = itemsHtml;
 
     recalculateDhFinancials();
+
+    // Auto-fill price from DS_SP if don_gia is 0 but id_sp is present
+    getDsSpPriceMap().then(() => {
+        editingDhRows.forEach((r, i) => {
+            const donGiaInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="don_gia"]`);
+            const currentDonGia = parseMoney(donGiaInput?.value || 0);
+            if (currentDonGia === 0) {
+                const idSpInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="id_sp"]`);
+                const idSpVal = idSpInput?.value?.trim();
+                if (idSpVal) {
+                    const matched = findDsSpPrice(idSpVal);
+                    if (matched && matched.giaBan > 0) {
+                        donGiaInput.value = formatDisplayNumber(matched.giaBan);
+                        updateDhItemSubtotal(i);
+                    }
+                }
+            }
+        });
+    });
 
     const modal = document.getElementById('dhDetailModal');
     if (modal) {
