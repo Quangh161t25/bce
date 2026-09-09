@@ -1483,3 +1483,33 @@
             color: #0f172a;
             transform: translateY(-1px);
         }
+
+        .dh-subrow {
+            cursor: default !important;
+        }
+
+        .dh-subrow:hover {
+            background: #f8fafc !important;
+        }
+
+        .dh-copyable-cell {
+            cursor: pointer !important;
+            transition: background-color 0.15s ease;
+        }
+
+        .dh-copyable-cell:hover {
+            background-color: #f1f5f9;
+        }
+
+        .dh-copyable-cell:hover .dh-code-badge {
+            color: #2563eb !important;
+        }
+
+        .dh-expand-items-btn {
+            transition: all 0.15s ease;
+        }
+
+        .dh-expand-items-btn:hover {
+            filter: brightness(0.95);
+            transform: scale(1.05);
+        }

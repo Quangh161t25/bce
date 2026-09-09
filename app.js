@@ -64,7 +64,7 @@ JYdnFqf9hx1XKT04zZ49M7w=
         'DH': {
             range: 'DH!A2:Y',
             headers: ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'sku', 'id_sp', 'slg', 'don_gia', 'thanh_tien', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don'],
-            displayHeaders: ['gian', 'ngay', 'ngay_gio', 'mdh', 'mvd', 'tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don'],
+            displayHeaders: ['gian', 'ngay', 'mdh', 'mvd', 'tong_tien', 'ma_giam_gia', 'phi_vc', 'phu_phi', 'thue', 'doanh_thu', 'phi_khac', 'tien_sp', 'loi_nhuan', 'tinh_trang', 'trang_thai', 'ten_khach', 'ng_nhan', 'dia_chi', 'link_don'],
             priceCols: [5, 6, 7, 8, 9, 10, 11, 12, 13, 19, 20]
         }
     }
@@ -609,7 +609,11 @@ function renderHeaders() {
         const colClass = isSku ? ' col-sku' : (isTenSp ? ' col-ten-sp' : (isMoTa ? ' col-mo-ta' : ''));
         const isNum = isNumericDisplayHeader(h);
         const textAlignStyle = isNum ? ' style="text-align: right;"' : '';
-        const headerLabel = (h === 'anh') ? 'ẢNH' : h.toUpperCase();
+        let headerLabel = (h === 'anh') ? 'ẢNH' : h.toUpperCase();
+        if (currentTab === 'DH') {
+            if (h === 'ma_giam_gia') headerLabel = 'MGG';
+            if (h === 'doanh_thu') headerLabel = 'DT';
+        }
         return `<th data-col="${escapeHtml(h)}" class="sortable-header${activeClass}${colClass}"${textAlignStyle} onclick="handleHeaderSort('${escapeHtml(escapeJsString(h))}')" title="Bấm để sắp xếp">${escapeHtml(headerLabel)}${sortIndicator}</th>`;
     }).join('')}</tr>`;
 }
@@ -1922,13 +1926,30 @@ function renderTable() {
                 }
                 if (header === 'mdh') {
                     const mdhVal = String(row[3] || cell || '').trim();
-                    return `<td data-col="mdh" style="vertical-align: middle; padding: 4px 8px; white-space: nowrap;">
-                        <div style="display: inline-flex; align-items: center; gap: 6px;">
-                            <span style="font-weight: 700; color: #0f172a;">${escapeHtml(mdhVal)}</span>
-                            <button type="button" class="dh-edit-order-btn" onclick="event.stopPropagation(); openDhDetail('${escapeJsString(mdhVal)}')" style="padding: 2px 7px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 5px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="Sửa chi tiết đơn hàng & ID SP">
-                                ✏️ Sửa
-                            </button>
-                        </div>
+                    return `<td data-col="mdh" class="dh-copyable-cell" style="vertical-align: middle; padding: 4px 8px; white-space: nowrap; cursor: pointer;" onclick="event.stopPropagation(); copyDhValue('${escapeJsString(mdhVal)}', 'Mã đơn hàng', this)" ondblclick="event.stopPropagation(); openDhDetail('${escapeJsString(mdhVal)}')" title="Click để sao chép MDH: ${escapeHtml(mdhVal)} (Double-click để mở chi tiết)">
+                        <span class="dh-code-badge" style="font-weight: 700; color: #0f172a; display: inline-flex; align-items: center; gap: 4px;">
+                            ${escapeHtml(mdhVal)} <span style="font-size: 11px; opacity: 0.6;" title="Copy">📋</span>
+                        </span>
+                    </td>`;
+                }
+                if (header === 'mvd') {
+                    const mvdVal = String(cell || '').trim();
+                    const mdhVal = String(row[3] || '').trim();
+                    const tooltip = mvdVal ? `Click để sao chép MVD: ${escapeHtml(mvdVal)} (Double-click để mở chi tiết)` : 'Chưa có mã vận đơn';
+                    return `<td data-col="mvd" class="dh-copyable-cell" style="vertical-align: middle; padding: 4px 8px; white-space: nowrap; ${mvdVal ? 'cursor: pointer;' : ''}" ${mvdVal ? `onclick="event.stopPropagation(); copyDhValue('${escapeJsString(mvdVal)}', 'Mã vận đơn', this)"` : ''} ondblclick="event.stopPropagation(); openDhDetail('${escapeJsString(mdhVal)}')" title="${tooltip}">
+                        <span class="dh-code-badge" style="font-weight: 600; color: #334155; display: inline-flex; align-items: center; gap: 4px;">
+                            ${escapeHtml(mvdVal || '—')}${mvdVal ? ' <span style="font-size: 11px; opacity: 0.6;" title="Copy">📋</span>' : ''}
+                        </span>
+                    </td>`;
+                }
+                if (header === 'tien_sp') {
+                    const numVal = formatDisplayNumber(cell);
+                    const mdhVal = String(row[3] || '').trim();
+                    return `<td data-col="tien_sp" style="vertical-align: middle; padding: 4px 8px; text-align: right; white-space: nowrap;">
+                        <span style="font-weight: 700; color: #0f172a;">${numVal}</span>
+                        <button type="button" class="dh-expand-items-btn" id="dh_btn_${start + rowIndex}" onclick="event.stopPropagation(); toggleDhOrderItems('${escapeJsString(mdhVal)}', ${start + rowIndex}, this)" style="margin-left: 6px; padding: 2px 6px; font-size: 11px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; font-weight: 600;" title="Bấm xem chi tiết sản phẩm">
+                            📦 ▾
+                        </button>
                     </td>`;
                 }
                 if (header === 'tinh_trang') {
@@ -2017,7 +2038,10 @@ function renderTable() {
         const imgSearchCell = currentTab === 'DS_SP'
             ? `<td onclick="event.stopPropagation()" style="white-space:nowrap;padding:0 8px;"><button onclick="event.stopPropagation(); openImageSearch(${start + rowIndex})" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;border:none;border-radius:7px;padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;">🔍</button></td>`
             : '';
-        return `<tr${editAction}>${selectCell}${cells}${imgSearchCell}</tr>`;
+        const subRowHtml = (currentTab === 'DH')
+            ? `<tr id="dh_subrow_${start + rowIndex}" class="dh-subrow" style="display: none; background: #f8fafc;"><td colspan="${displayHeaders.length}" style="padding: 0; border-top: none;" id="dh_subrow_td_${start + rowIndex}"></td></tr>`
+            : '';
+        return `<tr${editAction}>${selectCell}${cells}${imgSearchCell}</tr>${subRowHtml}`;
     }).join('');
 
     renderPagination();
@@ -4189,6 +4213,144 @@ function copyDhOrderLink(linkDon, gianName, mdh, cellEl) {
         });
     } else {
         fallbackCopyText(cleanLink);
+    }
+}
+
+function copyDhValue(val, typeLabel, cellEl) {
+    const cleanVal = String(val || '').trim();
+    if (!cleanVal) {
+        showToastNotification(`⚠️ Chưa có ${typeLabel || 'dữ liệu'} để sao chép!`);
+        return;
+    }
+
+    const showSuccess = () => {
+        showToastNotification(`📋 Đã copy ${typeLabel || 'mã'}: ${cleanVal}`);
+        if (cellEl) {
+            const badge = cellEl.querySelector('.dh-code-badge') || cellEl;
+            const originalBg = badge.style.backgroundColor || '';
+            const originalColor = badge.style.color || '';
+            badge.style.backgroundColor = '#dcfce7';
+            badge.style.color = '#15803d';
+            badge.style.borderRadius = '4px';
+            badge.style.padding = '2px 4px';
+            setTimeout(() => {
+                badge.style.backgroundColor = originalBg;
+                badge.style.color = originalColor;
+            }, 600);
+        }
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cleanVal).then(showSuccess).catch(() => {
+            fallbackCopyText(cleanVal);
+        });
+    } else {
+        fallbackCopyText(cleanVal);
+    }
+}
+
+function toggleDhOrderItems(mdh, rowIdx, btnEl) {
+    const subRow = document.getElementById(`dh_subrow_${rowIdx}`);
+    const tdContent = document.getElementById(`dh_subrow_td_${rowIdx}`);
+    if (!subRow || !tdContent) return;
+
+    const isCurrentlyOpen = (subRow.style.display !== 'none');
+    if (isCurrentlyOpen) {
+        subRow.style.display = 'none';
+        if (btnEl) {
+            btnEl.innerHTML = '📦 ▾';
+            btnEl.style.background = '#e0e7ff';
+            btnEl.style.color = '#4338ca';
+            btnEl.style.borderColor = '#c7d2fe';
+            btnEl.title = 'Bấm xem chi tiết sản phẩm';
+        }
+        return;
+    }
+
+    const cleanMdh = String(mdh || '').trim();
+    const items = allData.filter(r => String(r[3] || '').trim() === cleanMdh);
+
+    const dhConfig = CONFIG.tabs['DH'];
+    const skuIdx = dhConfig ? dhConfig.headers.indexOf('sku') : 16;
+    const idSpIdx = dhConfig ? dhConfig.headers.indexOf('id_sp') : 17;
+    const slgIdx = dhConfig ? dhConfig.headers.indexOf('slg') : 18;
+    const donGiaIdx = dhConfig ? dhConfig.headers.indexOf('don_gia') : 19;
+    const thanhTienIdx = dhConfig ? dhConfig.headers.indexOf('thanh_tien') : 20;
+
+    let totalSlg = 0;
+    let totalAmount = 0;
+
+    const itemsRowsHtml = items.map((r, i) => {
+        const sku = String(r[skuIdx] || '').trim();
+        const idSp = String(r[idSpIdx] || '').trim();
+        const slgRaw = String(r[slgIdx] ?? '').trim();
+        const slg = slgRaw === '' ? 0 : (parseInt(slgRaw) >= 0 ? parseInt(slgRaw) : 0);
+        const donGia = parseMoney(r[donGiaIdx] || 0);
+        const thanhTienRaw = parseMoney(r[thanhTienIdx] || 0);
+        const subtotal = thanhTienRaw > 0 ? thanhTienRaw : (slg * donGia);
+
+        totalSlg += slg;
+        totalAmount += subtotal;
+
+        const spName = (dsSpNameMapCache && idSp) ? (dsSpNameMapCache.get(idSp.toUpperCase()) || dsSpNameMapCache.get(idSp.toUpperCase().slice(0, 4)) || '') : '';
+
+        return `
+            <tr style="border-bottom: 1px solid #e2e8f0; background: ${i % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                <td style="padding: 6px 10px; text-align: center; color: #64748b; font-weight: 600;">${i + 1}</td>
+                <td style="padding: 6px 10px; font-weight: 600; color: #0f172a;">${escapeHtml(sku || '—')}</td>
+                <td style="padding: 6px 10px;">
+                    <span style="font-weight: 700; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; padding: 2px 7px; border-radius: 4px; font-size: 11px;">
+                        ${escapeHtml(idSp || '—')}
+                    </span>
+                    ${spName ? `<div style="font-size: 11px; color: #64748b; margin-top: 2px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(spName)}">${escapeHtml(spName)}</div>` : ''}
+                </td>
+                <td style="padding: 6px 10px; text-align: center; font-weight: 700; color: #0f172a;">${formatDisplayNumber(slg)}</td>
+                <td style="padding: 6px 10px; text-align: right; font-weight: 600; color: #334155;">${formatDisplayNumber(donGia)}</td>
+                <td style="padding: 6px 10px; text-align: right; font-weight: 700; color: #059669;">${formatDisplayNumber(subtotal)}</td>
+            </tr>
+        `;
+    }).join('');
+
+    tdContent.innerHTML = `
+        <div style="padding: 10px 16px 12px 24px; background: #f8fafc; border-left: 4px solid #4f46e5; border-bottom: 2px solid #cbd5e1;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <div style="font-size: 12px; font-weight: 700; color: #334155; display: flex; align-items: center; gap: 8px;">
+                    <span>📦 Chi tiết sản phẩm trong đơn: <strong style="color: #4338ca;">${escapeHtml(cleanMdh)}</strong></span>
+                    <span style="font-size: 11px; background: #e0e7ff; color: #3730a3; padding: 1px 7px; border-radius: 10px; font-weight: 700;">${items.length} mặt hàng</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 11px; font-weight: 600; color: #64748b;">Tổng SL: <strong style="color: #0f172a;">${formatDisplayNumber(totalSlg)}</strong></span>
+                    <span style="font-size: 11px; font-weight: 600; color: #64748b;">Tổng tiền SP: <strong style="color: #059669;">${formatDisplayNumber(totalAmount)}</strong></span>
+                    <button type="button" onclick="event.stopPropagation(); openDhDetail('${escapeJsString(cleanMdh)}')" style="padding: 2px 8px; font-size: 11px; font-weight: 700; background: #ffffff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 5px; cursor: pointer;" title="Mở modal chỉnh sửa chi tiết đơn hàng">
+                        ✏️ Sửa chi tiết
+                    </button>
+                </div>
+            </div>
+            <table style="width: 100%; max-width: 950px; border-collapse: collapse; font-size: 12px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <thead>
+                    <tr style="background: #e2e8f0; color: #334155; font-weight: 700; border-bottom: 1px solid #cbd5e1;">
+                        <th style="padding: 6px 10px; width: 40px; text-align: center;">#</th>
+                        <th style="padding: 6px 10px; text-align: left;">SKU</th>
+                        <th style="padding: 6px 10px; text-align: left; width: 220px;">ID SP</th>
+                        <th style="padding: 6px 10px; text-align: center; width: 80px;">Số lượng</th>
+                        <th style="padding: 6px 10px; text-align: right; width: 120px;">Đơn giá</th>
+                        <th style="padding: 6px 10px; text-align: right; width: 130px;">Thành tiền</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${itemsRowsHtml || '<tr><td colspan="6" style="padding: 10px; text-align: center; color: #94a3b8;">Không có dữ liệu sản phẩm</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    subRow.style.display = 'table-row';
+    if (btnEl) {
+        btnEl.innerHTML = '📦 ▴';
+        btnEl.style.background = '#4338ca';
+        btnEl.style.color = '#ffffff';
+        btnEl.style.borderColor = '#3730a3';
+        btnEl.title = 'Bấm thu gọn chi tiết sản phẩm';
     }
 }
 
