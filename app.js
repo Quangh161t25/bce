@@ -1,33 +1,33 @@
 const CONFIG = {
     spreadsheetId: "19gZ6mR4UnKjZiWQc-W5CrCBKD7xz02Szd4Amlqvu99Y",
-    serviceAccountEmail: "test-gia-ason@api-test-sheet-161.iam.gserviceaccount.com",
+    serviceAccountEmail: "ca-nhan@h161-508101.iam.gserviceaccount.com",
     privateKey: `-----BEGIN PRIVATE KEY-----
-MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC3NN84hLTkQPZd
-Lj7niXZTICq7nHsuTn3J6r2Paq12m70/lYSmrwh1i0EStr9bO19QM8cevGlslwGr
-WSVOLJlc6+w1HGPKvRXtA41kYV9MYIvpzIPQtkFE7Hxq71QyBARcv39Lfzze6Ioj
-3G8VBvAKFLAnCUr97GHRv+KbCTFxPZupd3PEB+xS5ZUlzdBCEZvDid3iXaaEJJ+l
-Td1apAGQHjtnDTLOkiTa8zf7X5ebALwnI9MziOdN8VyprHXGhkachPbKyrG0QwEs
-2jtiI6Y5ULsBPjNefoavH8MKU5DEAT9h0fZ7KfsKYVMDuXqmEKBs0D3B4Z6aDZQW
-wT2dDRZDAgMBAAECggEAEIuVoSzZVuFhaz1GI9ji0IacjvO50cIq7M8Zrj4/F756
-Ew6PIhKENafAb7U4INm2AnzUMO8CqL9Jpxs85qUM3W4JysSByqLUiRW2184amIyb
-j7jCXfLBTQn8AbHgrUepl5d/vBmFYMgon/mqjbNiGDb4FZgEQSkie5o6fi/dWp5d
-NahbZl+WTOB/znhAfKh/zferHNxldR/ERmwOubZUerkqysWiBigc3ovpLSUof9ur
-z3hNPPp0CKQjF40xuQc6FYTHUHMLuMvp78PXuc/mYqQmZ8VOGhU+faGtZ4m+QJly
-dF5dS8U5cwKEF+ptuAUiWSahn6INb9yKn3+FcsW0UQKBgQDb8N4eWFvbgpRo/vxo
-wBN2u2TWubj6clcrq/1a+VR0njC28Can0ogJHhrFhPxVs5D/rugs3HlbyAXJFptY
-V0DZPCwBxGU5P5RbGjXWWEUXjp4ISKQD8WKfVlXNr79TqLdOg2NZBYQAi06Cpo/T
-PV9l7LSG2Tj/9WdvD7W2wvrpaQKBgQDVPjpJN6xh7+sHtSU0mjKvrqigpHbuSQ/o
-XpUaWSIpJffm5QpFPAOcTT5mHZCyllicJQIrfPSY+sH8n+sF03CUqVkV4Q2UqfOf
-pFaLDB4P6SQ8iesZyF4VKFrj/cAvRJmp0e5W/DRnFkoEp+8c+nrru2+Dzm9kb7Uq
-0CiltqYAywKBgBtcfrV1to+7Ue0x84KwintV2rifyDRX7yI+tjkQFYKgf1zyyUxN
-c6D2vsvdvGqI+TvlrXqPPwW8/4NBrbeyux2LT8o0fYc+sp0WyKXOu2Gv21caelUH
-PYam/eultn6Y2Z0J2V0kw4Qx0GWOhQv5cZnDdb3k3iNxixmU8b03ynEpAoGBAKEA
-7O0fNe50QRZ+tOq0ihSPYQ55XrqnO3WNBDLynZJH8pbI1CpWF7vJrpVXOUs9rQWo
-A61mGR/wJMtiywaJEHWOL48PbzuR3jno0NcHfSMyOoPi9jlvSWncIFQH4TVPLF5F
-/Rh8L+ytrZE6YpWUoX6e9KGmGgDRPw5mQGpuL4RlAoGADe9n080SXlsUk4nHVjUz
-Efv7EBoBkgOpqb9T1foRfJl46NxmmTOYV3iGIhjwcDskEg284k4iq/gH6EEFyEBc
-Vz13jzB1nBgjfezFesVQz7bA/+Wik6HZtxAxVg38BKMt+Q1tYw9wOjbGPqOn++VC
-sR2Sh8e3h3Knd6j1tceRIFU=
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC1XkzwY+oHzPmN
+YnJ+sMKxe5TRTp8Md0Jb+PFApojE72HcVnXj14zFxFocyCPX1+dtwXJGJ/sSCyAh
+iV3OtLEpxRU5QJponFszl9X6vmdLzDbzQS7VQTqMPv0JB+lHEYMU2B37hcIfpfJO
++l6EMprUA7NJtmeJpqmXKjsov6Rdt61sjyH/LKaYj0T2sLGazgZesp96sEOu83HM
+nl+KPk9xafPOlKaE34Bk6zl4D8lFUK3v7opndvt/7IOBQ/RdI7p0v+HeOORGUuZW
+kW3GH1vo6xY/uyrtmjD7+18w5vmAIRm24Satu0MJYz+j1JtqV4U5wwDkNelXBAWz
+hKkfl5yxAgMBAAECggEAA9pDk+Epc943qFhQoo6Oai77+ai8AeuoHBRJCqSm99j2
+aRPol+0Im1xZBi69rSxzyO3wp5sajxbvqSq19Im70C10rpVH2mRE3y8Q321LPC3T
+tn3aWPMUY22Emjwh6U2uzULsex7roVi48ZLJrnD1Pz7vYGfYofDJfjGqVUqh2xA+
+OSiz/U2JFTmePtrhxQGwaS8PHWyyUd+aiHz7pBg+tNzX0L+rMirPsN6i/ph+QolS
+4YXubv94O/WL92helDjQuUyWbisYdkuLp2XxnB+5Oa/2fQY7+rhju4pcIm+zA+Wc
+GdSzvLtL5hY9vLrZ8e4n0E/saILqViHSkRFksV1PaQKBgQDmEDaYQxmBeQsDbRJN
+BLg5lNBCgEWWkW/GNcL9cT+IcmNSyiPAnk2jofQpvmbbBh1lYeCbOhE4HDotN8a8
+hc1uRLb4K17fofhGV/znXW9Y12NcwZTkL5u4kKwDy8Qfx3PfckeLxA1s/3oS01tF
+wrybv1aB3Vxain5axUps5v0x6QKBgQDJ0Ld9nqXGBrknORjF1uQ7vpp5wp4Haohy
+FVNNfMzjKGRzKl8d4TxPVrUpShYBQE+v1pCwahOXCefovff32mQHzg4oVeml3bQq
+otLFVVcydb1L8RY1R+QLbiqRy6Pnv5h4pB82eWg1i7xKuZvxZ68v6iPpEz+8zx0F
+FJ9IGolPiQKBgBRF03nBV+sHzoejwdwVkWJJkbx6bydgc3gE3sTUiOOuKMBv3Yyo
+pnDH4asYAxpDxK1dXZxwFnpaSmoXoySTqdGQrorZz4dnT2hrcna0zg4HFNNkn4ko
+BNHTtcSz3Plr6vMCr/lJ8mDrdkdYZo+UJGiZCLdy2SOFVrMK9Y75H9CZAoGBAJcl
+jTc06VztTiA1H/uT3K1uLA2DF43gWL5wgEopbN24M7sZAdHEDcIx405AIUjgnI3J
++eVWHMPi9GAYXq2vT3mU9n95EJtb9wJznb2TE9JD4fkNX5+Z7w4sfQ9iX6hCk3PP
+H11SAh0QQX4JkuRyzf7pselutC65Qze54S1ESpBZAoGACkqjFmmF9I9jLZfJdWJM
+hOdPNHJD8NcM7ixbO9FBMw6S7PeUE//IuKQQcnxm9FsxCFVo2Q16+XKYLryZ/QxD
+cRUVkq/nAg4IB78jDp5Yc3n5VXAr10zWHWNFwVbdcZAs3BT9Q4WacASPdyowQPx0
+JYdnFqf9hx1XKT04zZ49M7w=
 -----END PRIVATE KEY-----`,
     tokenUrl: "https://oauth2.googleapis.com/token",
     googleCx: '',
@@ -683,9 +683,9 @@ function applyHeaderSort() {
     });
 }
 
-function normalizeRow(row) {
+function normalizeRow(row, tabName = currentTab) {
     const source = Array.isArray(row) ? row : [];
-    return getStorageHeaders().map((_, idx) => String(source[idx] ?? '').trim());
+    return getStorageHeaders(tabName).map((_, idx) => String(source[idx] ?? '').trim());
 }
 
 function getStorageHeaders(tabName = currentTab) {
@@ -878,20 +878,40 @@ async function writeRecordRow(row, sheetRow, startColIndex = 0) {
 
 async function batchWriteRecordRows(items) {
     if (!items.length) return;
-    const token = await getAccessToken();
+    let token = await getAccessToken();
     const endCol = colName(getStorageHeaders().length - 1);
     const data = items.map(item => ({
         range: `${currentTab}!A${item.sheetRow}:${endCol}${item.sheetRow}`,
         values: [normalizeRow(item.row)]
     }));
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values:batchUpdate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data })
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Cáº­p nháº­t nhiá» u dòng thất bại.');
+
+    let retries = 0;
+    const maxRetries = 4;
+    while (retries < maxRetries) {
+        try {
+            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values:batchUpdate`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data })
+            });
+            if (res.status === 429) {
+                retries++;
+                const waitMs = retries * 2500;
+                console.warn(`[HTTP 429] Quota Google Sheets API hết lượt khi lưu. Đang thử lại (${retries}/${maxRetries}) sau ${waitMs/1000}s...`);
+                await new Promise(r => setTimeout(r, waitMs));
+                token = await getAccessToken();
+                continue;
+            }
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error?.message || 'Cập nhật dòng dữ liệu thất bại.');
+            }
+            return await res.json();
+        } catch (err) {
+            retries++;
+            if (retries >= maxRetries) throw err;
+            await new Promise(r => setTimeout(r, retries * 1500));
+        }
     }
 }
 
@@ -1898,6 +1918,17 @@ function renderTable() {
                         <span class="dh-gian-badge" style="font-weight: 700; color: #1e40af; background: #eff6ff; border: 1px solid #bfdbfe; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;">
                             🏬 ${escapeHtml(gianVal)} <span style="font-size: 11px; opacity: 0.8;" title="Copy link đơn">📋</span>
                         </span>
+                    </td>`;
+                }
+                if (header === 'mdh') {
+                    const mdhVal = String(row[3] || cell || '').trim();
+                    return `<td data-col="mdh" style="vertical-align: middle; padding: 4px 8px; white-space: nowrap;">
+                        <div style="display: inline-flex; align-items: center; gap: 6px;">
+                            <span style="font-weight: 700; color: #0f172a;">${escapeHtml(mdhVal)}</span>
+                            <button type="button" class="dh-edit-order-btn" onclick="event.stopPropagation(); openDhDetail('${escapeJsString(mdhVal)}')" style="padding: 2px 7px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 5px; font-size: 11px; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" title="Sửa chi tiết đơn hàng & ID SP">
+                                ✏️ Sửa
+                            </button>
+                        </div>
                     </td>`;
                 }
             }
@@ -4116,58 +4147,64 @@ function copyDhOrderLink(linkDon, gianName, mdh, cellEl) {
 let dsSpPriceMapCache = null;
 let isFetchingDsSpPriceMap = false;
 
+let dsSpPriceMapPromise = null;
 async function getDsSpPriceMap(force = false) {
     if (dsSpPriceMapCache && dsSpPriceMapCache.size > 0 && !force) return dsSpPriceMapCache;
-    if (isFetchingDsSpPriceMap) return dsSpPriceMapCache || new Map();
-    isFetchingDsSpPriceMap = true;
+    if (dsSpPriceMapPromise && !force) return dsSpPriceMapPromise;
 
-    try {
-        let dsSpRows = null;
-        if (allDataCache['DS_SP'] && allDataCache['DS_SP'].length) {
-            dsSpRows = allDataCache['DS_SP'];
-        } else if (rangeDataCache['DS_SP!A2:K'] && rangeDataCache['DS_SP!A2:K'].length) {
-            dsSpRows = rangeDataCache['DS_SP!A2:K'];
-        } else {
-            const token = await getAccessToken();
-            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DS_SP!A2:G`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                dsSpRows = data.values || [];
+    dsSpPriceMapPromise = (async () => {
+        try {
+            let dsSpRows = null;
+            if (allDataCache['DS_SP'] && allDataCache['DS_SP'].length) {
+                dsSpRows = allDataCache['DS_SP'];
+            } else if (rangeDataCache['DS_SP!A2:K'] && rangeDataCache['DS_SP!A2:K'].length) {
+                dsSpRows = rangeDataCache['DS_SP!A2:K'];
+            } else {
+                const token = await getAccessToken();
+                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DS_SP!A2:G`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    dsSpRows = data.values || [];
+                }
             }
+
+            const map = new Map();
+            if (Array.isArray(dsSpRows)) {
+                dsSpRows.forEach(r => {
+                    if (!Array.isArray(r) || !r.length) return;
+                    const idCon = String(r[0] || '').trim().toUpperCase();
+                    const idSp = String(r[1] || '').trim().toUpperCase();
+                    const tenSp = String(r[2] || '').trim();
+                    const giaNhap = parseMoney(r[3]);
+                    const giaBan = parseMoney(r[4]);
+                    const item = { idCon, idSp, tenSp, giaNhap, giaBan };
+
+                    if (idCon) map.set(idCon, item);
+                    if (idSp && !map.has(idSp)) map.set(idSp, item);
+
+                    if (idCon && idCon.length >= 4 && !map.has(idCon.slice(0, 4))) {
+                        map.set(idCon.slice(0, 4), item);
+                    }
+                    if (idSp && idSp.length >= 4 && !map.has(idSp.slice(0, 4))) {
+                        map.set(idSp.slice(0, 4), item);
+                    }
+                });
+            }
+            dsSpPriceMapCache = map;
+            return dsSpPriceMapCache;
+        } catch (e) {
+            console.warn('Lỗi khi tải bảng giá DS_SP:', e);
+            if (!dsSpPriceMapCache) dsSpPriceMapCache = new Map();
+            return dsSpPriceMapCache;
+        } finally {
+            dsSpPriceMapPromise = null;
+            isFetchingDsSpPriceMap = false;
         }
+    })();
 
-        const map = new Map();
-        if (Array.isArray(dsSpRows)) {
-            dsSpRows.forEach(r => {
-                if (!Array.isArray(r) || !r.length) return;
-                const idCon = String(r[0] || '').trim().toUpperCase();
-                const idSp = String(r[1] || '').trim().toUpperCase();
-                const tenSp = String(r[2] || '').trim();
-                const giaNhap = parseMoney(r[3]);
-                const giaBan = parseMoney(r[4]);
-                const item = { idCon, idSp, tenSp, giaNhap, giaBan };
-
-                if (idCon) map.set(idCon, item);
-                if (idSp && !map.has(idSp)) map.set(idSp, item);
-
-                if (idCon && idCon.length >= 4 && !map.has(idCon.slice(0, 4))) {
-                    map.set(idCon.slice(0, 4), item);
-                }
-                if (idSp && idSp.length >= 4 && !map.has(idSp.slice(0, 4))) {
-                    map.set(idSp.slice(0, 4), item);
-                }
-            });
-        }
-        dsSpPriceMapCache = map;
-    } catch (e) {
-        console.warn('Lỗi khi tải bảng giá DS_SP:', e);
-        if (!dsSpPriceMapCache) dsSpPriceMapCache = new Map();
-    } finally {
-        isFetchingDsSpPriceMap = false;
-    }
-    return dsSpPriceMapCache;
+    return dsSpPriceMapPromise;
 }
 
 function findDsSpPrice(query) {
@@ -4176,6 +4213,17 @@ function findDsSpPrice(query) {
     if (!clean) return null;
 
     if (dsSpPriceMapCache.has(clean)) return dsSpPriceMapCache.get(clean);
+
+    // If formatted string like "LK17-SI-00 - Tên SP (150.000 đ)"
+    const tokenBeforeSep = clean.split(/\s+[-–—]\s+/)[0].trim();
+    if (tokenBeforeSep && dsSpPriceMapCache.has(tokenBeforeSep)) {
+        return dsSpPriceMapCache.get(tokenBeforeSep);
+    }
+
+    const firstWord = clean.split(/[\s|]+/)[0].trim();
+    if (firstWord && dsSpPriceMapCache.has(firstWord)) {
+        return dsSpPriceMapCache.get(firstWord);
+    }
 
     const parts = clean.split(/[-_\s]+/);
     if (parts.length > 1 && dsSpPriceMapCache.has(parts[0])) {
@@ -4190,8 +4238,14 @@ function findDsSpPrice(query) {
 }
 
 async function handleDhDetailIdSpChange(itemIdx, inputEl) {
-    const rawVal = String(inputEl.value || '').trim();
+    let rawVal = String(inputEl.value || '').trim();
     if (!rawVal) return;
+
+    if (rawVal.includes(' - ')) {
+        const pureCode = rawVal.split(/\s+[-–—]\s+/)[0].trim();
+        inputEl.value = pureCode;
+        rawVal = pureCode;
+    }
 
     if (!dsSpPriceMapCache || dsSpPriceMapCache.size === 0) {
         await getDsSpPriceMap();
@@ -4212,6 +4266,8 @@ async function handleDhDetailIdSpChange(itemIdx, inputEl) {
         }
         updateDhItemSubtotal(itemIdx);
         showToastNotification(`💡 Đã tự động điền đơn giá cho ${matched.idCon || matched.idSp}: ${formatDisplayNumber(matched.giaBan)} đ`);
+    } else {
+        showToastNotification(`⚠️ Không tìm thấy đơn giá cho mã "${rawVal}" trong DS_SP. Bạn có thể tự nhập ô Đơn Giá.`);
     }
 }
 
@@ -4251,7 +4307,7 @@ async function populateDhIdSpDatalist() {
             dsSpRows = rangeDataCache['DS_SP!A2:K'];
         } else {
             const token = await getAccessToken();
-            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DS_SP!A2:C`, {
+            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DS_SP!A2:E`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
@@ -4266,13 +4322,15 @@ async function populateDhIdSpDatalist() {
                 const idCon = String(r[0] || '').trim();
                 const idSp = String(r[1] || '').trim();
                 const tenSp = String(r[2] || '').trim();
+                const giaBan = parseMoney(r[4] || 0);
+                const priceStr = giaBan > 0 ? ` (${formatDisplayNumber(giaBan)} đ)` : '';
                 if (idCon && !set.has(idCon)) {
                     set.add(idCon);
-                    options.push(`<option value="${escapeHtml(idCon)}">${escapeHtml(tenSp ? tenSp : idCon)}</option>`);
+                    options.push(`<option value="${escapeHtml(idCon)}">${escapeHtml(idCon)}${tenSp ? ' - ' + escapeHtml(tenSp) : ''}${priceStr}</option>`);
                 }
                 if (idSp && !set.has(idSp)) {
                     set.add(idSp);
-                    options.push(`<option value="${escapeHtml(idSp)}">${escapeHtml(tenSp ? tenSp : idSp)}</option>`);
+                    options.push(`<option value="${escapeHtml(idSp)}">${escapeHtml(idSp)}${tenSp ? ' - ' + escapeHtml(tenSp) : ''}${priceStr}</option>`);
                 }
             });
             datalist.innerHTML = options.join('');
@@ -4295,6 +4353,7 @@ function getDhSummaryRows(rawRows) {
         if (!orderMap.has(mdh)) {
             const masterRow = [...row];
             masterRow._itemsCount = 1;
+            masterRow._sheetRow = row._sheetRow;
             orderMap.set(mdh, masterRow);
         } else {
             const masterRow = orderMap.get(mdh);
@@ -4308,11 +4367,19 @@ function openDhDetail(mdh) {
     const cleanMdh = String(mdh || '').trim();
     if (!cleanMdh) return;
 
-    editingDhRows = allData.filter(r => String(r[3] || '').trim() === cleanMdh && r._sheetRow);
+    editingDhRows = allData.filter(r => String(r[3] || '').trim() === cleanMdh);
     if (!editingDhRows.length) {
         alert('Không tìm thấy dữ liệu chi tiết cho đơn hàng ' + cleanMdh);
         return;
     }
+
+    editingDhRows.forEach(r => {
+        if (!r._sheetRow || r._sheetRow < 2) {
+            r._sheetRow = getDataSheetRow(r);
+        }
+    });
+
+    populateDhIdSpDatalist();
 
     const firstRow = editingDhRows[0];
     document.getElementById('dhDetailTitle').innerText = 'Chi Tiết Đơn Hàng ĐH: ' + cleanMdh;
@@ -4356,7 +4423,7 @@ function openDhDetail(mdh) {
         const alignRight = isFinance || isNumeric;
         return `<div style="display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;">
             <span style="font-size:12px; font-weight:700; color:${isLoiNhuan ? '#15803d' : '#334155'}; min-width:105px; text-transform:uppercase; white-space:nowrap;">${hdr}</span>
-            <input data-dh-hdr="${hdr}" type="text" value="${escapeHtml(String(displayVal))}" ${isReadOnly ? 'readonly' : ''} ${onInputAttr} style="flex:1; min-width:0; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700; font-size:13px; text-align:${alignRight ? 'right' : 'left'}; color:${isLoiNhuan ? '#16a34a' : '#0f172a'}; ${isReadOnly ? 'background:#f1f5f9; cursor:not-allowed;' : ''}">
+            <input data-dh-hdr="${hdr}" type="text" value="${escapeHtml(String(displayVal))}" ${isReadOnly ? 'readonly' : ''} ${onInputAttr} onkeydown="if(event.key==='Enter'){event.preventDefault();saveDhDetail();}" style="flex:1; min-width:0; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:700; font-size:13px; text-align:${alignRight ? 'right' : 'left'}; color:${isLoiNhuan ? '#16a34a' : '#0f172a'}; ${isReadOnly ? 'background:#f1f5f9; cursor:not-allowed;' : ''}">
         </div>`;
     };
 
@@ -4396,10 +4463,10 @@ function openDhDetail(mdh) {
         return `
         <tr style="border-bottom:1px solid #f1f5f9;">
             <td style="padding:8px 14px; text-align:left; font-weight:600;">${i + 1}</td>
-            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="sku" type="text" value="${escapeHtml(String(r[skuIdx] ?? ''))}" oninput="handleDhDetailSkuChange(${i}, this)" onchange="handleDhDetailSkuChange(${i}, this)" placeholder="SKU sản phẩm..." style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
-            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="id_sp" list="dhIdSpOptions" type="text" value="${escapeHtml(String(r[idSpIdx] ?? ''))}" oninput="handleDhDetailIdSpChange(${i}, this)" onchange="handleDhDetailIdSpChange(${i}, this)" placeholder="Chọn hoặc nhập ID SP..." style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
-            <td style="padding:8px 14px; text-align:center;"><input data-dh-item-idx="${i}" data-dh-item-hdr="slg" type="number" min="0" value="${escapeHtml(String(slg))}" style="width:65px; text-align:center; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;" oninput="updateDhItemSubtotal(${i})"></td>
-            <td style="padding:8px 14px; text-align:right;"><input data-dh-item-idx="${i}" data-dh-item-hdr="don_gia" type="text" value="${escapeHtml(String(formatDisplayNumber(donGia)))}" style="width:120px; text-align:right; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;" oninput="updateDhItemSubtotal(${i})"></td>
+            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="sku" type="text" value="${escapeHtml(String(r[skuIdx] ?? ''))}" oninput="handleDhDetailSkuChange(${i}, this)" onchange="handleDhDetailSkuChange(${i}, this)" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDhDetail();}" placeholder="SKU sản phẩm..." style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
+            <td style="padding:8px 14px;"><input data-dh-item-idx="${i}" data-dh-item-hdr="id_sp" list="dhIdSpOptions" type="text" value="${escapeHtml(String(r[idSpIdx] ?? ''))}" oninput="handleDhDetailIdSpChange(${i}, this)" onchange="handleDhDetailIdSpChange(${i}, this)" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDhDetail();}" placeholder="Chọn hoặc nhập ID SP..." style="width:100%; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;"></td>
+            <td style="padding:8px 14px; text-align:center;"><input data-dh-item-idx="${i}" data-dh-item-hdr="slg" type="number" min="0" value="${escapeHtml(String(slg))}" style="width:65px; text-align:center; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;" oninput="updateDhItemSubtotal(${i})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDhDetail();}"></td>
+            <td style="padding:8px 14px; text-align:right;"><input data-dh-item-idx="${i}" data-dh-item-hdr="don_gia" type="text" value="${escapeHtml(String(formatDisplayNumber(donGia)))}" style="width:120px; text-align:right; padding:6px 10px; border:1px solid #cbd5e1; border-radius:6px; font-weight:600;" oninput="updateDhItemSubtotal(${i})" onkeydown="if(event.key==='Enter'){event.preventDefault();saveDhDetail();}"></td>
             <td style="padding:8px 14px; text-align:right; font-weight:700; color:#0f172a;"><span id="dhSubtotal_${i}">${formatDisplayNumber(subtotal)}</span></td>
         </tr>
     `;
@@ -4560,63 +4627,94 @@ function closeDhDetail() {
 
 async function saveDhDetail() {
     if (!editingDhRows.length) return;
-    const dhConfig = CONFIG.tabs['DH'];
-    
-    // Read input values
-    const generalInputs = document.querySelectorAll('#dhDetailFields [data-dh-hdr]');
-    const updatedFields = {};
-    generalInputs.forEach(inp => {
-        const hdr = inp.dataset.dhHdr;
-        const idx = dhConfig.headers.indexOf(hdr);
-        let val = inp.value.trim();
-        if (dhConfig.priceCols.includes(idx)) {
-            val = parseMoney(val);
-        }
-        updatedFields[idx] = val;
-    });
+    const saveBtn = document.querySelector('#dhDetailModal .primary-btn');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerText = '⏳ Đang lưu...';
+    }
+    document.getElementById('loading').style.display = 'flex';
+    document.querySelector('#loading p').innerText = 'Đang lưu thông tin đơn hàng ĐH vào Google Sheets...';
 
-    const itemsToUpdate = [];
-    const skuIdx = dhConfig.headers.indexOf('sku');
-    const idSpIdx = dhConfig.headers.indexOf('id_sp');
-    const slgIdx = dhConfig.headers.indexOf('slg');
-    const donGiaIdx = dhConfig.headers.indexOf('don_gia');
-    const thanhTienIdx = dhConfig.headers.indexOf('thanh_tien');
-
-    editingDhRows.forEach((r, i) => {
-        const newRow = [...r];
-        Object.keys(updatedFields).forEach(idx => {
-            newRow[idx] = updatedFields[idx];
+    try {
+        const dhConfig = CONFIG.tabs['DH'];
+        
+        // Read input values
+        const generalInputs = document.querySelectorAll('#dhDetailFields [data-dh-hdr]');
+        const updatedFields = {};
+        generalInputs.forEach(inp => {
+            const hdr = inp.dataset.dhHdr;
+            const idx = dhConfig.headers.indexOf(hdr);
+            if (idx === -1) return;
+            let val = inp.value.trim();
+            if (dhConfig.priceCols.includes(idx)) {
+                val = parseMoney(val);
+            }
+            updatedFields[idx] = val;
         });
 
-        // Read item specific inputs
-        const skuInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="sku"]`);
-        const idSpInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="id_sp"]`);
-        const slgInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="slg"]`);
-        const donGiaInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="don_gia"]`);
+        const itemsToUpdate = [];
+        const skuIdx = dhConfig.headers.indexOf('sku');
+        const idSpIdx = dhConfig.headers.indexOf('id_sp');
+        const slgIdx = dhConfig.headers.indexOf('slg');
+        const donGiaIdx = dhConfig.headers.indexOf('don_gia');
+        const thanhTienIdx = dhConfig.headers.indexOf('thanh_tien');
 
-        if (skuInput && skuIdx !== -1) newRow[skuIdx] = skuInput.value.trim();
-        if (idSpInput && idSpIdx !== -1) newRow[idSpIdx] = idSpInput.value.trim();
-        const slgVal = slgInput ? slgInput.value.trim() : '';
-        if (slgIdx !== -1) newRow[slgIdx] = (slgVal === '' || isNaN(slgVal)) ? 0 : Math.max(0, parseInt(slgVal));
-        if (donGiaInput && donGiaIdx !== -1) newRow[donGiaIdx] = parseMoney(donGiaInput.value);
-        if (thanhTienIdx !== -1) newRow[thanhTienIdx] = (newRow[slgIdx] ?? 0) * (newRow[donGiaIdx] ?? 0); // thanh_tien
+        editingDhRows.forEach((r, i) => {
+            const newRow = [...r];
+            Object.keys(updatedFields).forEach(idx => {
+                newRow[idx] = updatedFields[idx];
+            });
 
-        if (r._sheetRow) newRow._sheetRow = r._sheetRow;
-        itemsToUpdate.push({ row: newRow, sheetRow: getDataSheetRow(r) });
-    });
+            // Read item specific inputs
+            const skuInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="sku"]`);
+            const idSpInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="id_sp"]`);
+            const slgInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="slg"]`);
+            const donGiaInput = document.querySelector(`[data-dh-item-idx="${i}"][data-dh-item-hdr="don_gia"]`);
 
-    document.getElementById('loading').style.display = 'flex';
-    document.querySelector('#loading p').innerText = 'Đang lưu thông tin đơn hàng ĐH...';
-    try {
+            if (skuInput && skuIdx !== -1) newRow[skuIdx] = skuInput.value.trim();
+            if (idSpInput && idSpIdx !== -1) {
+                let cleanIdSp = idSpInput.value.trim();
+                if (cleanIdSp.includes(' - ')) {
+                    cleanIdSp = cleanIdSp.split(/\s+[-–—]\s+/)[0].trim();
+                }
+                newRow[idSpIdx] = cleanIdSp;
+            }
+            const slgVal = slgInput ? slgInput.value.trim() : '';
+            if (slgIdx !== -1) newRow[slgIdx] = (slgVal === '' || isNaN(slgVal)) ? 0 : Math.max(0, parseInt(slgVal));
+            if (donGiaInput && donGiaIdx !== -1) newRow[donGiaIdx] = parseMoney(donGiaInput.value);
+            if (thanhTienIdx !== -1) newRow[thanhTienIdx] = (newRow[slgIdx] ?? 0) * (newRow[donGiaIdx] ?? 0); // thanh_tien
+
+            let sheetRow = getDataSheetRow(r);
+            if (!sheetRow || sheetRow < 2) {
+                sheetRow = r._sheetRow || 0;
+            }
+            if (!sheetRow || sheetRow < 2) {
+                const mdhVal = String(r[3] || '').trim();
+                const foundIdx = allData.findIndex(rowItem => String(rowItem[3] || '').trim() === mdhVal);
+                if (foundIdx >= 0) {
+                    sheetRow = allData[foundIdx]._sheetRow || (foundIdx + 2);
+                }
+            }
+            newRow._sheetRow = sheetRow;
+            itemsToUpdate.push({ row: newRow, sheetRow });
+        });
+
+        if (!itemsToUpdate.length) {
+            throw new Error('Không tìm thấy dữ liệu dòng để cập nhật.');
+        }
+
+        // Save to Google Sheets
         await batchWriteRecordRows(itemsToUpdate);
+
+        // Update local memory and caches
         itemsToUpdate.forEach(item => {
-            const idx = allData.findIndex(r => r._sheetRow === item.sheetRow);
+            const idx = allData.findIndex(r => r._sheetRow === item.sheetRow || (r[3] && r[3] === item.row[3]));
             if (idx !== -1) {
                 allData[idx] = item.row;
                 item.row._sheetRow = item.sheetRow;
             }
             if (allDataCache['DH']) {
-                const cIdx = allDataCache['DH'].findIndex(r => r._sheetRow === item.sheetRow);
+                const cIdx = allDataCache['DH'].findIndex(r => r._sheetRow === item.sheetRow || (r[3] && r[3] === item.row[3]));
                 if (cIdx !== -1) {
                     allDataCache['DH'][cIdx] = item.row;
                     item.row._sheetRow = item.sheetRow;
@@ -4632,16 +4730,49 @@ async function saveDhDetail() {
                 }
             }
         });
+
+        // Update LocalStorage cache for DH so fresh data is loaded on page reload or 429
+        try {
+            const cachedStr = localStorage.getItem('sheet_cache_DH');
+            if (cachedStr) {
+                const cached = JSON.parse(cachedStr);
+                if (cached && Array.isArray(cached.values)) {
+                    itemsToUpdate.forEach(item => {
+                        const rowIdx = item.sheetRow - 2;
+                        const norm = normalizeRow(item.row, 'DH');
+                        if (rowIdx >= 0 && rowIdx < cached.values.length) {
+                            cached.values[rowIdx] = norm;
+                        } else {
+                            const fIdx = cached.values.findIndex(r => r[3] && r[3] === item.row[3]);
+                            if (fIdx !== -1) cached.values[fIdx] = norm;
+                        }
+                    });
+                    cached.timestamp = Date.now();
+                    localStorage.setItem('sheet_cache_DH', JSON.stringify(cached));
+                } else {
+                    localStorage.removeItem('sheet_cache_DH');
+                }
+            } else {
+                localStorage.removeItem('sheet_cache_DH');
+            }
+        } catch (_) {}
+
         closeDhDetail();
         filterTable();
-        showToastNotification('✅ Đã lưu thông tin đơn hàng ĐH thành công!');
+        const mdhName = editingDhRows[0]?.[3] || '';
+        showToastNotification(`✅ Đã lưu thành công đơn hàng ${mdhName} vào Google Sheets!`);
     } catch (err) {
         console.error('Lỗi khi lưu đơn hàng ĐH:', err);
-        alert('Không thể lưu: ' + err.message);
+        alert('Không thể lưu đơn hàng: ' + err.message);
     } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerText = '💾 Lưu Thay Đổi';
+        }
         document.getElementById('loading').style.display = 'none';
     }
 }
+
 
 async function ensureDhSheetExists() {
     try {
