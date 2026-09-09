@@ -1931,6 +1931,40 @@ function renderTable() {
                         </div>
                     </td>`;
                 }
+                if (header === 'tinh_trang') {
+                    const ttVal = String(cell || '').trim().toUpperCase();
+                    let badgeHtml = '';
+                    if (ttVal === 'HỦY') {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;">❌ HỦY</span>`;
+                    } else if (ttVal === 'HOÀN') {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #ffedd5; color: #ea580c; border: 1px solid #fed7aa;">↩️ HOÀN</span>`;
+                    } else if (ttVal === 'TRẢ') {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #fef3c7; color: #d97706; border: 1px solid #fde68a;">🔄 TRẢ</span>`;
+                    } else if (ttVal === 'XONG') {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #dcfce7; color: #16a34a; border: 1px solid #86efac;">✅ XONG</span>`;
+                    } else if (!ttVal) {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 600; font-size: 11px; background: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1;">⚪ (Trống)</span>`;
+                    } else {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe;">${escapeHtml(ttVal)}</span>`;
+                    }
+                    return `<td data-col="tinh_trang" style="vertical-align: middle; padding: 4px 8px;">${badgeHtml}</td>`;
+                }
+                if (header === 'trang_thai') {
+                    const thVal = String(cell || '').trim().toUpperCase();
+                    let badgeHtml = '';
+                    if (thVal === 'HỦY') {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5;">❌ HỦY</span>`;
+                    } else if (thVal === 'HOÀN TRẢ' || thVal === 'HOÀN') {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #ffedd5; color: #ea580c; border: 1px solid #fed7aa;">↩️ HOÀN TRẢ</span>`;
+                    } else if (thVal === 'HOÀN THÀNH' || thVal === 'XONG') {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #dcfce7; color: #16a34a; border: 1px solid #86efac;">✅ HOÀN THÀNH</span>`;
+                    } else if (!thVal) {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 600; font-size: 11px; background: #f8fafc; color: #94a3b8; border: 1px dashed #cbd5e1;">⚪ (Trống)</span>`;
+                    } else {
+                        badgeHtml = `<span style="padding: 2px 7px; border-radius: 4px; font-weight: 700; font-size: 11px; background: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd;">${escapeHtml(thVal)}</span>`;
+                    }
+                    return `<td data-col="trang_thai" style="vertical-align: middle; padding: 4px 8px;">${badgeHtml}</td>`;
+                }
             }
             const displayCell = isNumericDisplayHeader(header)
                 ? formatDisplayNumber(cell)
@@ -2079,10 +2113,24 @@ function filterTable() {
             const matchesGian = selectedGianList.length === 0 || selectedGianList.includes(rowGian);
 
             const rowTinhTrang = String(row[14] || '').trim().toUpperCase();
-            const matchesTinhTrang = selectedTinhTrangList.length === 0 || selectedTinhTrangList.includes(rowTinhTrang);
+            let matchesTinhTrang = false;
+            if (selectedTinhTrangList.length === 0) {
+                matchesTinhTrang = true;
+            } else {
+                const matchEmpty = (selectedTinhTrangList.includes('(TRỐNG)') || selectedTinhTrangList.includes('TRỐNG')) && !rowTinhTrang;
+                const matchVal = rowTinhTrang && selectedTinhTrangList.includes(rowTinhTrang);
+                matchesTinhTrang = matchEmpty || matchVal;
+            }
 
             const rowTrangThai = String(row[15] || '').trim().toUpperCase();
-            const matchesTrangThai = selectedTrangThaiList.length === 0 || selectedTrangThaiList.includes(rowTrangThai);
+            let matchesTrangThai = false;
+            if (selectedTrangThaiList.length === 0) {
+                matchesTrangThai = true;
+            } else {
+                const matchEmpty = (selectedTrangThaiList.includes('(TRỐNG)') || selectedTrangThaiList.includes('TRỐNG')) && !rowTrangThai;
+                const matchVal = rowTrangThai && selectedTrangThaiList.includes(rowTrangThai);
+                matchesTrangThai = matchEmpty || matchVal;
+            }
 
             const orderDateObj = parseDhDate(row[2]) || parseDhDate(row[1]);
             const orderTime = orderDateObj ? orderDateObj.getTime() : 0;
@@ -4866,7 +4914,7 @@ function toggleDhGianFilter(gianName, btnElement) {
 }
 
 function toggleDhTinhTrangFilter(val) {
-    if (!val) {
+    if (!val || val === 'ALL') {
         selectedDhTinhTrangSet.clear();
     } else {
         if (selectedDhTinhTrangSet.has(val)) {
@@ -4880,7 +4928,7 @@ function toggleDhTinhTrangFilter(val) {
 }
 
 function toggleDhTrangThaiFilter(val) {
-    if (!val) {
+    if (!val || val === 'ALL') {
         selectedDhTrangThaiSet.clear();
     } else {
         if (selectedDhTrangThaiSet.has(val)) {
@@ -4933,8 +4981,13 @@ function populateDhTinhTrangFilter() {
     });
 
     const statusCounts = new Map();
+    let emptyCount = 0;
     orderMap.forEach(st => {
-        if (st) statusCounts.set(st, (statusCounts.get(st) || 0) + 1);
+        if (st) {
+            statusCounts.set(st, (statusCounts.get(st) || 0) + 1);
+        } else {
+            emptyCount++;
+        }
     });
 
     const presetList = ['HỦY', 'HOÀN', 'TRẢ', 'XONG'];
@@ -4948,7 +5001,16 @@ function populateDhTinhTrangFilter() {
     const allBtnColor = isAllActive ? '#ffffff' : '#334155';
     const allBtnBorder = isAllActive ? '#4338ca' : '#cbd5e1';
 
-    let buttonsHtml = `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${allBtnBg}; color: ${allBtnColor}; border: 1px solid ${allBtnBorder}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s;" onclick="toggleDhTinhTrangFilter('')">Tất cả <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${orderMap.size}</sub></button>`;
+    let buttonsHtml = `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${allBtnBg}; color: ${allBtnColor}; border: 1px solid ${allBtnBorder}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s;" onclick="toggleDhTinhTrangFilter('ALL')">Tất cả <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${orderMap.size}</sub></button>`;
+
+    // Nút lọc (Trống)
+    const isEmptySelected = selectedDhTinhTrangSet.has('(TRỐNG)') || selectedDhTinhTrangSet.has('TRỐNG');
+    const emptyBg = isEmptySelected ? '#475569' : '#f8fafc';
+    const emptyColor = isEmptySelected ? '#ffffff' : '#475569';
+    const emptyBorder = isEmptySelected ? '#334155' : '#cbd5e1';
+    const emptyShadow = isEmptySelected ? '0 2px 4px rgba(71, 85, 105, 0.25)' : 'none';
+
+    buttonsHtml += `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${emptyBg}; color: ${emptyColor}; border: 1px solid ${emptyBorder}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s; box-shadow: ${emptyShadow};" onclick="toggleDhTinhTrangFilter('(TRỐNG)')">⚪ (Trống) <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${emptyCount}</sub></button>`;
 
     allStatuses.forEach(st => {
         const cnt = statusCounts.get(st) || 0;
@@ -5001,8 +5063,13 @@ function populateDhTrangThaiFilter() {
     });
 
     const statusCounts = new Map();
+    let emptyCount = 0;
     orderMap.forEach(st => {
-        if (st) statusCounts.set(st, (statusCounts.get(st) || 0) + 1);
+        if (st) {
+            statusCounts.set(st, (statusCounts.get(st) || 0) + 1);
+        } else {
+            emptyCount++;
+        }
     });
 
     const presetList = ['HỦY', 'HOÀN TRẢ', 'HOÀN THÀNH'];
@@ -5016,7 +5083,18 @@ function populateDhTrangThaiFilter() {
     const allBtnColor = isAllActive ? '#ffffff' : '#334155';
     const allBtnBorder = isAllActive ? '#4338ca' : '#cbd5e1';
 
-    let buttonsHtml = `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${allBtnBg}; color: ${allBtnColor}; border: 1px solid ${allBtnBorder}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s;" onclick="toggleDhTrangThaiFilter('')">Tất cả <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${orderMap.size}</sub></button>`;
+    let buttonsHtml = `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${allBtnBg}; color: ${allBtnColor}; border: 1px solid ${allBtnBorder}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s;" onclick="toggleDhTrangThaiFilter('ALL')">Tất cả <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${orderMap.size}</sub></button>`;
+
+    // Nút lọc (Trống) cho trạng thái nếu có
+    if (emptyCount > 0) {
+        const isEmptySelected = selectedDhTrangThaiSet.has('(TRỐNG)') || selectedDhTrangThaiSet.has('TRỐNG');
+        const emptyBg = isEmptySelected ? '#475569' : '#f8fafc';
+        const emptyColor = isEmptySelected ? '#ffffff' : '#475569';
+        const emptyBorder = isEmptySelected ? '#334155' : '#cbd5e1';
+        const emptyShadow = isEmptySelected ? '0 2px 4px rgba(71, 85, 105, 0.25)' : 'none';
+
+        buttonsHtml += `<button type="button" class="quick-btn" style="height: 30px; padding: 2px 10px; background: ${emptyBg}; color: ${emptyColor}; border: 1px solid ${emptyBorder}; border-radius: 6px; font-weight: 700; font-size: 12px; cursor: pointer; transition: all 0.15s; box-shadow: ${emptyShadow};" onclick="toggleDhTrangThaiFilter('(TRỐNG)')">⚪ (Trống) <sub style="color: inherit; font-size: 10px; font-weight: 800; margin-left: 2px;">${emptyCount}</sub></button>`;
+    }
 
     allStatuses.forEach(st => {
         const cnt = statusCounts.get(st) || 0;
