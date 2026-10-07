@@ -1921,13 +1921,19 @@
     };
 
     // ==========================================
-    // INDEXEDDB HELPER FOR PERSISTENT DIRECTORY HANDLE
+    // INDEXEDDB HELPER FOR PERSISTENT DIRECTORY HANDLE & FILE CACHE
     // ==========================================
     function openFolderDB() {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('WameliFolderDB', 1);
+            const req = indexedDB.open('WameliFolderDB', 2);
             req.onupgradeneeded = () => {
-                req.result.createObjectStore('handles');
+                const db = req.result;
+                if (!db.objectStoreNames.contains('handles')) {
+                    db.createObjectStore('handles');
+                }
+                if (!db.objectStoreNames.contains('cached_files')) {
+                    db.createObjectStore('cached_files');
+                }
             };
             req.onsuccess = () => resolve(req.result);
             req.onerror = () => reject(req.error);
@@ -1958,6 +1964,89 @@
         }
     }
 
+    async function saveCachedFiles(items) {
+        try {
+            const db = await openFolderDB();
+            const tx = db.transaction('cached_files', 'readwrite');
+            const store = tx.objectStore('cached_files');
+            await new Promise((res, rej) => {
+                const clearReq = store.clear();
+                clearReq.onsuccess = () => res();
+                clearReq.onerror = () => rej(clearReq.error);
+            });
+            for (const item of items) {
+                store.put({
+                    id: item.id,
+                    file: item.file,
+                    name: item.name,
+                    date: item.date instanceof Date ? item.date.getTime() : (item.date || Date.now()),
+                    isPdf: item.isPdf,
+                    isExcel: item.isExcel,
+                    isMock: false
+                }, item.id);
+            }
+        } catch (e) {
+            console.warn('[Wameli IDB] saveCachedFiles error:', e);
+        }
+    }
+
+    async function getCachedFiles() {
+        try {
+            const db = await openFolderDB();
+            if (!db.objectStoreNames.contains('cached_files')) return [];
+            return new Promise((resolve) => {
+                const tx = db.transaction('cached_files', 'readonly');
+                const req = tx.objectStore('cached_files').getAll();
+                req.onsuccess = () => {
+                    const list = (req.result || []).map(r => ({
+                        id: r.id,
+                        file: r.file,
+                        name: r.name,
+                        date: new Date(r.date),
+                        isPdf: r.isPdf,
+                        isExcel: r.isExcel,
+                        isMock: false
+                    }));
+                    resolve(list);
+                };
+                req.onerror = () => resolve([]);
+            });
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function extractFileDate(file) {
+        if (!file || !file.name) return new Date();
+        // 1. Pattern: DDMM-...-HHMM-... (e.g. 0710-joy-0806-1.pdf or 0610-bce-0809-1.xlsx)
+        const match = file.name.match(/^(\d{2})(\d{2})-[a-zA-Z0-9]+-(\d{2})(\d{2})/);
+        if (match) {
+            const day = parseInt(match[1], 10);
+            const month = parseInt(match[2], 10) - 1;
+            const hour = parseInt(match[3], 10);
+            const min = parseInt(match[4], 10);
+            const currentYear = new Date().getFullYear();
+            if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+                return new Date(currentYear, month, day, hour, min, 0);
+            }
+        }
+        // 2. Pattern: mass_update_sales_info_..._YYYYMMDDHHmmss.xlsx
+        const matchMass = file.name.match(/_(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})\./);
+        if (matchMass) {
+            const y = parseInt(matchMass[1], 10);
+            const m = parseInt(matchMass[2], 10) - 1;
+            const d = parseInt(matchMass[3], 10);
+            const h = parseInt(matchMass[4], 10);
+            const min = parseInt(matchMass[5], 10);
+            return new Date(y, m, d, h, min, 0);
+        }
+        // 3. Fallback to file.lastModified
+        if (file.lastModified) {
+            return new Date(file.lastModified);
+        }
+        return new Date();
+    }
+
     function isValidOrderFile(file) {
         if (!file || !file.name) return false;
         const name = file.name;
@@ -1969,68 +2058,9 @@
         return isPdf || isExcel;
     }
 
-    function generateMockFiles() {
-        const today = new Date();
-        const yesterday = new Date(Date.now() - 86400000);
-        const dayBeforeYesterday = new Date(Date.now() - 3 * 86400000);
-
-        function createTime(baseDate, h, m) {
-            const d = new Date(baseDate);
-            d.setHours(h, m, 0, 0);
-            return d;
-        }
-
-        const mockList = [
-            // Group Hôm nay (06/10/2026) (5)
-            { name: 'mass_update_sales_info_80369669_20261006103708.xlsx', size: 74.7 * 1024, date: createTime(today, 9, 37) },
-            { name: '0610-gdd-0931-1.xlsx', size: 9.7 * 1024, date: createTime(today, 9, 33) },
-            { name: '0610-gdd-0931-1.pdf', size: 186.0 * 1024, date: createTime(today, 9, 31) },
-            { name: '0610-bce-0809-1.xlsx', size: 17.8 * 1024, date: createTime(today, 8, 9) },
-            { name: '0610-bce-0809-1.pdf', size: 186.8 * 1024, date: createTime(today, 8, 9) },
-
-            // Group Hôm qua (05/10/2026) (7)
-            { name: 'Mau_Nhap_San_Pham_SoSanhGia.xlsx', size: 19.3 * 1024, date: createTime(yesterday, 23, 42) },
-            { name: '0510-gdd-0808-1.xlsx', size: 19.5 * 1024, date: createTime(yesterday, 8, 8) },
-            { name: '0510-gdd-0807-3.pdf', size: 186.5 * 1024, date: createTime(yesterday, 8, 8) },
-            { name: '0510-gdd-0807-2.pdf', size: 218.7 * 1024, date: createTime(yesterday, 8, 7) },
-            { name: '0510-gdd-0807-1.pdf', size: 185.9 * 1024, date: createTime(yesterday, 8, 7) },
-            { name: '0510-joy-0804-1.xlsx', size: 17.8 * 1024, date: createTime(yesterday, 8, 4) },
-            { name: '0510-joy-0804-1.pdf', size: 186.0 * 1024, date: createTime(yesterday, 8, 4) },
-
-            // Group Ngày 03/10/2026 (9)
-            { name: '0310-gdd-1005-4.xlsx', size: 17.7 * 1024, date: createTime(dayBeforeYesterday, 10, 5) },
-            { name: '0310-gdd-1005-2.pdf', size: 234.2 * 1024, date: createTime(dayBeforeYesterday, 10, 5) },
-            { name: '0310-bce-0921-2.xlsx', size: 17.8 * 1024, date: createTime(dayBeforeYesterday, 9, 21) },
-            { name: '0310-bce-0921-2.pdf', size: 188.4 * 1024, date: createTime(dayBeforeYesterday, 9, 21) },
-            { name: '0310-gdd-0901-2.xlsx', size: 9.9 * 1024, date: createTime(dayBeforeYesterday, 9, 2) },
-            { name: '0310-bce-0759-1.xlsx', size: 17.8 * 1024, date: createTime(dayBeforeYesterday, 7, 59) },
-            { name: '0310-bce-0759-1.pdf', size: 187.1 * 1024, date: createTime(dayBeforeYesterday, 7, 59) },
-            { name: '0310-gdd-0759-1.xlsx', size: 17.7 * 1024, date: createTime(dayBeforeYesterday, 7, 59) },
-            { name: '0310-gdd-0759-1.pdf', size: 218.4 * 1024, date: createTime(dayBeforeYesterday, 7, 59) }
-        ];
-
-        return mockList.map((item, idx) => {
-            const isPdf = item.name.toLowerCase().endsWith('.pdf');
-            const isExcel = !isPdf;
-            const mime = isPdf ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-            const dummyBytes = new Uint8Array(Math.round(item.size || 1024));
-            const mockBlob = new Blob([dummyBytes], { type: mime });
-            const mockFile = new File([mockBlob], item.name, { type: mime, lastModified: item.date.getTime() });
-
-            return {
-                id: 'mock_' + idx,
-                file: mockFile,
-                name: item.name,
-                date: item.date,
-                isPdf,
-                isExcel,
-                isMock: true
-            };
-        });
-    }
-
     // --- REALTIME SCANNING ENGINE ---
     let realtimeTimer = null;
+    let isScanning = false;
     let lastFilesSignature = '';
 
     function computeFilesSignature(files) {
@@ -2041,40 +2071,32 @@
             .join('|');
     }
 
-    async function scanDirectoryHandle(dirHandle, maxDepth = 1) {
+    async function scanDirectoryHandle(dirHandle) {
         const foundFiles = [];
-        const ignoredDirs = new Set(['node_modules', '.git', '.vscode', 'appdata', 'temp', 'tmp', '$recycle.bin']);
-
-        async function scanDir(dir, depth) {
-            if (depth > maxDepth) return;
-            try {
-                for await (const entry of dir.values()) {
-                    if (entry.kind === 'file') {
-                        try {
-                            const file = await entry.getFile();
-                            if (isValidOrderFile(file)) {
+        try {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'file') {
+                    const lowerName = entry.name.toLowerCase();
+                    if (lowerName.endsWith('.pdf') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv')) {
+                        if (!entry.name.startsWith('~$') && !entry.name.startsWith('._') && !entry.name.startsWith('.')) {
+                            try {
+                                const file = await entry.getFile();
                                 foundFiles.push(file);
-                            }
-                        } catch (e) { }
-                    } else if (entry.kind === 'directory') {
-                        if (ignoredDirs.has(entry.name.toLowerCase())) continue;
-                        try {
-                            await scanDir(entry, depth + 1);
-                        } catch (e) { }
+                            } catch (e) { }
+                        }
                     }
                 }
-            } catch (e) {
-                console.warn('[Wameli Realtime scanDir] Error:', e);
             }
+        } catch (e) {
+            console.warn('[Wameli scanDirectoryHandle] Error:', e);
         }
-
-        await scanDir(dirHandle, 0);
         return foundFiles;
     }
 
     function startRealtimePolling(dirHandle) {
         if (realtimeTimer) clearInterval(realtimeTimer);
         scannedFolderState.dirHandle = dirHandle;
+        scannedFolderState.pendingHandle = null;
         scannedFolderState.isRealtime = true;
 
         const badge = document.querySelector('.wqf-realtime-badge');
@@ -2084,8 +2106,9 @@
         if (resumeBtn) resumeBtn.style.display = 'none';
 
         const checkDirChanges = async () => {
-            if (!scannedFolderState.dirHandle) return;
+            if (!scannedFolderState.dirHandle || isScanning) return;
             if (document.hidden) return; // Pause when tab is hidden to save CPU/battery
+            isScanning = true;
             try {
                 const files = await scanDirectoryHandle(scannedFolderState.dirHandle);
                 const sig = computeFilesSignature(files);
@@ -2096,11 +2119,13 @@
                 }
             } catch (err) {
                 console.warn('[Wameli Realtime poll] Error:', err);
+            } finally {
+                isScanning = false;
             }
         };
 
-        // Poll every 2.5s
-        realtimeTimer = setInterval(checkDirChanges, 2500);
+        // Poll every 2s
+        realtimeTimer = setInterval(checkDirChanges, 2000);
 
         // Immediate check on window focus or visibility return
         window.removeEventListener('focus', checkDirChanges);
@@ -2121,6 +2146,7 @@
                 const folderName = dirHandle.name;
                 scannedFolderState.folderName = folderName;
                 scannedFolderState.dirHandle = dirHandle;
+                scannedFolderState.pendingHandle = null;
                 localStorage.setItem('wqf_last_folder', folderName);
                 await saveDirHandle(dirHandle);
 
@@ -2194,14 +2220,14 @@
         files.forEach((f) => {
             if (!isValidOrderFile(f)) return; // Strictly only Excel (.xlsx, .xls, .csv) & PDF (.pdf)
 
-            // Stable ID based on filename to preserve checked checkboxes across polling updates
             const stableId = 'file_' + encodeURIComponent(f.name);
+            const fileDate = extractFileDate(f);
 
             validItems.push({
                 id: stableId,
                 file: f,
                 name: f.name,
-                date: new Date(f.lastModified || Date.now()),
+                date: fileDate,
                 isPdf: f.name.toLowerCase().endsWith('.pdf'),
                 isExcel: !f.name.toLowerCase().endsWith('.pdf'),
                 isMock: false
@@ -2218,6 +2244,10 @@
 
         const prevCount = scannedFolderState.files.length;
         scannedFolderState.files = validItems;
+
+        // Persist real files to IndexedDB cache so they are never lost on reload
+        await saveCachedFiles(validItems);
+
         renderExplorerList();
         updateExplorerStatusBar();
 
@@ -2292,13 +2322,42 @@
 
         pickBtn.addEventListener('click', () => selectFolderFromDisk());
 
+        // Function to activate pending directory permission on user gesture
+        const activatePendingPermission = async () => {
+            if (!scannedFolderState.pendingHandle) return;
+            try {
+                const perm = await scannedFolderState.pendingHandle.requestPermission({ mode: 'read' });
+                if (perm === 'granted') {
+                    const handle = scannedFolderState.pendingHandle;
+                    scannedFolderState.pendingHandle = null;
+                    startRealtimePolling(handle);
+                    showWameliToast(`🟢 Đã kích hoạt Realtime thư mục: ${handle.name}!`);
+                }
+            } catch (e) {
+                console.warn('[Wameli activatePendingPermission] Error:', e);
+            }
+        };
+
+        if (resumeBtn) {
+            resumeBtn.addEventListener('click', activatePendingPermission);
+        }
+
+        // Seamless activation when user interacts anywhere inside the directory manager
+        manager.addEventListener('click', (e) => {
+            if (scannedFolderState.pendingHandle && !scannedFolderState.dirHandle) {
+                if (e.target.closest('.wqf-explorer-row, .wqf-explorer-btn, .wqf-dir-input, .wqf-btn-resume, .wqf-dir-head')) {
+                    activatePendingPermission();
+                }
+            }
+        });
+
         // Refresh button: re-scans current handle immediately without opening picker dialog!
         refreshBtn.addEventListener('click', async () => {
-            if (scannedFolderState.dirHandle) {
-                refreshBtn.style.transform = 'rotate(180deg)';
-                refreshBtn.style.transition = 'transform 0.35s ease';
-                setTimeout(() => refreshBtn.style.transform = '', 350);
+            refreshBtn.style.transform = 'rotate(180deg)';
+            refreshBtn.style.transition = 'transform 0.35s ease';
+            setTimeout(() => refreshBtn.style.transform = '', 350);
 
+            if (scannedFolderState.dirHandle) {
                 try {
                     const files = await scanDirectoryHandle(scannedFolderState.dirHandle);
                     lastFilesSignature = computeFilesSignature(files);
@@ -2312,7 +2371,9 @@
                 try {
                     const perm = await scannedFolderState.pendingHandle.requestPermission({ mode: 'read' });
                     if (perm === 'granted') {
-                        startRealtimePolling(scannedFolderState.pendingHandle);
+                        const handle = scannedFolderState.pendingHandle;
+                        scannedFolderState.pendingHandle = null;
+                        startRealtimePolling(handle);
                     } else {
                         selectFolderFromDisk();
                     }
@@ -2388,38 +2449,34 @@
             }
         });
 
-        if (scannedFolderState.files.length === 0) {
-            scannedFolderState.files = generateMockFiles();
-        }
-
-        renderExplorerList();
-        updateExplorerStatusBar();
-
-        // Check for previously saved directory handle in IndexedDB to automatically resume realtime monitoring
+        // 1. Immediately restore cached real files from previous sessions so files are never missing on page load
         (async () => {
+            try {
+                const cached = await getCachedFiles();
+                if (cached && cached.length > 0 && scannedFolderState.files.length === 0) {
+                    scannedFolderState.files = cached;
+                    renderExplorerList();
+                    updateExplorerStatusBar();
+                }
+            } catch (err) {
+                console.warn('[Wameli Cache restore] Error:', err);
+            }
+
+            // 2. Check for previously saved directory handle in IndexedDB to automatically resume realtime monitoring
             try {
                 const savedHandle = await getSavedDirHandle();
                 if (savedHandle) {
+                    scannedFolderState.folderName = savedHandle.name;
+                    if (dirInput) dirInput.value = savedHandle.name;
+
                     const perm = await savedHandle.queryPermission({ mode: 'read' });
                     if (perm === 'granted') {
-                        scannedFolderState.dirHandle = savedHandle;
-                        scannedFolderState.folderName = savedHandle.name;
-                        if (dirInput) dirInput.value = savedHandle.name;
                         startRealtimePolling(savedHandle);
                     } else {
                         scannedFolderState.pendingHandle = savedHandle;
-                        scannedFolderState.folderName = savedHandle.name;
-                        if (dirInput) dirInput.value = savedHandle.name;
                         if (resumeBtn) {
                             resumeBtn.style.display = 'inline-flex';
                             resumeBtn.textContent = `🟢 Bật Realtime (${savedHandle.name})`;
-                            resumeBtn.addEventListener('click', async () => {
-                                const requestPerm = await savedHandle.requestPermission({ mode: 'read' });
-                                if (requestPerm === 'granted') {
-                                    startRealtimePolling(savedHandle);
-                                    showWameliToast(`🟢 Đã kích hoạt Realtime thư mục: ${savedHandle.name}!`);
-                                }
-                            });
                         }
                     }
                 }
@@ -2427,6 +2484,9 @@
                 console.warn('[Wameli IDB check] Error:', err);
             }
         })();
+
+        renderExplorerList();
+        updateExplorerStatusBar();
     }
 
     function renderExplorerList() {
