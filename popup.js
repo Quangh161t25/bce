@@ -2318,21 +2318,95 @@ async function uploadFileToCatbox(file) {
     throw new Error("Không có dữ liệu ảnh hoặc file ảnh 0 bytes để upload!");
   }
 
-  // Tải lên duy nhất qua API Catbox (https://catbox.moe/user/api.php)
-  const fdCatbox = new FormData();
-  fdCatbox.append("reqtype", "fileupload");
-  fdCatbox.append("fileToUpload", fileObj, fileName);
+  // 1. Kiểm tra Catbox Userhash nếu người dùng đã lưu
+  let catboxUserhash = "";
+  try {
+    const store = await chrome.storage.local.get(["catboxUserhash"]);
+    catboxUserhash = (store?.catboxUserhash || "").trim();
+  } catch (e) {}
 
-  const resCatbox = await fetch("https://catbox.moe/user/api.php", {
-    method: "POST",
-    body: fdCatbox
-  });
-  const textCatbox = await resCatbox.text();
-  if (resCatbox.ok && textCatbox && textCatbox.trim().startsWith("http")) {
-    return textCatbox.trim();
+  // 2. Thử upload lên Catbox API (https://catbox.moe/user/api.php)
+  let catboxErr = "";
+  try {
+    const fdCatbox = new FormData();
+    fdCatbox.append("reqtype", "fileupload");
+    if (catboxUserhash) {
+      fdCatbox.append("userhash", catboxUserhash);
+    }
+    fdCatbox.append("fileToUpload", fileObj, fileName);
+
+    const resCatbox = await fetch("https://catbox.moe/user/api.php", {
+      method: "POST",
+      body: fdCatbox
+    });
+    const textCatbox = await resCatbox.text();
+    const cleanText = (textCatbox || "").trim();
+    if (resCatbox.ok && cleanText.startsWith("http") && !cleanText.toLowerCase().includes("invalid uploader") && !cleanText.toLowerCase().includes("error")) {
+      return cleanText;
+    }
+    catboxErr = cleanText || `HTTP ${resCatbox.status}`;
+  } catch (err) {
+    catboxErr = err.message;
   }
 
-  throw new Error(textCatbox || `Không thể upload ${fileName} lên API Catbox (https://files.catbox.moe/).`);
+  // 3. Tự động fallback sang FreeImageHost / ImgBB nếu Catbox bị chặn hoặc lỗi
+  console.warn("Catbox upload không thành công (" + catboxErr + "), chuyển sang máy chủ dự phòng...");
+  let base64Data = "";
+  try {
+    const arrayBuf = await fileObj.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuf);
+    let binary = "";
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.byteLength; i += chunkSize) {
+      const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.byteLength));
+      binary += String.fromCharCode.apply(null, chunk);
+    }
+    base64Data = btoa(binary);
+  } catch (b64Err) {
+    console.warn("Không convert được sang base64:", b64Err);
+  }
+
+  if (base64Data) {
+    // Dự phòng 1: FreeImageHost
+    try {
+      const fdFree = new FormData();
+      fdFree.append("key", "6d207e02198a847aa98d0a2a901485a5");
+      fdFree.append("action", "upload");
+      fdFree.append("source", base64Data);
+      fdFree.append("format", "json");
+
+      const resFree = await fetch("https://freeimage.host/api/1/upload", {
+        method: "POST",
+        body: fdFree
+      });
+      const dataFree = await resFree.json();
+      if (dataFree?.image?.url) {
+        return dataFree.image.url;
+      }
+    } catch (freeErr) {
+      console.warn("Dự phòng FreeImageHost lỗi:", freeErr);
+    }
+
+    // Dự phòng 2: ImgBB
+    try {
+      const fdImgBB = new FormData();
+      fdImgBB.append("key", "1bad1429a242d7040fda3f2cfddb3a25");
+      fdImgBB.append("image", base64Data);
+
+      const resImgBB = await fetch("https://api.imgbb.com/1/upload", {
+        method: "POST",
+        body: fdImgBB
+      });
+      const dataImgBB = await resImgBB.json();
+      if (dataImgBB?.data?.url) {
+        return dataImgBB.data.url;
+      }
+    } catch (imgbbErr) {
+      console.warn("Dự phòng ImgBB lỗi:", imgbbErr);
+    }
+  }
+
+  throw new Error(`Không thể upload ${fileName}: Catbox báo "${catboxErr}".`);
 }
 
 // Alias để tương thích các hàm cũ
@@ -8945,6 +9019,18 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentViewMode = "grid3"; // Mặc định là Lưới 3 cột
   const selectedApiItemIds = new Set();
   let isAiBatchRunning = false;
+
+  const catboxUserhashInput = document.getElementById("catbox-userhash-input");
+  if (catboxUserhashInput) {
+    chrome.storage.local.get(["catboxUserhash"], (res) => {
+      if (res?.catboxUserhash) {
+        catboxUserhashInput.value = res.catboxUserhash;
+      }
+    });
+    catboxUserhashInput.addEventListener("input", () => {
+      chrome.storage.local.set({ catboxUserhash: catboxUserhashInput.value.trim() });
+    });
+  }
 
   function updateDeleteButtonUI() {
     const btnDeleteSelected = document.getElementById("api-btn-delete-selected");

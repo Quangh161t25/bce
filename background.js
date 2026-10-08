@@ -69,6 +69,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+async function blobToBase64String(blob) {
+  const arrayBuf = await blob.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuf);
+  let binary = "";
+  const len = bytes.byteLength;
+  const chunkSize = 8192;
+  for (let i = 0; i < len; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, len));
+    binary += String.fromCharCode.apply(null, chunk);
+  }
+  return btoa(binary);
+}
+
 async function uploadImageToFreeImageHost(imageUrl) {
   let blob = null;
   let fileName = "image.png";
@@ -110,21 +123,87 @@ async function uploadImageToFreeImageHost(imageUrl) {
   const ext = (fileName.split(".").pop() || "png").toLowerCase();
   const safeName = fileName || `image_${Date.now()}.${ext}`;
 
-  // Tải lên duy nhất qua API Catbox (https://catbox.moe/user/api.php)
-  const fdCatbox = new FormData();
-  fdCatbox.append("reqtype", "fileupload");
-  fdCatbox.append("fileToUpload", blob, safeName);
+  // 1. Kiểm tra Catbox Userhash nếu người dùng đã lưu
+  let catboxUserhash = "";
+  try {
+    const store = await chrome.storage.local.get(["catboxUserhash"]);
+    catboxUserhash = (store?.catboxUserhash || "").trim();
+  } catch (e) {}
 
-  const resCatbox = await fetch("https://catbox.moe/user/api.php", {
-    method: "POST",
-    body: fdCatbox
-  });
-  const textCatbox = await resCatbox.text();
-  if (resCatbox.ok && textCatbox && textCatbox.trim().startsWith("http")) {
-    return textCatbox.trim();
+  // 2. Thử upload qua API Catbox (https://catbox.moe/user/api.php)
+  let catboxErr = "";
+  try {
+    const fdCatbox = new FormData();
+    fdCatbox.append("reqtype", "fileupload");
+    if (catboxUserhash) {
+      fdCatbox.append("userhash", catboxUserhash);
+    }
+    fdCatbox.append("fileToUpload", blob, safeName);
+
+    const resCatbox = await fetch("https://catbox.moe/user/api.php", {
+      method: "POST",
+      body: fdCatbox
+    });
+    const textCatbox = await resCatbox.text();
+    const cleanText = (textCatbox || "").trim();
+    if (resCatbox.ok && cleanText.startsWith("http") && !cleanText.toLowerCase().includes("invalid uploader") && !cleanText.toLowerCase().includes("error")) {
+      return cleanText;
+    }
+    catboxErr = cleanText || `HTTP ${resCatbox.status}`;
+  } catch (e) {
+    catboxErr = e.message;
   }
 
-  throw new Error(textCatbox || "Không thể upload ảnh lên API Catbox (https://files.catbox.moe/).");
+  // 3. Tự động fallback sang FreeImageHost / ImgBB nếu Catbox bị chặn hoặc lỗi
+  console.warn("Catbox upload không thành công (" + catboxErr + "), chuyển sang máy chủ dự phòng...");
+  let base64Data = "";
+  try {
+    base64Data = await blobToBase64String(blob);
+  } catch (b64Err) {
+    console.warn("Không convert được sang base64:", b64Err);
+  }
+
+  if (base64Data) {
+    // Dự phòng 1: FreeImageHost
+    try {
+      const fdFree = new FormData();
+      fdFree.append("key", "6d207e02198a847aa98d0a2a901485a5");
+      fdFree.append("action", "upload");
+      fdFree.append("source", base64Data);
+      fdFree.append("format", "json");
+
+      const resFree = await fetch("https://freeimage.host/api/1/upload", {
+        method: "POST",
+        body: fdFree
+      });
+      const dataFree = await resFree.json();
+      if (dataFree?.image?.url) {
+        return dataFree.image.url;
+      }
+    } catch (freeErr) {
+      console.warn("Dự phòng FreeImageHost lỗi:", freeErr);
+    }
+
+    // Dự phòng 2: ImgBB
+    try {
+      const fdImgBB = new FormData();
+      fdImgBB.append("key", "1bad1429a242d7040fda3f2cfddb3a25");
+      fdImgBB.append("image", base64Data);
+
+      const resImgBB = await fetch("https://api.imgbb.com/1/upload", {
+        method: "POST",
+        body: fdImgBB
+      });
+      const dataImgBB = await resImgBB.json();
+      if (dataImgBB?.data?.url) {
+        return dataImgBB.data.url;
+      }
+    } catch (imgbbErr) {
+      console.warn("Dự phòng ImgBB lỗi:", imgbbErr);
+    }
+  }
+
+  throw new Error(catboxErr || "Không thể upload ảnh lên API Catbox (https://files.catbox.moe/) và các máy chủ dự phòng.");
 }
 
   if (message?.type === "SAVE_IMAGE_TO_SHEET_API") {
@@ -157,25 +236,46 @@ async function uploadImageToFreeImageHost(imageUrl) {
         await ensureSheetExists("LUU_ANH_API", token, sheetId);
 
         // Đảm bảo tiêu đề cột [id, link, ten_anh, link_cu] tồn tại
-        const { res: hRes, data: hData } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("LUU_ANH_API!A1:D1")}`, {
+        const { res: hRes, data: hData } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("LUU_ANH_API!A:D")}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        if (hRes.ok && (!hData.values || hData.values.length === 0)) {
-          await updateSheetValues("LUU_ANH_API!A1:D1", [["id", "link", "ten_anh", "link_cu"]], token);
-        } else if (hRes.ok && hData.values && hData.values[0]) {
-          if (hData.values[0].length < 4 || !hData.values[0][3]) {
-            await updateSheetValues("LUU_ANH_API!D1", [["link_cu"]], token);
+        const existingRows = (hRes.ok && hData.values) ? hData.values : [];
+        let lastUsedRow = 0;
+        for (let i = 0; i < existingRows.length; i++) {
+          const r = existingRows[i];
+          if (r && r.some(cell => String(cell ?? "").trim() !== "")) {
+            lastUsedRow = i + 1;
           }
+        }
+        if (lastUsedRow === 0) {
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("LUU_ANH_API!A1:D1")}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: [["id", "link", "ten_anh", "link_cu"]] })
+          });
+          lastUsedRow = 1;
+        } else if (existingRows[0] && (existingRows[0].length < 4 || !existingRows[0][3])) {
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("LUU_ANH_API!D1")}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: [["link_cu"]] })
+          });
         }
         
         // 3. Tạo ID và tên ảnh
         const imgId = "IMG_" + Date.now();
         const titleName = message.title || "Ảnh từ Web";
         
-        // Chuẩn bị dòng dữ liệu 4 cột: [id, link, ten_anh, link_cu] (Cột B là link ảnh)
+        // Chuẩn bị dòng dữ liệu 4 cột: [id, link, ten_anh, link_cu] (Cột A: id, Cột B: link ảnh)
         const rowData = [imgId, hostedImageUrl, titleName, rawUrl];
+        const startRowNum = lastUsedRow + 1;
         
-        await appendSheetValues("LUU_ANH_API!A:D", [rowData], token);
+        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`LUU_ANH_API!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ values: [rowData] })
+        });
+        if (!res.ok) throw new Error(data.error?.message || "Không lưu được vào LUU_ANH_API.");
         sendResponse({ ok: true, id: imgId, url: hostedImageUrl, link_cu: rawUrl });
       } catch (err) {
         console.error("Lỗi lưu LUU_ANH_API:", err);
@@ -283,18 +383,40 @@ async function uploadImageToFreeImageHost(imageUrl) {
       .then(async ([token, sheetId]) => {
         await ensureSheetExists("LUU_ANH_API", token, sheetId);
         // Ensure header row id, link, ten_anh, link_cu exists
-        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("LUU_ANH_API!A1:D1")}`, {
+        const { res: hRes, data: hData } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("LUU_ANH_API!A:D")}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        if (res.ok && (!data.values || data.values.length === 0)) {
-          await updateSheetValues("LUU_ANH_API!A1:D1", [["id", "link", "ten_anh", "link_cu"]], token);
-        } else if (res.ok && data.values && data.values[0]) {
-          if (data.values[0].length < 4 || !data.values[0][3]) {
-            await updateSheetValues("LUU_ANH_API!D1", [["link_cu"]], token);
+        const existingRows = (hRes.ok && hData.values) ? hData.values : [];
+        let lastUsedRow = 0;
+        for (let i = 0; i < existingRows.length; i++) {
+          const r = existingRows[i];
+          if (r && r.some(cell => String(cell ?? "").trim() !== "")) {
+            lastUsedRow = i + 1;
           }
         }
-        if (message.rows && message.rows.length > 0) {
-          await appendSheetValues("LUU_ANH_API!A:D", message.rows, token);
+        if (lastUsedRow === 0) {
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("LUU_ANH_API!A1:D1")}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: [["id", "link", "ten_anh", "link_cu"]] })
+          });
+          lastUsedRow = 1;
+        } else if (existingRows[0] && (existingRows[0].length < 4 || !existingRows[0][3])) {
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("LUU_ANH_API!D1")}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: [["link_cu"]] })
+          });
+        }
+        const validRows = (message.rows || []).filter(r => Array.isArray(r) && r.length > 0);
+        if (validRows.length > 0) {
+          const startRowNum = lastUsedRow + 1;
+          const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`LUU_ANH_API!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: validRows })
+          });
+          if (!res.ok) throw new Error(data.error?.message || "Không lưu được vào LUU_ANH_API.");
         }
         sendResponse({ ok: true });
       })
@@ -1609,17 +1731,43 @@ async function uploadImageToFreeImageHost(imageUrl) {
   if (message?.type === "SAVE_WEB_SP") {
     Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
       .then(async ([token, sheetId]) => {
-        await ensureSheetExists("WEB_SP", token);
-        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A:O")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
-          method: "POST",
+        await ensureSheetExists("WEB_SP", token, sheetId);
+        const validRows = (message.values || []).filter(r => Array.isArray(r) && r.some(cell => String(cell ?? "").trim() !== ""));
+        if (!validRows.length) throw new Error("Không có dữ liệu hợp lệ để lưu WEB_SP.");
+
+        const { res: readRes, data: readData } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A:AZ")}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const existingRows = (readRes.ok && readData.values) ? readData.values : [];
+        let lastUsedRow = 0;
+        for (let i = 0; i < existingRows.length; i++) {
+          const r = existingRows[i];
+          if (r && r.some(cell => String(cell ?? "").trim() !== "")) {
+            lastUsedRow = i + 1;
+          }
+        }
+
+        if (lastUsedRow === 0) {
+          const webSpHeaders = [["id", "gian", "sku", "phan_loai", "ten_sp", "nganh_hang", "mo_ta", "anh", "anh_mota", "anh_phan_loai", "link_video", "gia", "gia_khuyen_mai", "item_id", "link_shopee"]];
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A1:O1")}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: webSpHeaders })
+          });
+          lastUsedRow = 1;
+        }
+
+        const startRowNum = lastUsedRow + 1;
+        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`WEB_SP!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
+          method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ values: message.values })
+          body: JSON.stringify({ values: validRows })
         });
-        if (!res.ok) throw new Error(data.error?.message || "Khong ghi duoc vao WEB_SP.");
-        sendResponse({ ok: true, count: message.values.length });
+        if (!res.ok) throw new Error(data.error?.message || "Không ghi được vào WEB_SP.");
+        sendResponse({ ok: true, count: validRows.length });
       })
       .catch(error => sendResponse({ ok: false, error: error.message }));
     return true;
@@ -1628,15 +1776,33 @@ async function uploadImageToFreeImageHost(imageUrl) {
   if (message?.type === "APPEND_DS_SP") {
     Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
       .then(async ([token, sheetId]) => {
-        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/DS_SP:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
-          method: "POST",
+        await ensureSheetExists("DS_SP", token, sheetId);
+        const validRows = (message.rowDatas || []).filter(r => Array.isArray(r) && r.some(cell => String(cell ?? "").trim() !== ""));
+        if (!validRows.length) throw new Error("Không có dữ liệu hợp lệ để thêm vào DS_SP.");
+
+        const { res: readRes, data: readData } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("DS_SP!A:AZ")}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const existingRows = (readRes.ok && readData.values) ? readData.values : [];
+        let lastUsedRow = 0;
+        for (let i = 0; i < existingRows.length; i++) {
+          const r = existingRows[i];
+          if (r && r.some(cell => String(cell ?? "").trim() !== "")) {
+            lastUsedRow = i + 1;
+          }
+        }
+        if (lastUsedRow === 0) lastUsedRow = 1;
+
+        const startRowNum = lastUsedRow + 1;
+        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`DS_SP!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
+          method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ values: message.rowDatas })
+          body: JSON.stringify({ values: validRows })
         });
-        if (!res.ok) throw new Error(data.error?.message || "Khong them duoc vao DS_SP.");
+        if (!res.ok) throw new Error(data.error?.message || "Không thêm được vào DS_SP.");
         sendResponse({ ok: true, data });
       })
       .catch(error => sendResponse({ ok: false, error: error.message }));
@@ -1646,15 +1812,42 @@ async function uploadImageToFreeImageHost(imageUrl) {
   if (message?.type === "APPEND_SP_SHOPEE") {
     Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
       .then(async ([token, sheetId]) => {
-        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/SP_SHOPEE:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
-          method: "POST",
+        await ensureSheetExists("SP_SHOPEE", token, sheetId);
+        const validRows = (message.values || []).filter(r => Array.isArray(r) && r.some(cell => String(cell ?? "").trim() !== ""));
+        if (!validRows.length) throw new Error("Không có dữ liệu hợp lệ để thêm vào SP_SHOPEE.");
+
+        const { res: readRes, data: readData } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A:AZ")}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const existingRows = (readRes.ok && readData.values) ? readData.values : [];
+        let lastUsedRow = 0;
+        for (let i = 0; i < existingRows.length; i++) {
+          const r = existingRows[i];
+          if (r && r.some(cell => String(cell ?? "").trim() !== "")) {
+            lastUsedRow = i + 1;
+          }
+        }
+
+        if (lastUsedRow === 0) {
+          const defaultHeaders = [["Mã sản phẩm", "Tên sản phẩm", "Mô tả sản phẩm", "Tên phân loại", "Giá trước giảm", "SKU phân loại", "Giá", "Kho hàng", "Hình ảnh", "Phân loại 1", "Phân loại 2", "Mã gian"]];
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A1:L1")}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: defaultHeaders })
+          });
+          lastUsedRow = 1;
+        }
+
+        const startRowNum = lastUsedRow + 1;
+        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`SP_SHOPEE!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
+          method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ values: message.values })
+          body: JSON.stringify({ values: validRows })
         });
-        if (!res.ok) throw new Error(data.error?.message || "Khong them duoc vao SP_SHOPEE.");
+        if (!res.ok) throw new Error(data.error?.message || "Không thêm được vào SP_SHOPEE.");
         sendResponse({ ok: true, data });
       })
       .catch(error => sendResponse({ ok: false, error: error.message }));

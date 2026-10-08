@@ -242,12 +242,19 @@ style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); bo
 <h2>2. Tải Ảnh Lên API Catbox (Lưu Sheet LUU_ANH_API)</h2>
 </div>
 
+<!-- Cấu hình Catbox Userhash tùy chọn -->
+<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 6px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px;">
+  <span style="font-weight: 600; color: #334155; white-space: nowrap;">🔑 Catbox Userhash:</span>
+  <input type="text" id="catbox-userhash-input" placeholder="Tùy chọn: Nhập userhash từ catbox.moe/user/manage.php..." style="flex: 1; padding: 3px 8px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; background: #fff;">
+  <a href="https://catbox.moe/user/manage.php" target="_blank" rel="noreferrer" style="color: #2563eb; text-decoration: underline; font-size: 10px; white-space: nowrap;" title="Mở trang lấy Userhash của tài khoản Catbox">Lấy mã</a>
+</div>
+
 <!-- Dropzone Kéo Thả & Paste (Ctrl + V) Ảnh dạng thanh ngang gọn nhẹ -->
 <div id="api-img-dropzone" tabindex="0" style="border: 2px dashed #3b82f6; border-radius: 8px; padding: 10px 12px; text-align: center; background: #f0f7ff; cursor: pointer; transition: all 0.2s ease; margin-bottom: 8px; outline: none; display: flex; align-items: center; justify-content: center; gap: 10px;">
   <div style="font-size: 22px;">📥</div>
   <div style="text-align: left;">
     <div style="font-size: 11px; font-weight: bold; color: #1e40af;">Kéo thả, Click chọn hoặc bấm Ctrl + V để Dán ảnh</div>
-    <div style="font-size: 10px; color: #64748b;">Tự động upload qua API https://files.catbox.moe/ &amp; lưu vào Sheet LUU_ANH_API (id, link, ten_anh, link_cu)</div>
+    <div style="font-size: 10px; color: #64748b;">Tự động upload qua API Catbox (files.catbox.moe) &amp; lưu vào Sheet LUU_ANH_API (id, link, ten_anh, link_cu)</div>
   </div>
   <input type="file" id="api-img-file-input" accept="image/*" multiple style="display: none;">
 </div>
@@ -279,7 +286,7 @@ style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); bo
         <th style="padding: 6px 8px; width: 35px;">STT</th>
         <th style="padding: 6px 8px; width: 45px;">Ảnh</th>
         <th style="padding: 6px 8px;">Tên file</th>
-        <th style="padding: 6px 8px;">Link Catbox (files.catbox.moe)</th>
+        <th style="padding: 6px 8px;">Link ảnh (Catbox / Host)</th>
         <th style="padding: 6px 8px;">Link cũ (link_cu)</th>
         <th style="padding: 6px 8px; width: 150px; text-align: center;">Thao tác</th>
         <th style="padding: 6px 8px; width: 35px; text-align: center;">Xóa</th>
