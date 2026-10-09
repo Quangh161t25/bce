@@ -422,10 +422,10 @@
             }
             .wqf-inline-field-group > .select2-container,
             .wqf-inline-field-group > input.form-control {
-                width: 220px !important;
-                min-width: 220px !important;
-                max-width: 220px !important;
-                flex: 0 0 220px !important;
+                width: 135px !important;
+                min-width: 110px !important;
+                max-width: 140px !important;
+                flex: 0 0 135px !important;
                 display: inline-block !important;
                 box-sizing: border-box !important;
             }
@@ -654,7 +654,8 @@
             /* Explorer Column Head */
             .wqf-explorer-head {
                 display: grid;
-                grid-template-columns: 24px 1fr 140px 96px;
+                grid-template-columns: 24px 1fr 115px 105px;
+                column-gap: 8px;
                 align-items: center;
                 padding: 6px 12px;
                 border-bottom: 1px solid #e2e8f0;
@@ -722,7 +723,8 @@
             /* Explorer Row */
             .wqf-explorer-row {
                 display: grid;
-                grid-template-columns: 24px 1fr 140px 96px;
+                grid-template-columns: 24px 1fr 115px 105px;
+                column-gap: 8px;
                 align-items: center;
                 padding: 5px 12px;
                 border-bottom: 1px solid #f8fafc;
@@ -762,8 +764,10 @@
                 font-size: 11px;
                 color: #64748b;
                 text-align: right;
-                padding-right: 4px;
+                padding-right: 2px;
                 white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             .wqf-explorer-actions {
                 display: flex;
@@ -862,12 +866,9 @@
 
     function formatFileDateVi(d) {
         const dateStr = getDateKey(d);
-        let hours = d.getHours();
+        const hours = String(d.getHours()).padStart(2, '0');
         const minutes = String(d.getMinutes()).padStart(2, '0');
-        const ampm = hours >= 12 ? 'CH' : 'SA';
-        hours = hours % 12;
-        hours = hours ? hours : 12;
-        return `${dateStr} ${hours}:${minutes} ${ampm}`;
+        return `${dateStr} ${hours}:${minutes}`;
     }
 
     function formatFileSize(bytes) {
@@ -1391,10 +1392,10 @@
         inlineGroup.className = 'wqf-inline-field-group';
 
         if (select2Container) {
-            select2Container.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+            select2Container.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
             inlineGroup.appendChild(select2Container);
         } else {
-            platformSelect.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+            platformSelect.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
             inlineGroup.appendChild(platformSelect);
         }
 
@@ -1454,7 +1455,7 @@
         const observer = new MutationObserver(() => {
             const s2 = col10.querySelector(':scope > .select2-container');
             if (s2 && !inlineGroup.contains(s2)) {
-                s2.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+                s2.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
                 inlineGroup.insertBefore(s2, inlineGroup.firstChild);
             }
         });
@@ -1477,10 +1478,10 @@
         inlineGroup.className = 'wqf-inline-field-group';
 
         if (select2Container) {
-            select2Container.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+            select2Container.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
             inlineGroup.appendChild(select2Container);
         } else {
-            warehouseSelect.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+            warehouseSelect.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
             inlineGroup.appendChild(warehouseSelect);
         }
 
@@ -1535,14 +1536,14 @@
         const observer = new MutationObserver(() => {
             const s2 = col10.querySelector(':scope > .select2-container');
             if (s2 && !inlineGroup.contains(s2)) {
-                s2.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+                s2.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
                 inlineGroup.insertBefore(s2, inlineGroup.firstChild);
             }
         });
         observer.observe(col10, { childList: true });
     }
 
-    // --- Shop Field: Inline 220px & Gợi ý Shop nằm cạnh ô điền Shop (lấy từ chương trình đã lưu) ---
+    // --- Shop Field: Inline compact & Gợi ý Shop nằm cạnh ô điền Shop (lấy từ chương trình đã lưu) ---
     function setupShopField(shopSelect) {
         if (!shopSelect) return;
         const formGroup = shopSelect.closest('.form-group');
@@ -1562,16 +1563,16 @@
             inlineGroup.className = 'wqf-inline-field-group';
 
             if (select2Container) {
-                select2Container.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+                select2Container.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
                 inlineGroup.appendChild(select2Container);
             } else {
-                shopSelect.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+                shopSelect.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
                 inlineGroup.appendChild(shopSelect);
             }
 
             col10.appendChild(inlineGroup);
         } else if (select2Container && select2Container.parentElement !== inlineGroup) {
-            select2Container.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+            select2Container.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
             inlineGroup.insertBefore(select2Container, inlineGroup.firstChild);
         }
 
@@ -1655,7 +1656,7 @@
         const observer = new MutationObserver(() => {
             const s2 = col10.querySelector(':scope > .select2-container');
             if (s2 && !inlineGroup.contains(s2)) {
-                s2.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+                s2.style.cssText = 'width: 135px !important; min-width: 110px !important; max-width: 140px !important; flex: 0 0 135px !important; display: inline-block !important; box-sizing: border-box !important;';
                 inlineGroup.insertBefore(s2, inlineGroup.firstChild);
             }
         });
@@ -1675,7 +1676,7 @@
         const inlineGroup = document.createElement('div');
         inlineGroup.className = 'wqf-inline-field-group';
 
-        dateInput.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+        dateInput.style.cssText = 'width: 115px !important; min-width: 100px !important; max-width: 125px !important; flex: 0 0 115px !important; display: inline-block !important; box-sizing: border-box !important;';
         dateInput.setAttribute('data-wqf-add-date-ready', '1');
 
         const now = new Date();
@@ -1750,10 +1751,10 @@
         inlineGroup.className = 'wqf-inline-field-group';
 
         if (select2Container) {
-            select2Container.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+            select2Container.style.cssText = 'width: 110px !important; min-width: 90px !important; max-width: 120px !important; flex: 0 0 110px !important; display: inline-block !important; box-sizing: border-box !important;';
             inlineGroup.appendChild(select2Container);
         } else {
-            hourSelect.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+            hourSelect.style.cssText = 'width: 110px !important; min-width: 90px !important; max-width: 120px !important; flex: 0 0 110px !important; display: inline-block !important; box-sizing: border-box !important;';
             inlineGroup.appendChild(hourSelect);
         }
 
@@ -1816,7 +1817,7 @@
         const observer = new MutationObserver(() => {
             const s2 = col10.querySelector(':scope > .select2-container');
             if (s2 && !inlineGroup.contains(s2)) {
-                s2.style.cssText = 'width: 220px !important; min-width: 220px !important; max-width: 220px !important; flex: 0 0 220px !important; display: inline-block !important; box-sizing: border-box !important;';
+                s2.style.cssText = 'width: 110px !important; min-width: 90px !important; max-width: 120px !important; flex: 0 0 110px !important; display: inline-block !important; box-sizing: border-box !important;';
                 inlineGroup.insertBefore(s2, inlineGroup.firstChild);
             }
         });
@@ -2259,8 +2260,17 @@
             });
         });
 
+        // Chỉ lấy và lưu trữ file thuộc 4 ngày gần nhất
+        const distinctDateKeys = Array.from(new Set(validItems.map(item => getDateKey(item.date)))).sort((a, b) => {
+            const [da, ma, ya] = a.split('/').map(Number);
+            const [db, mb, yb] = b.split('/').map(Number);
+            return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da);
+        });
+        const recent4Dates = new Set(distinctDateKeys.slice(0, 4));
+        const filteredItems = validItems.filter(item => recent4Dates.has(getDateKey(item.date)));
+
         // Clean up selectedIds for files that no longer exist
-        const validIds = new Set(validItems.map(item => item.id));
+        const validIds = new Set(filteredItems.map(item => item.id));
         for (const selId of scannedFolderState.selectedIds) {
             if (!validIds.has(selId)) {
                 scannedFolderState.selectedIds.delete(selId);
@@ -2268,18 +2278,18 @@
         }
 
         const prevCount = scannedFolderState.files.length;
-        scannedFolderState.files = validItems;
+        scannedFolderState.files = filteredItems;
 
         // Persist real files to IndexedDB cache so they are never lost on reload
-        await saveCachedFiles(validItems);
+        await saveCachedFiles(filteredItems);
 
         renderExplorerList();
         updateExplorerStatusBar();
 
         if (isFirstScan) {
-            showWameliToast(`Đã nạp ${validItems.length} file (PDF & Excel) nhóm theo ngày!`);
-        } else if (validItems.length > prevCount && prevCount > 0) {
-            const addedCount = validItems.length - prevCount;
+            showWameliToast(`Đã nạp ${filteredItems.length} file (4 ngày gần nhất)!`);
+        } else if (filteredItems.length > prevCount && prevCount > 0) {
+            const addedCount = filteredItems.length - prevCount;
             showWameliToast(`🟢 Thư mục vừa cập nhật thêm ${addedCount} file mới!`);
         }
     }
@@ -2479,7 +2489,13 @@
             try {
                 const cached = await getCachedFiles();
                 if (cached && cached.length > 0 && scannedFolderState.files.length === 0) {
-                    scannedFolderState.files = cached;
+                    const distinctDateKeys = Array.from(new Set(cached.map(item => getDateKey(item.date)))).sort((a, b) => {
+                        const [da, ma, ya] = a.split('/').map(Number);
+                        const [db, mb, yb] = b.split('/').map(Number);
+                        return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da);
+                    });
+                    const recent4Dates = new Set(distinctDateKeys.slice(0, 4));
+                    scannedFolderState.files = cached.filter(item => recent4Dates.has(getDateKey(item.date)));
                     renderExplorerList();
                     updateExplorerStatusBar();
                 }
@@ -2528,7 +2544,7 @@
                     </div>
                     <div style="font-size: 11.5px; color: #64748b; margin-bottom: 12px; line-height: 1.5;">
                         Bấm nút <b>[ 📂 Chọn ]</b> ở trên để chọn thư mục từ máy tính (ví dụ <i>${escapeHtml(scannedFolderState.folderName || 'tải xuống 2')}</i>)<br/>
-                        <span style="color: #059669; font-weight: 600;">(Hệ thống tự động lọc chỉ lấy file Excel & PDF nhóm theo ngày)</span>
+                        <span style="color: #059669; font-weight: 600;">(Hệ thống tự động lọc chỉ lấy file Excel & PDF trong 4 ngày gần nhất)</span>
                     </div>
                     <button type="button" class="wqf-dir-btn btn-empty-pick-folder" style="font-size: 11.5px; padding: 5px 12px; margin: 0 auto;">
                         📂 Chọn Thư Mục
@@ -2555,7 +2571,7 @@
             const [da, ma, ya] = a.split('/').map(Number);
             const [db, mb, yb] = b.split('/').map(Number);
             return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da);
-        });
+        }).slice(0, 4);
 
         sortedDateKeys.forEach(dateKey => {
             const groupFiles = groupsMap.get(dateKey);
