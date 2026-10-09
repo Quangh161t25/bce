@@ -195,7 +195,7 @@
                 gap: 16px;
                 width: 100%;
                 align-items: flex-start;
-                margin-top: 8px;
+                margin-top: 0;
                 box-sizing: border-box;
             }
             .wqf-add-order-left-col {
@@ -228,9 +228,11 @@
                 background: #f0fdf4;
                 border: 1px solid #bbf7d0;
                 border-radius: 6px;
-                margin-bottom: 14px;
+                margin-bottom: 12px;
                 box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
                 font-family: inherit;
+                width: 100%;
+                box-sizing: border-box;
             }
             .wqf-preset-header-row {
                 display: flex;
@@ -940,6 +942,10 @@
         const existingTwoCols = document.getElementById('wqf-add-order-two-cols');
         if (existingTwoCols) {
             if (existingTwoCols.contains(panelBody)) {
+                const presetBar = document.getElementById('wqf-preset-bar');
+                if (presetBar && existingTwoCols.parentNode && presetBar.nextElementSibling !== existingTwoCols) {
+                    existingTwoCols.parentNode.insertBefore(presetBar, existingTwoCols);
+                }
                 return {
                     wrapper: existingTwoCols,
                     leftCol: existingTwoCols.querySelector('.wqf-add-order-left-col'),
@@ -965,6 +971,11 @@
 
         panelBody.parentNode.insertBefore(twoCols, panelBody);
         leftCol.appendChild(panelBody);
+
+        const presetBar = document.getElementById('wqf-preset-bar');
+        if (presetBar && twoCols.parentNode && presetBar.nextElementSibling !== twoCols) {
+            twoCols.parentNode.insertBefore(presetBar, twoCols);
+        }
 
         return { wrapper: twoCols, leftCol, rightCol };
     }
@@ -1036,7 +1047,15 @@
 
     function setupPresetToolbar(panelBody) {
         if (!panelBody) return;
-        if (document.getElementById('wqf-preset-bar')) return;
+
+        const twoCols = document.getElementById('wqf-add-order-two-cols');
+        const existingPresetBar = document.getElementById('wqf-preset-bar');
+        if (existingPresetBar) {
+            if (twoCols && twoCols.parentNode && existingPresetBar.nextElementSibling !== twoCols) {
+                twoCols.parentNode.insertBefore(existingPresetBar, twoCols);
+            }
+            return;
+        }
 
         let currentGroupBy = localStorage.getItem('wqf_preset_group_by') || 'shop';
 
@@ -1067,7 +1086,13 @@
             <div id="wqf-preset-list" class="wqf-preset-list"></div>
         `;
 
-        panelBody.insertBefore(presetBar, panelBody.firstChild);
+        if (twoCols && twoCols.parentNode) {
+            twoCols.parentNode.insertBefore(presetBar, twoCols);
+        } else if (panelBody.parentNode) {
+            panelBody.parentNode.insertBefore(presetBar, panelBody);
+        } else {
+            panelBody.insertBefore(presetBar, panelBody.firstChild);
+        }
 
         // Switch group mode (Shop vs Giờ)
         presetBar.querySelectorAll('.wqf-preset-toggle-btn').forEach(btn => {
