@@ -1,0 +1,4 @@
+node_modules/
+BCE/node_modules/
+*.log
+.DS_Store

@@ -19,7 +19,8 @@
     "unlimitedStorage",
     "scripting",
     "sidePanel",
-    "tabs"
+    "tabs",
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -151,6 +152,10 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "bce.html",
+        "bce-redirect.js",
+        "BCE/dist/*",
+        "BCE/dist/assets/*",
         "ioy.png",
         "bce.png",
         "shopee-fetch-interceptor.js",

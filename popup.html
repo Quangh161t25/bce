@@ -12,6 +12,8 @@
 <body>
 <main class="panel">
 <div class="tab-header">
+<button id="btn-open-web-bce" type="button" class="tab-btn" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #ffffff; font-weight: 800; border: 1px solid #4338ca; white-space: nowrap; box-shadow: 0 1px 3px rgba(79,70,229,0.3); display: flex; align-items: center; gap: 4px; padding: 4px 8px;" title="Mở Giao diện Web Quản Lý BCE (Toàn màn hình / Dashboard tổng)">🌐 Web BCE ↗</button>
+<button class="tab-btn" data-tab="tab-bce" style="background: #eef2ff; color: #4338ca; font-weight: bold; border-color: #c7d2fe;">BCE Panel</button>
 <button class="tab-btn" data-tab="tab-tools">Tiện Ích</button>
 <button class="tab-btn active" data-tab="tab-web-sp" >Web bán SP</button>
 <button class="tab-btn" data-tab="tab-api-images">Ảnh AI & API</button>
@@ -33,6 +35,36 @@
 <button class="tab-btn" data-tab="tab-doanh-thu">Doanh Thu</button>
 <button class="tab-btn" data-tab="tab-test">Test</button>
 <button class="tab-btn" data-tab="tab-settings">Cài đặt</button>
+</div>
+
+<div id="tab-bce" class="tab-content" hidden style="padding: 10px; display: flex; flex-direction: column; gap: 10px;">
+  <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); color: #ffffff; padding: 14px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 22px;">🌐</span>
+        <div>
+          <h2 style="font-size: 14px; font-weight: 800; margin: 0; color: #f8fafc;">HỆ THỐNG QUẢN LÝ BCE</h2>
+          <p style="font-size: 11px; color: #a5b4fc; margin: 2px 0 0 0;">Web Dashboard toàn diện kết hợp cùng Extension</p>
+        </div>
+      </div>
+    </div>
+    <div style="font-size: 11.5px; color: #e2e8f0; line-height: 1.5; margin-bottom: 12px; background: rgba(255,255,255,0.08); padding: 8px 10px; border-radius: 6px;">
+      ✨ <strong>Đặc điểm nổi bật:</strong> Quản lý dữ liệu lớn, bảng Đơn Hàng (thống kê doanh thu/lợi nhuận theo tháng), Tính Giá động chi tiết, Danh Sách Sản Phẩm với tìm ảnh Bing, Sản Phẩm Giảm Giá, Web SP.
+    </div>
+    <button id="btn-open-bce-fullscreen" type="button" style="width: 100%; padding: 10px 14px; font-size: 12.5px; font-weight: 800; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #ffffff; border: 1px solid #6366f1; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.2);" title="Mở Dashboard BCE ở tab trình duyệt toàn màn hình để thao tác bảng dữ liệu rộng rãi nhất">
+      <span>🚀 MỞ WEB BCE TOÀN MÀN HÌNH (KHUYẾN NGHỊ) ↗</span>
+    </button>
+  </div>
+
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+    <div style="font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+      <span>📱 Xem nhanh BCE trong Side Panel:</span>
+      <span style="font-size: 10px; color: #64748b;">(Có thể cuộn ngang/dọc)</span>
+    </div>
+    <div style="border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; background: #f8fafc; height: 500px; position: relative;">
+      <iframe src="BCE/dist/index.html" style="width: 100%; height: 100%; border: none;"></iframe>
+    </div>
+  </div>
 </div>
 
 <div id="tab-tools" class="tab-content" hidden>

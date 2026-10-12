@@ -54,6 +54,19 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({
     openPanelOnActionClick: true
   });
+  try {
+    chrome.contextMenus.create({
+      id: "open_bce_dashboard",
+      title: "🌐 Mở Giao Diện Web BCE",
+      contexts: ["action"]
+    });
+  } catch (_) {}
+});
+
+chrome.contextMenus?.onClicked?.addListener((info) => {
+  if (info.menuItemId === "open_bce_dashboard") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("BCE/dist/index.html") });
+  }
 });
 
 let saveDhOrderQueue = Promise.resolve();
