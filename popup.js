@@ -5668,7 +5668,7 @@ document.querySelectorAll(".tab-btn").forEach((tabButton) => {
   tabButton.addEventListener("click", (e) => {
     if (tabButton.id === "btn-open-web-bce") {
       e.stopPropagation();
-      const url = chrome.runtime.getURL("BCE/dist/index.html");
+      const url = chrome.runtime.getURL("index.html");
       chrome.tabs.create({ url });
       return;
     }
@@ -5679,7 +5679,7 @@ document.querySelectorAll(".tab-btn").forEach((tabButton) => {
 });
 
 document.getElementById("btn-open-bce-fullscreen")?.addEventListener("click", () => {
-  const url = chrome.runtime.getURL("BCE/dist/index.html");
+  const url = chrome.runtime.getURL("index.html");
   chrome.tabs.create({ url });
 });
 

@@ -152,10 +152,12 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "index.html",
+        "bce-standalone.html",
         "bce.html",
         "bce-redirect.js",
-        "BCE/dist/*",
-        "BCE/dist/assets/*",
+        "dist/*",
+        "dist/assets/*",
         "ioy.png",
         "bce.png",
         "shopee-fetch-interceptor.js",

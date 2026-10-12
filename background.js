@@ -65,7 +65,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus?.onClicked?.addListener((info) => {
   if (info.menuItemId === "open_bce_dashboard") {
-    chrome.tabs.create({ url: chrome.runtime.getURL("BCE/dist/index.html") });
+    chrome.tabs.create({ url: chrome.runtime.getURL("index.html") });
   }
 });
 

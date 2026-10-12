@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node -e \"fs.copyFileSync('dist/template.html', 'dist/index.html')\"",
-    "build:single": "node -e \"process.env.SINGLE_FILE='true'\" && vite build && node -e \"fs.copyFileSync('dist/template.html', 'index.html'); fs.copyFileSync('dist/template.html', 'dist/index.html')\"",
+    "build": "vite build && node -e \"const fs=require('fs'); let h=fs.readFileSync('dist/template.html','utf8'); fs.writeFileSync('dist/index.html',h); let rh=h.replace(/\\.\\/assets\\//g, './dist/assets/').replace(/<script type=\\\"module\\\" crossorigin/g, '<script'); fs.writeFileSync('index.html', rh);\"",
+    "build:single": "node -e \"process.env.SINGLE_FILE='true'\" && vite build && node -e \"fs.copyFileSync('dist/template.html', 'bce-standalone.html');\"",
     "preview": "vite preview"
   },
   "dependencies": {
