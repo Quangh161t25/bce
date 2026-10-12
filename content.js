@@ -10293,235 +10293,8 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       return btn;
   }
 
-  let shopeeCameraStream = null;
 
-  function openShopeeReturnPhotoModal(orderData) {
-    const existingModal = document.getElementById("shopee-return-photo-modal");
-    if (existingModal) existingModal.remove();
 
-    const orderId = (orderData?.orderId || "").trim();
-    const tracking = (orderData?.tracking || "").trim();
-
-    const modal = document.createElement("div");
-    modal.id = "shopee-return-photo-modal";
-    modal.style.cssText = "position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75); z-index: 9999999; display: flex; align-items: center; justify-content: center; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;";
-
-    modal.innerHTML = `
-      <div style="background: #ffffff; border-radius: 10px; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: flex; flex-direction: column;">
-        <div style="padding: 12px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; border-radius: 10px 10px 0 0;">
-          <div style="font-weight: bold; font-size: 13px; color: #1e293b; display: flex; align-items: center; gap: 6px;">
-            <span>📸 Ảnh Hàng Hoàn</span>
-            <span style="font-size: 11px; color: #0284c7; background: #e0f2fe; padding: 2px 6px; border-radius: 4px;">${orderId || tracking || 'Chung'}</span>
-          </div>
-          <button type="button" class="btn-shopee-close-photo-modal" style="background: none; border: none; font-size: 18px; color: #64748b; cursor: pointer; line-height: 1;">✕</button>
-        </div>
-
-        <div style="padding: 14px 16px;">
-          <!-- Thanh thao tác chính -->
-          <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
-            <button type="button" class="btn-shopee-cam-toggle" style="padding: 6px 12px; font-size: 11.5px; font-weight: bold; background: #059669; color: white; border: none; border-radius: 5px; cursor: pointer;">📸 Tự chụp ảnh (Camera)</button>
-            <button type="button" class="btn-shopee-pick-file" style="padding: 6px 12px; font-size: 11.5px; font-weight: bold; background: #0284c7; color: white; border: none; border-radius: 5px; cursor: pointer;">📁 Chọn từ file</button>
-            <input type="file" class="input-shopee-photo-file" accept="image/*" multiple style="display: none;">
-            <span style="font-size: 10.5px; color: #64748b;">(Dán ảnh Ctrl+V)</span>
-          </div>
-
-          <!-- Khung camera preview -->
-          <div class="shopee-cam-box" style="display: none; background: #0f172a; border-radius: 8px; padding: 10px; margin-bottom: 12px; text-align: center;">
-            <video class="shopee-cam-video" autoplay playsinline muted style="width: 100%; max-height: 240px; object-fit: contain; background: #000; border-radius: 4px;"></video>
-            <div style="display: flex; justify-content: center; gap: 10px; margin-top: 8px;">
-              <button type="button" class="btn-shopee-snap-cam" style="padding: 6px 16px; font-size: 12px; font-weight: bold; background: #ef4444; color: white; border: 2px solid white; border-radius: 20px; cursor: pointer;">🔘 BẤM CHỤP</button>
-              <button type="button" class="btn-shopee-stop-cam" style="padding: 6px 12px; font-size: 11px; background: #475569; color: white; border: none; border-radius: 4px; cursor: pointer;">Tắt Cam</button>
-            </div>
-          </div>
-
-          <!-- Danh sách ảnh đã chụp cho đơn này -->
-          <div style="font-size: 11px; font-weight: bold; color: #334155; margin-bottom: 6px;">Ảnh đã lưu cho đơn này:</div>
-          <div class="shopee-photo-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 8px; max-height: 220px; overflow-y: auto; padding: 4px; border: 1px solid #f1f5f9; border-radius: 6px;"></div>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    const closeBtn = modal.querySelector('.btn-shopee-close-photo-modal');
-    const camToggle = modal.querySelector('.btn-shopee-cam-toggle');
-    const pickFile = modal.querySelector('.btn-shopee-pick-file');
-    const fileInput = modal.querySelector('.input-shopee-photo-file');
-    const camBox = modal.querySelector('.shopee-cam-box');
-    const camVideo = modal.querySelector('.shopee-cam-video');
-    const btnSnap = modal.querySelector('.btn-shopee-snap-cam');
-    const btnStop = modal.querySelector('.btn-shopee-stop-cam');
-    const photoGrid = modal.querySelector('.shopee-photo-grid');
-
-    const closeModal = () => {
-      if (shopeeCameraStream) {
-        shopeeCameraStream.getTracks().forEach(t => t.stop());
-        shopeeCameraStream = null;
-      }
-      modal.remove();
-    };
-
-    closeBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
-    });
-
-    const renderPhotos = async () => {
-      const res = await chrome.storage.local.get(['hangHoanPhotos']);
-      const allPhotos = Array.isArray(res?.hangHoanPhotos) ? res.hangHoanPhotos : [];
-      const orderPhotos = allPhotos.filter(p => {
-        const pOrder = (p.orderId || "").toLowerCase();
-        const pTrk = (p.trackingNum || "").toLowerCase();
-        return (orderId && pOrder === orderId.toLowerCase()) || (tracking && pTrk === tracking.toLowerCase());
-      });
-
-      if (!orderPhotos.length) {
-        photoGrid.innerHTML = '<div style="grid-column: 1/-1; padding: 12px; text-align: center; color: #94a3b8; font-size: 11px;">Chưa có ảnh nào cho đơn này.</div>';
-        return;
-      }
-
-      photoGrid.innerHTML = '';
-      orderPhotos.forEach(p => {
-        const item = document.createElement('div');
-        item.style.cssText = 'position: relative; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; background: #000;';
-        item.innerHTML = `
-          <img src="${p.dataUrl}" style="width: 100%; height: 70px; object-fit: cover; cursor: pointer;">
-          <button type="button" class="del-btn" style="position: absolute; top: 2px; right: 2px; background: rgba(239, 68, 68, 0.85); color: white; border: none; width: 18px; height: 18px; border-radius: 9px; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
-        `;
-        item.querySelector('img').addEventListener('click', () => {
-          const w = window.open("");
-          w.document.write(`<img src="${p.dataUrl}" style="max-width: 100%; height: auto;">`);
-        });
-        item.querySelector('.del-btn').addEventListener('click', async (e) => {
-          e.stopPropagation();
-          if (confirm("Xóa ảnh này?")) {
-            const updated = allPhotos.filter(x => x.id !== p.id);
-            await chrome.storage.local.set({ hangHoanPhotos: updated });
-            renderPhotos();
-          }
-        });
-        photoGrid.appendChild(item);
-      });
-    };
-
-    renderPhotos();
-
-    // Camera toggle
-    camToggle.addEventListener('click', async () => {
-      if (camBox.style.display === 'block') {
-        if (shopeeCameraStream) {
-          shopeeCameraStream.getTracks().forEach(t => t.stop());
-          shopeeCameraStream = null;
-        }
-        camBox.style.display = 'none';
-      } else {
-        camBox.style.display = 'block';
-        try {
-          shopeeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        } catch (e) {
-          try {
-            shopeeCameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-          } catch (e2) {
-            alert("Không thể mở Camera: " + (e2.message || "Lỗi quyền"));
-            camBox.style.display = 'none';
-            return;
-          }
-        }
-        camVideo.srcObject = shopeeCameraStream;
-        camVideo.play();
-      }
-    });
-
-    btnStop.addEventListener('click', () => {
-      if (shopeeCameraStream) {
-        shopeeCameraStream.getTracks().forEach(t => t.stop());
-        shopeeCameraStream = null;
-      }
-      camBox.style.display = 'none';
-    });
-
-    btnSnap.addEventListener('click', async () => {
-      if (!camVideo.videoWidth) return;
-      const canvas = document.createElement('canvas');
-      canvas.width = camVideo.videoWidth;
-      canvas.height = camVideo.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(camVideo, 0, 0);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
-      const res = await chrome.storage.local.get(['hangHoanPhotos']);
-      const list = Array.isArray(res?.hangHoanPhotos) ? res.hangHoanPhotos : [];
-      list.unshift({
-        id: 'hh_img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        orderId: orderId,
-        trackingNum: tracking,
-        dataUrl: dataUrl,
-        fileName: `snap_${orderId || 'don'}_${Date.now()}.jpg`,
-        createdAt: Date.now(),
-        source: 'camera'
-      });
-      await chrome.storage.local.set({ hangHoanPhotos: list });
-      renderPhotos();
-    });
-
-    pickFile.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', async (e) => {
-      const files = Array.from(e.target.files || []);
-      if (!files.length) return;
-      const res = await chrome.storage.local.get(['hangHoanPhotos']);
-      const list = Array.isArray(res?.hangHoanPhotos) ? res.hangHoanPhotos : [];
-
-      for (const f of files) {
-        const reader = new FileReader();
-        reader.onload = async (ev) => {
-          list.unshift({
-            id: 'hh_img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-            orderId: orderId,
-            trackingNum: tracking,
-            dataUrl: ev.target.result,
-            fileName: f.name || `file_${Date.now()}.jpg`,
-            createdAt: Date.now(),
-            source: 'file'
-          });
-          await chrome.storage.local.set({ hangHoanPhotos: list });
-          renderPhotos();
-        };
-        reader.readAsDataURL(f);
-      }
-      fileInput.value = '';
-    });
-
-    // Paste listener inside modal
-    modal.addEventListener('paste', async (e) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.indexOf('image') !== -1) {
-          e.preventDefault();
-          const file = items[i].getAsFile();
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = async (ev) => {
-              const res = await chrome.storage.local.get(['hangHoanPhotos']);
-              const list = Array.isArray(res?.hangHoanPhotos) ? res.hangHoanPhotos : [];
-              list.unshift({
-                id: 'hh_img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-                orderId: orderId,
-                trackingNum: tracking,
-                dataUrl: ev.target.result,
-                fileName: `paste_${orderId || 'don'}_${Date.now()}.jpg`,
-                createdAt: Date.now(),
-                source: 'paste'
-              });
-              await chrome.storage.local.set({ hangHoanPhotos: list });
-              renderPhotos();
-            };
-            reader.readAsDataURL(file);
-          }
-        }
-      }
-    });
-  }
 
   function renderReturnInfoCopyButtons() {
     const href = (window.location.href || "").toLowerCase();
@@ -10599,20 +10372,17 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       }
       container.appendChild(btnCopy);
 
+      const btnTra = createActionBtn("Trả", "#3b82f6", () => handleDhHoanAction("Trả", orderIdEl, btnTra));
+      container.appendChild(btnTra);
+
       const btnHuy = createActionBtn("Hủy", "#ef4444", () => handleDhHoanAction("Hủy", orderIdEl, btnHuy));
       container.appendChild(btnHuy);
 
       const btnHoan = createActionBtn("Hoàn", "#f59e0b", () => handleDhHoanAction("Hoàn", orderIdEl, btnHoan));
       container.appendChild(btnHoan);
 
-      const btnTra = createActionBtn("Trả", "#3b82f6", () => handleDhHoanAction("Trả", orderIdEl, btnTra));
-      container.appendChild(btnTra);
-
       const btnUpdate = createActionBtn("Cập nhật", "#64748b", () => handleDhHoanAction("Cập nhật", orderIdEl, btnUpdate));
       container.appendChild(btnUpdate);
-
-      const btnPhoto = createActionBtn("📸 Ảnh", "#8b5cf6", () => openShopeeReturnPhotoModal(data || { orderId: directOrderId }));
-      container.appendChild(btnPhoto);
 
       // Gắn cụm nút ra ngoài thẻ link (nếu orderIdEl nằm trong thẻ <a>) để tránh kích hoạt link sản phẩm
       const linkParent = orderIdEl.tagName === 'A' ? orderIdEl : orderIdEl.closest('a');
