@@ -5665,22 +5665,11 @@ const switchToTab = (tabId) => {
   };
 
 document.querySelectorAll(".tab-btn").forEach((tabButton) => {
-  tabButton.addEventListener("click", (e) => {
-    if (tabButton.id === "btn-open-web-bce") {
-      e.stopPropagation();
-      const url = chrome.runtime.getURL("index.html");
-      chrome.tabs.create({ url });
-      return;
-    }
+  tabButton.addEventListener("click", () => {
     if (tabButton.dataset.tab) {
       switchToTab(tabButton.dataset.tab);
     }
   });
-});
-
-document.getElementById("btn-open-bce-fullscreen")?.addEventListener("click", () => {
-  const url = chrome.runtime.getURL("index.html");
-  chrome.tabs.create({ url });
 });
 
 
