@@ -48,7 +48,9 @@ function bingProxyPlugin() {
 
 const isSingleFile = process.env.SINGLE_FILE === 'true';
 
+// Nguồn web nằm trong web/, build ra dist/ (extension mở dist/index.html)
 export default defineConfig({
+  root: path.resolve(__dirname, 'web'),
   base: './',
   plugins: [
     react(),
@@ -61,16 +63,26 @@ export default defineConfig({
     }
   },
   build: {
+    outDir: path.resolve(__dirname, isSingleFile ? 'dist-standalone' : 'dist'),
+    emptyOutDir: true,
     target: 'esnext',
     assetsInlineLimit: isSingleFile ? 100000000 : 4096,
     chunkSizeWarningLimit: 100000000,
     cssCodeSplit: false,
     rollupOptions: {
-      input: path.resolve(__dirname, 'template.html'),
+      input: path.resolve(__dirname, 'web/index.html'),
+      output: {
+        // Tên file cố định để mỗi lần build không sinh file mới trong git
+        entryFileNames: 'assets/app.js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name][extname]'
+      }
     }
   },
   server: {
     port: 5173,
-    host: true
+    host: true,
+    // Cho phép web import shared/google-config.js nằm ngoài thư mục web/
+    fs: { allow: [path.resolve(__dirname)] }
   }
 });

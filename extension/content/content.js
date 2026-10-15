@@ -1,0 +1,18096 @@
+
+function downloadExcelFileBypass(wb, filename) {
+  const base64 = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.addEventListener('click', (e) => e.stopPropagation());
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 500);
+}
+
+(function () {
+  if (window.__shopeeQlspLoaded) {
+    return;
+  }
+
+  window.__shopeeQlspLoaded = true;
+
+  const ADD_PRODUCT_TEXT = "Th\u00eam S\u1ea3n Ph\u1ea9m";
+  const ADD_PRODUCT_URL = "https://banhang.shopee.vn/portal/product/new";
+  const IMAGE_UPLOAD_TEXT = "Th\u00eam h\u00ecnh \u1ea3nh";
+  const ADD_VARIATION_TEXT = "Th\u00eam nh\u00f3m ph\u00e2n lo\u1ea1i";
+  const PRODUCT_GALLERY_STYLE_ID = "shopee-qlsp-product-gallery-style";
+  const SCROLL_BUTTONS_ID = "shopee-qlsp-scroll-buttons";
+  const SCROLL_BUTTONS_STYLE_ID = "shopee-qlsp-scroll-buttons-style";
+  const AWB_DOWNLOAD_BUTTON_ID = "shopee-qlsp-awb-download";
+  const AWB_DOWNLOAD_STYLE_ID = "shopee-qlsp-awb-download-style";
+  const INCOME_TO_THU_CHI_BUTTON_ID = "shopee-qlsp-income-to-thu-chi";
+  const INCOME_TO_THU_CHI_SUMMARY_ID = "shopee-qlsp-income-summary";
+  const INCOME_TO_THU_CHI_TABLE_ID = "shopee-qlsp-income-table";
+  const INCOME_TO_THU_CHI_STYLE_ID = "shopee-qlsp-income-to-thu-chi-style";
+  const INCOME_ROW_ADD_BUTTON_CLASS = "shopee-qlsp-income-row-add";
+  const PRODUCT_LIST_STYLE_ID = "shopee-qlsp-product-list-style";
+  const PRODUCT_LIST_CLASS = "shopee-qlsp-product-list-page";
+  const PRODUCT_LIST_QUICK_ACTION_CLASS = "shopee-qlsp-product-list-actions";
+  const PRODUCT_LIST_ACTIONS = ["Xem tr\u01b0\u1edbc", "\u0110\u1ea9y s\u1ea3n ph\u1ea9m"];
+  const PRODUCT_LIST_COPY_LINK_TEXT = "Copy link";
+  const PRODUCT_LIST_COPY_NAME_TEXT = "Copy tên";
+  const PRODUCT_LIST_COPY_ID_TEXT = "Copy ID";
+  const PRODUCT_LIST_OPEN_KM_TEXT = "Mở KM";
+  const ORDER_SN_COPY_STYLE_ID = "shopee-qlsp-order-sn-copy-style";
+  const ORDER_SN_COPY_BUTTON_CLASS = "shopee-qlsp-order-sn-copy";
+  const WEIGHT_STYLE_ID = "shopee-qlsp-weight-style";
+  const WEIGHT_WRAP_CLASS = "shopee-qlsp-weight-actions";
+  const WEIGHT_VALUES = [2000, 3000, 4000, 5000];
+  const VARIATION_STYLE_ID = "shopee-qlsp-variation-style";
+  const VARIATION_WRAP_CLASS = "shopee-qlsp-variation-actions";
+  const VARIATION_VALUES = ["Ph\u00e2n lo\u1ea1i", "M\u00e0u"];
+  const DESCRIPTION_DROP_STYLE_ID = "shopee-qlsp-description-drop-style";
+  let cachedProductListShopId = "";
+  const DEFAULT_CHAT_KHACH_MESSAGE = `Shop cảm ơn Quý khách đã ủng hộ ạ ❤️ Shop sẽ lên đơn và gửi hàng nhanh nhất có thể. Mong Quý khách để ý điện thoại để nhận hàng giúp shop nhé! 🥰
+Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tốt lành nhé! `;
+
+  // ============================================================
+  // SHOPEE FETCH INTERCEPTOR - Lấy ảnh bằng cơ chế API thật
+  // ============================================================
+  const SPLQ_INTERCEPT_CHANNEL = 'SPLQ_FETCH_INTERCEPTED';
+  const interceptedApiData = {}; // { url: { url, headers, data } }
+  const interceptedByProduct = {}; // { "itemId-shopId": [...data] }
+
+  // Lắng nghe data từ interceptor script (đã được nạp qua manifest.json)
+  window.addEventListener('message', (e) => {
+    if (!e.data || e.data.channel !== SPLQ_INTERCEPT_CHANNEL) return;
+    const { url, headers, data } = e.data;
+    if (!url || !data) return;
+
+    // Lưu vào cache toàn bộ
+    interceptedApiData[url] = { url, headers, data };
+
+    // Nếu data chứa item, lưu theo itemId-shopId
+    let itemId, shopId;
+    if (data?.data?.item?.item_id) {
+      itemId = data.data.item.item_id;
+      shopId = data.data.item.shop_id;
+    } else if (data?.item?.item_id) {
+      itemId = data.item.item_id;
+      shopId = data.item.shop_id;
+    } else if (data?.data?.item_id) {
+      itemId = data.data.item_id;
+      shopId = data.data.shop_id;
+    }
+    
+    if (itemId && shopId) {
+      const key = `${itemId}-${shopId}`;
+      if (!interceptedByProduct[key]) interceptedByProduct[key] = [];
+      interceptedByProduct[key].push({ url, headers, data });
+    }
+  });
+
+  function callShopeeApiViaInterceptor(url, headers = {}) {
+    return new Promise((resolve) => {
+      const messageId = Math.random().toString(36).substring(2);
+      const handler = (e) => {
+        if (e.data && e.data.channel === 'SPLQ_FETCH_REPLY' && e.data.messageId === messageId) {
+          window.removeEventListener('message', handler);
+          resolve({ ok: !!e.data.data, data: e.data.data, error: e.data.error });
+        }
+      };
+      window.addEventListener('message', handler);
+      window.postMessage({ channel: 'SPLQ_FETCH_REQUEST', messageId, url, headers }, '*');
+      setTimeout(() => {
+        window.removeEventListener('message', handler);
+        resolve({ ok: false, error: 'timeout' });
+      }, 10000);
+    });
+  }
+
+  /**
+   * Gọi Shopee API /api/v4/pdp/get_pc với credentials thật từ trang.
+   * Trả về dữ liệu sản phẩm đầy đủ gồm ảnh, mô tả, thuộc tính.
+   */
+  async function fetchShopeeProductByApi(itemId, shopId) {
+    // 1. Thử dùng data đã intercepted (từ content-start.js hoặc content.js)
+    const key = `${itemId}-${shopId}`;
+    const cachedObj = (window.splqInterceptedByProduct && window.splqInterceptedByProduct[key]) || interceptedByProduct[key];
+    if (cachedObj && cachedObj.length > 0) {
+      // Tìm request chứa dữ liệu sản phẩm hợp lệ (có trường images hoặc image_urls)
+      const cached = cachedObj.find(c => {
+        const item = c.data?.data?.item || c.data?.item || c.data?.data || c.data;
+        return item && (item.images || item.image_urls);
+      });
+      if (cached) {
+        if (cached.data?.data) return { ok: true, data: cached.data.data, source: 'intercepted_v4' };
+        if (cached.data?.item) return { ok: true, data: cached.data.item, source: 'intercepted_v2' };
+      }
+    }
+
+    // Lấy header cũ nếu có (thường là lấy từ bất kỳ request nào để có header base)
+    const baseHeaders = {
+      'accept': 'application/json',
+      'af-ac-enc-dat': null,
+      'af-ac-enc-sz-token': '',
+      'content-type': 'application/json'
+    };
+
+    // 2. Gọi API thông qua script interceptor (chạy ở main world)
+    const apiUrl = `https://shopee.vn/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`;
+    try {
+      const res = await callShopeeApiViaInterceptor(apiUrl, baseHeaders);
+      if (res.ok && res.data && (res.data.error === 0 || res.data.error === null)) {
+        if (res.data.data) {
+          return { ok: true, data: res.data.data, source: 'main_world_fetch_v4' };
+        } else if (res.data.item) {
+          return { ok: true, data: res.data.item, source: 'main_world_fetch_v4_item' };
+        }
+      }
+    } catch (err) {
+      console.warn('[SPLQ] Main world API call failed:', err.message);
+    }
+
+    // 3. Fallback: thử API v2
+    try {
+      const res2 = await fetch(`https://shopee.vn/api/v2/item/get?itemid=${itemId}&shopid=${shopId}`, {
+        credentials: 'include',
+        headers: { 'accept': 'application/json' }
+      });
+      if (res2.ok) {
+        const json2 = await res2.json();
+        if ((json2.error === 0 || json2.error === null) && json2?.item) {
+          return { ok: true, data: json2.item, source: 'api_v2' };
+        }
+      }
+    } catch (err2) {
+      console.warn('[SPLQ] API v2 call failed:', err2.message);
+    }
+    return { ok: false, data: null, source: 'failed' };
+  }
+
+  /**
+   * Chuyển image hash/id thành URL đầy đủ Shopee CDN.
+   * Shopee dùng dạng: https://down-vn.img.susercontent.com/file/<hash>
+   */
+  function shopeeImageHashToUrl(hash) {
+    if (!hash) return null;
+    if (hash.startsWith('http')) return hash;
+    return `https://down-vn.img.susercontent.com/file/${hash}`;
+  }
+
+  /**
+   * Trích xuất toàn bộ danh sách ảnh từ data API Shopee.
+   */
+  function extractImagesFromApiData(data) {
+    const images = [];
+    const item = data?.item || data; 
+    
+    // 1. Lấy video (nếu có)
+    const videos = item?.video_info_list || [];
+    videos.forEach((vid, idx) => {
+       const vidUrl = vid.default_format?.url || vid.video_url;
+       if (vidUrl) {
+         images.push({ url: vidUrl, fileName: `video-${idx + 1}.mp4`, type: 'video' });
+       }
+    });
+
+    // 2. Lấy ảnh chính (main)
+    const mainImages = item?.images || item?.image_urls || [];
+    mainImages.forEach((hash, idx) => {
+      const url = typeof hash === 'string' ? shopeeImageHashToUrl(hash) : hash;
+      if (url) images.push({ url, fileName: `main-${idx + 1}.jpg`, type: 'main' });
+    });
+
+    // 3. Lấy ảnh phân loại hàng (variation/models)
+    const variationImages = [];
+    if (item?.tier_variations && item.tier_variations.length > 0) {
+      const tier0 = item.tier_variations[0];
+      if (tier0.images && tier0.images.length > 0) {
+        tier0.images.forEach((hash, idx) => {
+           if (hash) {
+             const optName = (tier0.options && tier0.options[idx]) ? tier0.options[idx] : `opt-${idx+1}`;
+             const cleanName = optName.replace(/[/\\?%*:|"<>]/g, '-'); // tránh lỗi tên file
+             variationImages.push({ hash, name: cleanName });
+           }
+        });
+      }
+    } else if (item?.models && item.models.length > 0) {
+      item.models.forEach((model, idx) => {
+        if (model.image || model.image_id) {
+           const hash = model.image || model.image_id;
+           const cleanName = (model.name || `model-${idx+1}`).replace(/[/\\?%*:|"<>]/g, '-');
+           variationImages.push({ hash, name: cleanName });
+        }
+      });
+    }
+
+    variationImages.forEach((v) => {
+       const url = shopeeImageHashToUrl(v.hash);
+       if (url) images.push({ url, fileName: `phanloai-${v.name}.jpg`, type: 'variation' });
+    });
+
+    // 4. Lấy ảnh mô tả (description)
+    const descInfo = item?.description_info;
+    const descImages = [];
+    if (descInfo?.extended_description?.field_list) {
+      descInfo.extended_description.field_list.forEach(field => {
+        const imageInfo = field.image_info || field.info;
+        if (imageInfo && imageInfo.image_id) {
+           descImages.push(shopeeImageHashToUrl(imageInfo.image_id));
+        } else if ((field.type === 'image' || field.field_type === 'image') && field.text) {
+           descImages.push(shopeeImageHashToUrl(field.text));
+        }
+      });
+    } 
+    // Fallback nếu API dùng cấu trúc image_info trực tiếp
+    if (descInfo?.image_info) {
+       descInfo.image_info.forEach(img => {
+          if (img.image_id) descImages.push(shopeeImageHashToUrl(img.image_id));
+       });
+    }
+
+    descImages.forEach((url, idx) => {
+       if (url) images.push({ url, fileName: `description-${idx + 1}.jpg`, type: 'description' });
+    });
+
+    return images;
+  }
+
+  /**
+   * Trích xuất thuộc tính sản phẩm từ data API.
+   */
+  function extractAttributesFromApiData(data) {
+    const attrs = {};
+    const attrList = data?.attributes || data?.tier_variations || [];
+    attrList.forEach(attr => {
+      const name = attr.name || attr.display_name || attr.attribute_name;
+      const value = attr.value || (attr.options && attr.options[0]);
+      if (name && value) attrs[name] = value;
+    });
+    return attrs;
+  }
+
+  function injectProductGalleryStyle() {
+    if (document.getElementById(PRODUCT_GALLERY_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = PRODUCT_GALLERY_STYLE_ID;
+    style.textContent = `
+      section._OguPS .airUhU {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: flex-start !important;
+        gap: 8px !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+        transform: none !important;
+      }
+
+      section._OguPS .airUhU .UBG7wZ {
+        flex: 0 0 82px !important;
+        width: 82px !important;
+        height: 82px !important;
+        margin: 0 !important;
+        transform: none !important;
+      }
+
+      section._OguPS .airUhU .jA1mTx,
+      section._OguPS .airUhU .YM40Nc,
+      section._OguPS .airUhU picture,
+      section._OguPS .airUhU img.raRnQV {
+        width: 82px !important;
+        height: 82px !important;
+      }
+
+      section._OguPS.shopee-qlsp-gallery-ready .airUhU button.CAvqYR,
+      section._OguPS.shopee-qlsp-gallery-ready .airUhU button.lWmpR1 {
+        display: none !important;
+      }
+
+      section._OguPS .shopee-qlsp-full-gallery {
+        display: grid !important;
+        grid-template-columns: repeat(5, 82px) !important;
+        gap: 8px !important;
+        width: 100% !important;
+        margin-top: 10px !important;
+        padding-bottom: 8px !important;
+      }
+
+      section._OguPS .shopee-qlsp-full-gallery img {
+        width: 82px !important;
+        height: 82px !important;
+        border: 1px solid #e5e5e5 !important;
+        object-fit: cover !important;
+        background: #fff !important;
+        cursor: pointer !important;
+      }
+
+      section._OguPS .shopee-qlsp-full-gallery img:hover {
+        border-color: #ee4d2d !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  injectProductGalleryStyle();
+
+  function injectDescriptionDropStyle() {
+    if (document.getElementById(DESCRIPTION_DROP_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = DESCRIPTION_DROP_STYLE_ID;
+    style.textContent = `
+      .shopee-qlsp-description-drop-ready {
+        outline: 2px dashed transparent !important;
+        outline-offset: -8px !important;
+        transition: outline-color 0.16s ease, background-color 0.16s ease !important;
+      }
+
+      .shopee-qlsp-description-drag-over {
+        outline-color: #ee4d2d !important;
+        background-color: rgba(238, 77, 45, 0.06) !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function injectScrollButtonsStyle() {
+    if (document.getElementById(SCROLL_BUTTONS_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = SCROLL_BUTTONS_STYLE_ID;
+    style.textContent = `
+      #${SCROLL_BUTTONS_ID} {
+        position: fixed !important;
+        right: 18px !important;
+        bottom: 92px !important;
+        z-index: 2147483647 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 6px !important;
+        pointer-events: auto !important;
+      }
+
+      #${SCROLL_BUTTONS_ID} button {
+        width: 42px !important;
+        height: 34px !important;
+        border: 0 !important;
+        border-radius: 50% !important;
+        color: #fff !important;
+        background: #2673dd;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24) !important;
+        font: 700 11px/1 Arial, sans-serif !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+
+      #${SCROLL_BUTTONS_ID} button:hover {
+        opacity: 0.88 !important;
+      }
+
+      #btn-fill-stock-1000-sidebar {
+        background: #ea580c !important;
+        background-color: #ea580c !important;
+      }
+      #btn-fill-stock-1000-sidebar:hover {
+        background: #c2410c !important;
+      }
+
+      #btn-fill-stock-0-sidebar {
+        background: #f97316 !important;
+        background-color: #f97316 !important;
+      }
+      #btn-fill-stock-0-sidebar:hover {
+        background: #ea580c !important;
+      }
+
+      #btn-save-product-sheet-sidebar {
+        background: #2563eb !important;
+        background-color: #2563eb !important;
+      }
+      #btn-save-product-sheet-sidebar:hover {
+        background: #1d4ed8 !important;
+      }
+
+      #btn-preview-product-sidebar {
+        background: #0284c7 !important;
+        background-color: #0284c7 !important;
+      }
+      #btn-preview-product-sidebar:hover {
+        background: #0369a1 !important;
+      }
+
+      #btn-pre-order-sidebar {
+        background: #8b5cf6 !important;
+        background-color: #8b5cf6 !important;
+      }
+      #btn-pre-order-sidebar:hover {
+        background: #7c3aed !important;
+      }
+      #btn-disable-pre-order-sidebar {
+        background: #64748b !important;
+        background-color: #64748b !important;
+      }
+      #btn-disable-pre-order-sidebar:hover {
+        background: #475569 !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function isScrollableElement(element) {
+    if (!element || element === document.documentElement || element === document.body) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(element);
+    const overflowY = style.overflowY;
+
+    return (
+      ["auto", "scroll"].includes(overflowY) &&
+      element.scrollHeight > element.clientHeight + 80 &&
+      isVisible(element)
+    );
+  }
+
+  function findBestScrollableElement() {
+    const candidates = Array.from(document.querySelectorAll("main, [class*='scroll'], [class*='container'], [class*='content'], div"))
+      .filter(isScrollableElement)
+      .sort((left, right) => {
+        const leftRect = left.getBoundingClientRect();
+        const rightRect = right.getBoundingClientRect();
+        const leftArea = leftRect.width * leftRect.height;
+        const rightArea = rightRect.width * rightRect.height;
+
+        return rightArea - leftArea;
+      });
+
+    return candidates[0] || document.scrollingElement || document.documentElement;
+  }
+
+  function scrollPageBy(direction) {
+    const distance = Math.max(360, Math.round(window.innerHeight * 0.82)) * direction;
+
+    if (document.documentElement.scrollHeight > window.innerHeight + 10) {
+      window.scrollBy({ top: distance, behavior: "smooth" });
+      return;
+    }
+
+    const target = findBestScrollableElement();
+
+    if (target === document.scrollingElement || target === document.documentElement || target === document.body) {
+      window.scrollBy({ top: distance, behavior: "smooth" });
+      return;
+    }
+
+    target.scrollBy({ top: distance, behavior: "smooth" });
+  }
+
+  function scrollPageTo(position) {
+    if (document.documentElement.scrollHeight > window.innerHeight + 10) {
+      window.scrollTo({ top: position === 'top' ? 0 : document.documentElement.scrollHeight, behavior: "smooth" });
+      return;
+    }
+    const target = findBestScrollableElement();
+    if (target === document.scrollingElement || target === document.documentElement || target === document.body) {
+      window.scrollTo({ top: position === 'top' ? 0 : document.documentElement.scrollHeight, behavior: "smooth" });
+      return;
+    }
+    target.scrollTo({ top: position === 'top' ? 0 : target.scrollHeight, behavior: "smooth" });
+  }
+
+  function removeOldScrollButtons(keepCurrent = false) {
+    const oldLabels = new Set(["TOP", "UP", "DN", "BOT", "XLS", "â†‘", "â†“", "â‡ˆ", "â‡Š", "↑", "↓", "⇈", "⇊"]);
+
+    if (!keepCurrent) {
+      document.querySelectorAll(`#${SCROLL_BUTTONS_ID}, [data-shopee-qlsp-scroll-buttons="1"]`).forEach(element => element.remove());
+    }
+    document.querySelectorAll("button").forEach(button => {
+      const text = normalizeText(button.textContent || button.innerHTML);
+      const parent = button.parentElement;
+      if (!parent || parent.id === SCROLL_BUTTONS_ID) return;
+      if (!oldLabels.has(text)) return;
+
+      const style = window.getComputedStyle(parent);
+      const parentButtons = Array.from(parent.querySelectorAll("button"));
+      const allLookLikeScrollButtons = parentButtons.length > 0 && parentButtons.every(item => oldLabels.has(normalizeText(item.textContent || item.innerHTML)));
+
+      if ((style.position === "fixed" || parent.style.position === "fixed") && allLookLikeScrollButtons) {
+        parent.remove();
+      }
+    });
+  }
+
+  function findPreOrderRadio() {
+    // 1. Tìm theo nhãn / span có chữ "Đồng ý"
+    const candidateLabels = Array.from(document.querySelectorAll('label.eds-radio, .eds-radio, label'));
+    for (const lbl of candidateLabels) {
+      if (lbl.closest('.eds-modal, .eds-dialog, .shopee-modal')) continue;
+      const text = (lbl.textContent || '').trim();
+      if (text === 'Đồng ý' || text.includes('Đồng ý')) {
+        const input = lbl.querySelector('input.eds-radio__input, input[type="radio"]') || (lbl.tagName === 'INPUT' ? lbl : null);
+        return { label: lbl, input };
+      }
+    }
+
+    // 2. Tìm theo input[type="radio"][value="true"]
+    const trueInputs = Array.from(document.querySelectorAll('input.eds-radio__input[value="true"], input[type="radio"][value="true"]'))
+      .filter(inp => !inp.closest('.eds-modal, .eds-dialog, .shopee-modal'));
+    for (const inp of trueInputs) {
+      const formItem = inp.closest('.product-edit-form-item, .form-item, .eds-form-item, div');
+      const itemText = formItem ? formItem.textContent : '';
+      if (itemText.includes('Đồng ý') || itemText.includes('đặt trước') || itemText.includes('chuẩn bị hàng')) {
+        return { label: inp.closest('label') || inp.parentElement || inp, input: inp };
+      }
+    }
+    if (trueInputs.length > 0) {
+      return { label: trueInputs[0].closest('label') || trueInputs[0].parentElement || trueInputs[0], input: trueInputs[0] };
+    }
+
+    return null;
+  }
+
+  function findDisablePreOrderRadio() {
+    // 1. Từ radio "Đồng ý", tìm radio "Không" cùng nhóm
+    const preOrderObj = findPreOrderRadio();
+    if (preOrderObj && preOrderObj.label) {
+      const parentGroup = preOrderObj.label.closest('.eds-radio-group, .product-edit-form-item, .form-item, .eds-form-item, div');
+      if (parentGroup) {
+        const radiosInGroup = Array.from(parentGroup.querySelectorAll('label.eds-radio, .eds-radio, label'));
+        for (const lbl of radiosInGroup) {
+          if (lbl === preOrderObj.label) continue;
+          const text = (lbl.textContent || '').trim();
+          if (text === 'Không' || text.includes('Không') || text.startsWith('Không')) {
+            const input = lbl.querySelector('input.eds-radio__input, input[type="radio"]') || (lbl.tagName === 'INPUT' ? lbl : null);
+            return { label: lbl, input };
+          }
+        }
+        const falseInput = parentGroup.querySelector('input.eds-radio__input[value="false"], input[type="radio"][value="false"], input[value="0"]');
+        if (falseInput) {
+          return { label: falseInput.closest('label') || falseInput.parentElement || falseInput, input: falseInput };
+        }
+      }
+    }
+
+    // 2. Tìm theo nhãn / span có chữ "Không" nằm trong khối Hàng đặt trước
+    const candidateLabels = Array.from(document.querySelectorAll('label.eds-radio, .eds-radio, label'));
+    for (const lbl of candidateLabels) {
+      if (lbl.closest('.eds-modal, .eds-dialog, .shopee-modal')) continue;
+      const text = (lbl.textContent || '').trim();
+      if (text === 'Không' || text.startsWith('Không')) {
+        const formItem = lbl.closest('.product-edit-form-item, .form-item, .eds-form-item, .eds-form-group, div');
+        const itemText = formItem ? formItem.textContent : '';
+        if (itemText.includes('đặt trước') || itemText.includes('chuẩn bị hàng') || itemText.includes('Đồng ý')) {
+          const input = lbl.querySelector('input.eds-radio__input, input[type="radio"]') || (lbl.tagName === 'INPUT' ? lbl : null);
+          return { label: lbl, input };
+        }
+      }
+    }
+
+    // 3. Tìm theo input[type="radio"][value="false"] nằm trong mục đặt trước
+    const falseInputs = Array.from(document.querySelectorAll('input.eds-radio__input[value="false"], input[type="radio"][value="false"]'))
+      .filter(inp => !inp.closest('.eds-modal, .eds-dialog, .shopee-modal'));
+    for (const inp of falseInputs) {
+      const formItem = inp.closest('.product-edit-form-item, .form-item, .eds-form-item, div');
+      const itemText = formItem ? formItem.textContent : '';
+      if (itemText.includes('Không') || itemText.includes('đặt trước') || itemText.includes('chuẩn bị hàng')) {
+        return { label: inp.closest('label') || inp.parentElement || inp, input: inp };
+      }
+    }
+    if (falseInputs.length > 0) {
+      return { label: falseInputs[0].closest('label') || falseInputs[0].parentElement || falseInputs[0], input: falseInputs[0] };
+    }
+
+    return null;
+  }
+
+  async function activatePreOrderRadio(radioObj) {
+    if (!radioObj) return false;
+    const { label, input } = radioObj;
+
+    try {
+      label.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 200));
+
+    const indicator = label.querySelector ? label.querySelector('.eds-radio__indicator') : null;
+    const target = indicator || label;
+
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
+      try {
+        target.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true }));
+      } catch (e) {}
+    });
+    if (target.click) target.click();
+
+    if (label && label !== target) {
+      ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(evt => {
+        try {
+          label.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true }));
+        } catch (e) {}
+      });
+      if (label.click) label.click();
+    }
+
+    if (input) {
+      if (!input.checked) input.checked = true;
+      try {
+        input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+      } catch (e) {}
+    }
+
+    return true;
+  }
+
+  async function findPreOrderDaysInput(radioObj, maxWaitMs = 2500) {
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+      // 1. Trong cùng form item hoặc container của radio
+      if (radioObj && radioObj.label) {
+        const container = radioObj.label.closest('.product-edit-form-item, .form-item, .eds-form-item, .eds-form-group, .item-content') || radioObj.label.parentElement?.parentElement;
+        if (container) {
+          const inps = Array.from(container.querySelectorAll('input.eds-input__input, input[type="text"]')).filter(el => {
+            const st = window.getComputedStyle(el);
+            return st.display !== 'none' && st.visibility !== 'hidden' && el.type !== 'radio';
+          });
+          if (inps.length > 0) {
+            const match = inps.find(i => i.getAttribute('placeholder') === '0' || i.getAttribute('modelvalue') !== null || i.classList.contains('eds-input__input'));
+            return match || inps[0];
+          }
+
+          let nextEl = container.nextElementSibling;
+          let count = 0;
+          while (nextEl && count < 3) {
+            const sibInps = Array.from(nextEl.querySelectorAll('input.eds-input__input, input[type="text"]')).filter(el => {
+              const st = window.getComputedStyle(el);
+              return st.display !== 'none' && st.visibility !== 'hidden' && el.type !== 'radio';
+            });
+            if (sibInps.length > 0) return sibInps[0];
+            nextEl = nextEl.nextElementSibling;
+            count++;
+          }
+        }
+      }
+
+      // 2. Tìm input có placeholder="0"
+      const p0 = Array.from(document.querySelectorAll('input.eds-input__input[placeholder="0"], input[placeholder="0"]')).filter(el => {
+        const st = window.getComputedStyle(el);
+        return st.display !== 'none' && st.visibility !== 'hidden' && !el.closest('.eds-modal, .eds-dialog, .shopee-modal');
+      });
+      if (p0.length > 0) {
+        for (const inp of p0) {
+          const rowText = inp.closest('.product-edit-form-item, .eds-form-item, div')?.textContent || '';
+          if (rowText.includes('ngày') || rowText.includes('đặt trước') || rowText.includes('Đồng ý') || rowText.includes('chuẩn bị')) {
+            return inp;
+          }
+        }
+        return p0[0];
+      }
+
+      // 3. Tìm bất kỳ ô text input nào nằm gần chữ "ngày"
+      const allText = Array.from(document.querySelectorAll('input.eds-input__input, input[type="text"]')).filter(el => {
+        const st = window.getComputedStyle(el);
+        return st.display !== 'none' && st.visibility !== 'hidden' && el.type !== 'radio' && !el.closest('.eds-modal, .eds-dialog, .shopee-modal');
+      });
+      for (const inp of allText) {
+        const rowText = inp.closest('.product-edit-form-item, .eds-form-item, .form-item, div')?.textContent || '';
+        if (rowText.includes('ngày') && (rowText.includes('đặt trước') || rowText.includes('Đồng ý') || rowText.includes('chuẩn bị'))) {
+          return inp;
+        }
+      }
+
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return null;
+  }
+
+  async function fillPreOrderDays(input, val = '15') {
+    if (!input) return false;
+    const textVal = String(val);
+
+    try {
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 100));
+
+    try {
+      if (typeof fillInputLikeUser === 'function') {
+        fillInputLikeUser(input, textVal);
+      }
+    } catch (err) {
+      console.warn("fillInputLikeUser:", err);
+    }
+
+    try {
+      const prototype = Object.getPrototypeOf(input);
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+      if (descriptor?.set) {
+        descriptor.set.call(input, textVal);
+      } else {
+        input.value = textVal;
+      }
+    } catch (e) {
+      input.value = textVal;
+    }
+
+    input.setAttribute("modelvalue", textVal);
+
+    ['keydown', 'keypress', 'keyup'].forEach(evtType => {
+      try {
+        input.dispatchEvent(new KeyboardEvent(evtType, { bubbles: true, cancelable: true, key: textVal.slice(-1) }));
+      } catch (e) {}
+    });
+    input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event('blur', { bubbles: true, composed: true }));
+
+    return true;
+  }
+
+  async function handleApplyPreOrder(targetDays = 15) {
+    if (typeof showTopNotification === 'function') {
+      showTopNotification("⏳ Đang cài đặt Hàng đặt trước...");
+    }
+
+    const radioObj = findPreOrderRadio();
+    if (!radioObj || !radioObj.label) {
+      if (typeof showTopNotification === 'function') {
+        showTopNotification("❌ Không tìm thấy tùy chọn 'Đồng ý' ở mục Hàng đặt trước!", true);
+      }
+      alert("Không tìm thấy tùy chọn 'Đồng ý' của Hàng đặt trước trên trang hiện tại!\nVui lòng đảm bảo bạn đang ở trang chỉnh sửa sản phẩm.");
+      return false;
+    }
+
+    await activatePreOrderRadio(radioObj);
+    await new Promise(r => setTimeout(r, 300));
+
+    const daysInput = await findPreOrderDaysInput(radioObj, 2500);
+    if (!daysInput) {
+      if (typeof showTopNotification === 'function') {
+        showTopNotification("⚠️ Đã chọn 'Đồng ý' nhưng chưa tìm thấy ô điền số ngày!", true);
+      }
+      alert("Đã chọn 'Đồng ý' của Hàng đặt trước, nhưng không tìm thấy ô nhập số ngày!");
+      return false;
+    }
+
+    await fillPreOrderDays(daysInput, targetDays);
+    await new Promise(r => setTimeout(r, 150));
+
+    if (typeof showTopNotification === 'function') {
+      showTopNotification(`✅ Đã bật Hàng đặt trước: Chọn 'Đồng ý' & điền ${targetDays} ngày thành công!`);
+    }
+    return true;
+  }
+
+  async function handleApplyDisablePreOrder() {
+    if (typeof showTopNotification === 'function') {
+      showTopNotification("⏳ Đang tắt Hàng đặt trước (chọn 'Không')...");
+    }
+
+    const radioObj = findDisablePreOrderRadio();
+    if (!radioObj || !radioObj.label) {
+      if (typeof showTopNotification === 'function') {
+        showTopNotification("❌ Không tìm thấy tùy chọn 'Không' ở mục Hàng đặt trước!", true);
+      }
+      alert("Không tìm thấy tùy chọn 'Không' của Hàng đặt trước trên trang hiện tại!\nVui lòng đảm bảo bạn đang ở trang chỉnh sửa sản phẩm.");
+      return false;
+    }
+
+    await activatePreOrderRadio(radioObj);
+    await new Promise(r => setTimeout(r, 200));
+
+    // Xử lý popup xác nhận (nếu Shopee hiển thị modal xác nhận tắt hàng đặt trước)
+    const confirmBtns = Array.from(document.querySelectorAll('.eds-modal .eds-button--primary, .shopee-modal .shopee-button--primary, .eds-dialog .eds-button--primary'));
+    for (const b of confirmBtns) {
+      const text = (b.textContent || '').trim().toLowerCase();
+      if (text.includes('xác nhận') || text.includes('đồng ý') || text.includes('confirm') || text.includes('ok')) {
+        b.click();
+        await new Promise(r => setTimeout(r, 200));
+        break;
+      }
+    }
+
+    if (typeof showTopNotification === 'function') {
+      showTopNotification(`✅ Đã tắt Hàng đặt trước (chọn 'Không' - Hàng có sẵn) thành công!`);
+    }
+    return true;
+  }
+
+  function injectPreOrderInlineButton() {
+    const path = window.location.pathname;
+    const isEdit = path.startsWith("/portal/product/new") || (path.startsWith("/portal/product/") && !path.includes("/list"));
+    if (!isEdit) return;
+
+    const candidateLabels = Array.from(document.querySelectorAll('label.eds-radio, .eds-radio'));
+    for (const lbl of candidateLabels) {
+      if (lbl.closest('.eds-modal, .eds-dialog, .shopee-modal')) continue;
+      const text = (lbl.textContent || '').trim();
+      if (text === 'Đồng ý' || text.includes('Đồng ý')) {
+        const parent = lbl.parentElement;
+        if (parent && !parent.querySelector('.shopee-qlsp-inline-preorder-btn')) {
+          const inlineWrap = document.createElement('span');
+          inlineWrap.className = 'shopee-qlsp-inline-preorder-btn';
+          inlineWrap.style.cssText = 'display: inline-flex !important; gap: 6px !important; margin-left: 10px !important; vertical-align: middle !important;';
+
+          const inlineBtn = document.createElement('button');
+          inlineBtn.type = 'button';
+          inlineBtn.textContent = '⚡ Đặt trước 15 ngày';
+          inlineBtn.title = 'Bấm để tự động chọn Đồng ý và điền 15 ngày';
+          inlineBtn.style.cssText = 'padding: 2px 10px !important; font-size: 11px !important; font-weight: bold !important; background: #8b5cf6 !important; color: white !important; border: 1px solid #7c3aed !important; border-radius: 4px !important; cursor: pointer !important; display: inline-flex !important; align-items: center !important;';
+          inlineBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            inlineBtn.textContent = '⏳';
+            try {
+              await handleApplyPreOrder(15);
+            } finally {
+              inlineBtn.textContent = '⚡ Đặt trước 15 ngày';
+            }
+          };
+
+          const disableBtn = document.createElement('button');
+          disableBtn.type = 'button';
+          disableBtn.textContent = '🚫 Tắt đặt trước';
+          disableBtn.title = 'Bấm để chọn Không (tắt hàng đặt trước)';
+          disableBtn.style.cssText = 'padding: 2px 10px !important; font-size: 11px !important; font-weight: bold !important; background: #64748b !important; color: white !important; border: 1px solid #475569 !important; border-radius: 4px !important; cursor: pointer !important; display: inline-flex !important; align-items: center !important;';
+          disableBtn.onclick = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            disableBtn.textContent = '⏳';
+            try {
+              await handleApplyDisablePreOrder();
+            } finally {
+              disableBtn.textContent = '🚫 Tắt đặt trước';
+            }
+          };
+
+          inlineWrap.appendChild(inlineBtn);
+          inlineWrap.appendChild(disableBtn);
+          parent.appendChild(inlineWrap);
+        }
+        break;
+      }
+    }
+  }
+
+  function injectScrollButtons() {
+    removeOldScrollButtons();
+
+    if (window !== window.top) {
+      return; 
+    }
+
+    injectScrollButtonsStyle();
+
+    const wrap = document.createElement("div");
+    wrap.id = SCROLL_BUTTONS_ID;
+    wrap.dataset.shopeeQlspScrollButtons = "1";
+    wrap.style.zIndex = "2147483647";
+
+    const topButton = document.createElement("button");
+    topButton.type = "button";
+    topButton.title = "Len dau trang";
+    topButton.textContent = "TOP";
+
+    const upButton = document.createElement("button");
+    upButton.type = "button";
+    upButton.title = "Len";
+    upButton.textContent = "UP";
+
+    const downButton = document.createElement("button");
+    downButton.type = "button";
+    downButton.title = "Xuong";
+    downButton.textContent = "DN";
+
+    const bottomButton = document.createElement("button");
+    bottomButton.type = "button";
+    bottomButton.title = "Xuong cuoi trang";
+    bottomButton.textContent = "BOT";
+
+    topButton.addEventListener("click", () => scrollPageTo("top"));
+    upButton.addEventListener("click", () => scrollPageBy(-1));
+    downButton.addEventListener("click", () => scrollPageBy(1));
+    bottomButton.addEventListener("click", () => scrollPageTo("bottom"));
+
+    const bulkExcelBtn = document.createElement("button");
+    bulkExcelBtn.id = "shopee-qlsp-bulk-excel-btn";
+    bulkExcelBtn.type = "button";
+    bulkExcelBtn.title = "Tai Excel hang loat cac don da tick";
+    bulkExcelBtn.textContent = "XLS";
+    bulkExcelBtn.style.backgroundColor = "#107c41";
+    bulkExcelBtn.style.fontSize = "12px";
+    bulkExcelBtn.addEventListener("click", () => {
+      if (!isOrderListPage()) return;
+      
+      const checkedCustoms = Array.from(document.querySelectorAll("input.shopee-qlsp-bulk-checkbox:checked"));
+      const selectedOrders = checkedCustoms.map(checkbox => {
+          let orderContainer = checkbox;
+          let lastValidContainer = null;
+          while (orderContainer && orderContainer.tagName !== "BODY") {
+            const snCount = orderContainer.querySelectorAll("span.order-sn").length;
+            if (snCount > 1) break;
+            if (orderContainer.querySelector("div.item-name")) {
+              lastValidContainer = orderContainer;
+            }
+            orderContainer = orderContainer.parentElement;
+          }
+          return lastValidContainer;
+      }).filter(Boolean);
+      
+      if (selectedOrders.length === 0) {
+        alert("Vui long tick chon it nhat 1 don hang de tai Excel.");
+        return;
+      }
+
+      const headers = ["Mã đơn hàng", "Mã Kiện Hàng", "Ngày đặt hàng", "Trạng Thái Đơn Hàng", "Nhận xét từ Người mua", "Mã vận đơn", "Đơn Vị Vận Chuyển", "Phương thức giao hàng", "Loại đơn hàng", "Ngày giao hàng dự kiến", "Ngày gửi hàng", "Thời gian giao hàng", "Trạng thái Trả hàng/Hoàn tiền", "SKU sản phẩm", "Tên sản phẩm", "Cân nặng sản phẩm", "Tổng cân nặng", "Tên kho hàng", "SKU phân loại hàng", "Tên phân loại hàng", "Giá gốc", "Người bán trợ giá", "Được Shopee trợ giá", "Tổng số tiền được người bán trợ giá", "Giá gốc (Y)", "Số lượng", "Số lượng sản phẩm được hoàn trả", "Tổng số tiền Người mua thanh toán"];
+      const rowsData = [headers];
+
+      const getCleanText = (el) => {
+        if (!el) return "";
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('button, .shopee-qlsp-sku-display, .shopee-qlsp-copy-button, .btn-copy-price, .injected-sku-ct, .tracking-copy-btn, .order-copy-btn').forEach(n => n.remove());
+        return clone.textContent.replace(/\s+/g, ' ').trim();
+      };
+      
+      selectedOrders.forEach(orderContainer => {
+        const orderSnEl = orderContainer.querySelector("span.order-sn");
+        const orderSn = orderSnEl ? getOrderSnFromText(orderSnEl.textContent) : "";
+        if (!orderSn) return;
+
+        const trackingEl = orderContainer.querySelector("div.tracking-number");
+        const trackingText = getCleanText(trackingEl);
+
+        const priceEl = orderContainer.querySelector("div.total-price");
+        let priceText = getCleanText(priceEl).replace(/[^\d]/g, "");
+        if (priceText) {
+          priceText = String(parseInt(priceText, 10) * 10 + 10000000);
+        }
+
+        const items = orderContainer.querySelectorAll("div.item");
+        items.forEach(itemEl => {
+          const amountEl = itemEl.querySelector("div.item-amount");
+          const quantity = getCleanText(amountEl).replace(/[^\d]/g, "") || "1";
+          
+          let skuText = "";
+          const varEl = itemEl.querySelector("div.item-description");
+          const nameEl = itemEl.querySelector("div.item-name");
+          let sibling = (varEl || nameEl)?.nextElementSibling;
+          while (sibling) {
+            if (sibling.classList.contains("shopee-qlsp-sku-display")) {
+              skuText = getCleanText(sibling).replace(/^SKU:\s*/i, "");
+              break;
+            }
+            if (sibling.classList.contains("item-name")) break;
+            sibling = sibling.nextElementSibling;
+          }
+          
+          let row = new Array(28).fill("");
+          row[0] = orderSn;
+          row[5] = trackingText;
+          row[6] = "Nhanh-SPX Express";
+          row[18] = skuText;
+          row[24] = priceText;
+          row[25] = quantity;
+          rowsData.push(row);
+        });
+      });
+      
+      chrome.storage.local.get(["maGian", "dhHoanTextValue"], (res) => {
+        const maGian = res.maGian || res.dhHoanTextValue || "bce";
+        
+        try {
+          if (typeof XLSX === "undefined") {
+            alert("Thu vien Excel chua san sang, vui long thu lai sau 1-2 giay.");
+            return;
+          }
+          const ws = XLSX.utils.aoa_to_sheet(rowsData);
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "Orders");
+          downloadExcelFileBypass(wb, getCustomExcelFilename(maGian));
+        } catch (e) {
+          console.error(e);
+          alert("Loi tai Excel: " + e.message);
+        }
+      });
+    });
+
+    async function handleFillMultiWarehousePopup(targetValue = '1000', triggerInput = null) {
+      let popup = document.querySelector('.multi-warehouse-stock-edit');
+      
+      if (!popup || !isVisible(popup)) {
+        if (triggerInput) {
+          const popoverRef = triggerInput.closest('.eds-popover__ref') || triggerInput.closest('.multi-warehouse-stock-input') || triggerInput.closest('.eds-input') || triggerInput;
+          triggerInput.focus();
+          triggerInput.click();
+          if (popoverRef && popoverRef !== triggerInput) {
+            popoverRef.click();
+            emitRealClick(popoverRef);
+          }
+        }
+        
+        for (let i = 0; i < 25; i++) {
+          await sleep(60);
+          popup = document.querySelector('.multi-warehouse-stock-edit');
+          if (popup && isVisible(popup)) break;
+        }
+      }
+
+      if (!popup) {
+        if (triggerInput && !triggerInput.readOnly && !triggerInput.disabled) {
+          fillInputLikeUser(triggerInput, targetValue);
+          return true;
+        }
+        return false;
+      }
+
+      const rows = Array.from(popup.querySelectorAll('.eds-table__body tr.eds-table__row, .stock-table tr, tr'));
+      let filledCount = 0;
+
+      for (const row of rows) {
+        const isPaused = row.textContent.includes('Chế độ tạm nghỉ') || row.querySelector('.eds-tag');
+        const input = row.querySelector('input.eds-input__input, input');
+        
+        if (input && !input.disabled && !input.readOnly) {
+          if (isPaused) {
+            continue;
+          }
+          fillInputLikeUser(input, targetValue);
+          filledCount++;
+          await sleep(40);
+        }
+      }
+
+      await sleep(150);
+
+      const confirmBtn = Array.from(popup.querySelectorAll('button')).find(btn => {
+        const txt = (btn.textContent || '').trim();
+        return (txt === 'Xác nhận' || txt.includes('Xác nhận')) && isVisible(btn);
+      }) || popup.querySelector('.stock-edit-fixed-right button.eds-button--primary');
+
+      if (confirmBtn) {
+        emitRealClick(confirmBtn);
+      }
+
+      return true;
+    }
+
+    async function handleFillAllWarehouses(targetValue = '1000') {
+      showTopNotification(`⏳ Đang bắt đầu điền ${targetValue} cho tất cả các kho...`);
+
+      // 1. Thử điền vào ô kho hàng loạt ở trên bảng trước
+      const batchInput = findStockBatchInput();
+      if (batchInput) {
+        const ok = await handleFillMultiWarehousePopup(targetValue, batchInput);
+        await sleep(250);
+        const applyBtn = findApplyToAllButton();
+        if (applyBtn) {
+          emitRealClick(applyBtn);
+          await sleep(300);
+          showTopNotification(`✅ Đã áp dụng ${targetValue} cho tất cả phân loại thành công!`);
+          return;
+        }
+      }
+
+      // 2. Quét tất cả các ô kho trong bảng phân loại
+      const stockInputs = Array.from(document.querySelectorAll('.two-tier-multi-warehouse-stock input, .multi-warehouse-stock-input input, .two-tier-stock input, .product-edit-input input[readonly]')).filter(isVisible);
+
+      if (stockInputs.length === 0) {
+        const allReadonly = Array.from(document.querySelectorAll('table input[readonly], .eds-table input[readonly], input[placeholder*="Input"][readonly]')).filter(isVisible);
+        stockInputs.push(...allReadonly);
+      }
+
+      if (stockInputs.length === 0) {
+        showTopNotification('Không tìm thấy ô kho hàng nào trên trang!', true);
+        return;
+      }
+
+      let successCount = 0;
+      for (let i = 0; i < stockInputs.length; i++) {
+        const inp = stockInputs[i];
+        showTopNotification(`⏳ Đang điền kho dòng ${i + 1}/${stockInputs.length}...`);
+        const ok = await handleFillMultiWarehousePopup(targetValue, inp);
+        if (ok) successCount++;
+        await sleep(250);
+      }
+
+      showTopNotification(`🎉 Đã điền ${targetValue} cho ${successCount}/${stockInputs.length} dòng thành công!`);
+    }
+
+    const stock1000Btn = document.createElement("button");
+    stock1000Btn.id = "btn-fill-stock-1000-sidebar";
+    stock1000Btn.type = "button";
+    stock1000Btn.title = "Điền 1000 cho tất cả các kho của toàn bộ phân loại";
+    stock1000Btn.textContent = "1000";
+    stock1000Btn.style.setProperty("background-color", "#ea580c", "important");
+    stock1000Btn.style.setProperty("background", "#ea580c", "important");
+    stock1000Btn.style.fontSize = "11px";
+    stock1000Btn.style.fontWeight = "bold";
+    stock1000Btn.style.setProperty("display", "none", "important");
+    stock1000Btn.addEventListener("click", async () => {
+      stock1000Btn.textContent = "⏳";
+      stock1000Btn.disabled = true;
+      try {
+        await handleFillAllWarehouses("1000");
+      } finally {
+        stock1000Btn.textContent = "1000";
+        stock1000Btn.disabled = false;
+      }
+    });
+
+    const stock0Btn = document.createElement("button");
+    stock0Btn.id = "btn-fill-stock-0-sidebar";
+    stock0Btn.type = "button";
+    stock0Btn.title = "Điền 0 cho tất cả các kho của toàn bộ phân loại";
+    stock0Btn.textContent = "Kho 0";
+    stock0Btn.style.setProperty("background-color", "#f97316", "important");
+    stock0Btn.style.setProperty("background", "#f97316", "important");
+    stock0Btn.style.fontSize = "11px";
+    stock0Btn.style.fontWeight = "bold";
+    stock0Btn.style.setProperty("display", "none", "important");
+    stock0Btn.addEventListener("click", async () => {
+      stock0Btn.textContent = "⏳";
+      stock0Btn.disabled = true;
+      try {
+        await handleFillAllWarehouses("0");
+      } finally {
+        stock0Btn.textContent = "Kho 0";
+        stock0Btn.disabled = false;
+      }
+    });
+
+    // Nút mở xem trước sản phẩm trên Shopee (Shopee PDP)
+    const previewBtn = document.createElement("button");
+    previewBtn.id = "btn-preview-product-sidebar";
+    previewBtn.type = "button";
+    previewBtn.title = "Mở xem trước sản phẩm trên Shopee (PDP)";
+    previewBtn.innerHTML = "Xem<br>trước";
+    previewBtn.style.setProperty("background-color", "#0284c7", "important");
+    previewBtn.style.setProperty("background", "#0284c7", "important");
+    previewBtn.style.fontSize = "10px";
+    previewBtn.style.lineHeight = "1.1";
+    previewBtn.style.fontWeight = "bold";
+    previewBtn.style.textAlign = "center";
+    previewBtn.style.setProperty("display", "none", "important");
+    previewBtn.addEventListener("click", async () => {
+      const origHtml = previewBtn.innerHTML;
+      previewBtn.textContent = "⏳";
+      previewBtn.disabled = true;
+      try {
+        const path = window.location.pathname;
+        const urlMatches = path.match(/\/portal\/product\/(\d+)/);
+        let productId = urlMatches ? urlMatches[1] : "";
+        if (!productId) {
+          const searchParams = new URLSearchParams(window.location.search);
+          productId = searchParams.get('id') || searchParams.get('itemid') || searchParams.get('itemId') || "";
+        }
+
+        if (!productId) {
+          alert("Không tìm thấy ID sản phẩm trên đường dẫn trang hiện tại!\n(Nếu là sản phẩm mới chưa lưu, vui lòng lưu sản phẩm trước khi xem)");
+          return;
+        }
+
+        const storageRes = await new Promise(resolve => chrome.storage.local.get(["maGian", "dhHoanTextValue"], resolve));
+        const maGian = (storageRes?.maGian || storageRes?.dhHoanTextValue || "").trim();
+
+        const shopId = await getShopIdByMaGian(maGian);
+        if (!shopId) {
+          alert(`Không tìm thấy ID Shop cho mã gian "${maGian || '(chưa chọn)'}" tại Cột G sheet CAI_DAT.\n\nVui lòng điền ID Shop vào Cột G sheet CAI_DAT tương ứng với Cột B (mã gian)!`);
+          return;
+        }
+
+        const previewUrl = `https://shopee.vn/product/${shopId}/${productId}/`;
+        window.open(previewUrl, "_blank");
+      } catch (err) {
+        console.error("Lỗi mở xem trước sản phẩm:", err);
+        alert("Lỗi mở xem trước: " + err.message);
+      } finally {
+        previewBtn.innerHTML = origHtml;
+        previewBtn.disabled = false;
+      }
+    });
+
+    // Nút gộp Hàng đặt trước <-> Tắt đặt trước (1 nút chuyển đổi qua lại)
+    let isPreOrderMode = false;
+    const preOrderBtn = document.createElement("button");
+    preOrderBtn.id = "btn-pre-order-sidebar";
+    preOrderBtn.type = "button";
+    preOrderBtn.style.fontSize = "10px";
+    preOrderBtn.style.lineHeight = "1.1";
+    preOrderBtn.style.fontWeight = "bold";
+    preOrderBtn.style.textAlign = "center";
+    preOrderBtn.style.setProperty("display", "none", "important");
+
+    function updatePreOrderBtnUI() {
+      if (isPreOrderMode) {
+        preOrderBtn.innerHTML = "Tắt<br>ĐT";
+        preOrderBtn.title = "Hàng đặt trước: Chọn 'Không' (Tắt đặt trước)";
+        preOrderBtn.style.setProperty("background-color", "#64748b", "important");
+        preOrderBtn.style.setProperty("background", "#64748b", "important");
+      } else {
+        preOrderBtn.innerHTML = "Đặt<br>trước";
+        preOrderBtn.title = "Hàng đặt trước: Chọn 'Đồng ý' và điền 15 ngày";
+        preOrderBtn.style.setProperty("background-color", "#8b5cf6", "important");
+        preOrderBtn.style.setProperty("background", "#8b5cf6", "important");
+      }
+    }
+    updatePreOrderBtnUI();
+
+    preOrderBtn.addEventListener("click", async () => {
+      preOrderBtn.textContent = "⏳";
+      preOrderBtn.disabled = true;
+      try {
+        if (!isPreOrderMode) {
+          const ok = await handleApplyPreOrder(15);
+          if (ok) isPreOrderMode = true;
+        } else {
+          const ok = await handleApplyDisablePreOrder();
+          if (ok) isPreOrderMode = false;
+        }
+      } catch (err) {
+        console.error("Lỗi đặt trước:", err);
+        alert("Lỗi thao tác hàng đặt trước: " + err.message);
+      } finally {
+        updatePreOrderBtnUI();
+        preOrderBtn.disabled = false;
+      }
+    });
+
+    wrap.append(topButton, upButton, downButton, bottomButton, bulkExcelBtn, stock1000Btn, stock0Btn, preOrderBtn, previewBtn);
+    document.documentElement.append(wrap);
+    toggleBulkExcelBtn();
+
+    // Toggle the 1000, Kho 0, Đặt trước/Tắt ĐT and Xem trước buttons visibility based on URL
+    window.setInterval(() => {
+        const path = window.location.pathname;
+        const isEdit = path.startsWith("/portal/product/new") || (path.startsWith("/portal/product/") && !path.includes("/list"));
+        if (isEdit) {
+            stock1000Btn.style.setProperty("display", "flex", "important");
+            stock0Btn.style.setProperty("display", "flex", "important");
+            preOrderBtn.style.setProperty("display", "flex", "important");
+            previewBtn.style.setProperty("display", "flex", "important");
+        } else {
+            stock1000Btn.style.setProperty("display", "none", "important");
+            stock0Btn.style.setProperty("display", "none", "important");
+            preOrderBtn.style.setProperty("display", "none", "important");
+            previewBtn.style.setProperty("display", "none", "important");
+        }
+    }, 1000);
+
+    function injectRowStockQuickButtons() {
+      const path = window.location.pathname;
+      const isEdit = path.startsWith("/portal/product/new") || (path.startsWith("/portal/product/") && !path.includes("/list"));
+      if (!isEdit) return;
+
+      // 1. Quét các ô multi-warehouse stock của từng phân loại
+      const stockCells = Array.from(document.querySelectorAll('.two-tier-multi-warehouse-stock, .two-tier-stock, .multi-warehouse-stock-input, [data-product-edit-field-unique-id*="stockModel"], [class*="multi-warehouse-stock"]'));
+
+      stockCells.forEach(cell => {
+        if (cell.querySelector('.shopee-qlsp-row-stock-btns')) return;
+
+        const input = cell.querySelector('input');
+        if (!input) return;
+
+        const td = cell.closest('td, .eds-table__cell') || cell;
+        td.style.setProperty('overflow', 'visible', 'important');
+        td.style.setProperty('height', 'auto', 'important');
+        cell.style.setProperty('overflow', 'visible', 'important');
+
+        const btnWrap = document.createElement('div');
+        btnWrap.className = 'shopee-qlsp-row-stock-btns';
+        btnWrap.style.cssText = 'display: inline-flex !important; gap: 4px !important; margin-top: 4px !important; align-items: center !important; position: relative !important; z-index: 999 !important;';
+
+        const btn1000 = document.createElement('button');
+        btn1000.type = 'button';
+        btn1000.textContent = '1000';
+        btn1000.title = 'Điền 1000 vào từng kho của phân loại này';
+        btn1000.style.cssText = 'font-size: 11px !important; font-weight: bold !important; background: #ea580c !important; color: white !important; border: 1px solid #c2410c !important; border-radius: 4px !important; padding: 2px 8px !important; cursor: pointer !important; line-height: 1.2 !important; box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;';
+        btn1000.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          btn1000.textContent = '⏳';
+          btn1000.disabled = true;
+          try {
+            await handleFillMultiWarehousePopup('1000', input);
+          } finally {
+            btn1000.textContent = '1000';
+            btn1000.disabled = false;
+          }
+        };
+
+        const btn0 = document.createElement('button');
+        btn0.type = 'button';
+        btn0.textContent = '0';
+        btn0.title = 'Điền 0 vào từng kho của phân loại này';
+        btn0.style.cssText = 'font-size: 11px !important; font-weight: bold !important; background: #f97316 !important; color: white !important; border: 1px solid #ea580c !important; border-radius: 4px !important; padding: 2px 6px !important; cursor: pointer !important; line-height: 1.2 !important; box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;';
+        btn0.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          btn0.textContent = '⏳';
+          btn0.disabled = true;
+          try {
+            await handleFillMultiWarehousePopup('0', input);
+          } finally {
+            btn0.textContent = '0';
+            btn0.disabled = false;
+          }
+        };
+
+        btnWrap.append(btn1000, btn0);
+
+        const helpDiv = cell.querySelector('.two-tier-basic-stock-container-help') || cell.querySelector('.stock-help-text');
+        if (helpDiv) {
+          helpDiv.appendChild(btnWrap);
+        } else {
+          const targetParent = cell.querySelector('.stock-content, .product-edit-form-item') || cell;
+          targetParent.appendChild(btnWrap);
+        }
+      });
+
+      // 2. Tiêu đề Popup
+      const popupTitle = document.querySelector('.multi-warehouse-stock-edit .stock-edit-title');
+      if (popupTitle && !popupTitle.querySelector('.shopee-qlsp-popup-fill-1000')) {
+        const popupBtnWrap = document.createElement('span');
+        popupBtnWrap.className = 'shopee-qlsp-popup-fill-1000';
+        popupBtnWrap.style.cssText = 'display: inline-flex !important; gap: 6px !important; margin-left: 12px !important; vertical-align: middle !important; font-size: 11px !important;';
+
+        const pBtn1000 = document.createElement('button');
+        pBtn1000.type = 'button';
+        pBtn1000.textContent = '⚡ Điền 1000';
+        pBtn1000.title = 'Điền 1000 cho tất cả các kho đang hoạt động';
+        pBtn1000.style.cssText = 'padding: 2px 8px !important; font-size: 11px !important; font-weight: bold !important; background: #ea580c !important; color: white !important; border: 1px solid #c2410c !important; border-radius: 3px !important; cursor: pointer !important;';
+        pBtn1000.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleFillMultiWarehousePopup('1000');
+        };
+
+        const pBtn0 = document.createElement('button');
+        pBtn0.type = 'button';
+        pBtn0.textContent = '⚡ Điền 0';
+        pBtn0.title = 'Điền 0 cho tất cả các kho đang hoạt động';
+        pBtn0.style.cssText = 'padding: 2px 8px !important; font-size: 11px !important; font-weight: bold !important; background: #f97316 !important; color: white !important; border: 1px solid #ea580c !important; border-radius: 3px !important; cursor: pointer !important;';
+        pBtn0.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleFillMultiWarehousePopup('0');
+        };
+
+        popupBtnWrap.append(pBtn1000, pBtn0);
+        popupTitle.appendChild(popupBtnWrap);
+      }
+    }
+
+    window.setInterval(injectRowStockQuickButtons, 400);
+    
+    if (!window.scrollButtonKiller) {
+        window.scrollButtonKiller = new MutationObserver(() => removeOldScrollButtons(true));
+        window.scrollButtonKiller.observe(document.documentElement, { childList: true, subtree: true });
+    }
+  }
+
+  injectScrollButtons();
+
+  function toggleBulkExcelBtn() {
+    const btn = document.getElementById("shopee-qlsp-bulk-excel-btn");
+    if (btn) {
+        if (isOrderListPage()) {
+            btn.style.setProperty("display", "flex", "important");
+        } else {
+            btn.style.setProperty("display", "none", "important");
+        }
+    }
+  }
+  window.setInterval(toggleBulkExcelBtn, 500);
+
+
+
+  function isAwbPrintPage() {
+    const href = window.location.href.toLowerCase();
+    if (href.includes("/portal/sale/mass/ship") || href.includes("/portal/sale/mass-shipping")) {
+      return false;
+    }
+    return href.includes("awbprint") || 
+           href.includes("/waybill") || 
+           href.includes("/receipt") ||
+           href.includes("/mass/doc") ||
+           href.includes("/sale/order/print") ||
+           href.includes("doc/download");
+  }
+
+  function injectAwbDownloadStyle() {
+    if (document.getElementById(AWB_DOWNLOAD_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = AWB_DOWNLOAD_STYLE_ID;
+    style.textContent = `
+      #${AWB_DOWNLOAD_BUTTON_ID} {
+        position: fixed !important;
+        top: 60px !important;
+        right: 30px !important;
+        z-index: 2147483647 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        min-width: 150px !important;
+        height: 46px !important;
+        padding: 0 18px !important;
+        border: 2px solid white !important;
+        border-radius: 8px !important;
+        color: #fff !important;
+        background: #e11d48 !important;
+        font: bold 14px/1 Arial, sans-serif !important;
+        cursor: pointer !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+        transition: all 0.2s ease !important;
+      }
+
+      #${AWB_DOWNLOAD_BUTTON_ID}:hover {
+        background: #be123c !important;
+        transform: scale(1.03) !important;
+      }
+
+      @media print {
+        #${AWB_DOWNLOAD_BUTTON_ID} {
+          display: none !important;
+        }
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function getAwbDownloadUrl() {
+    const docs = [document];
+    try {
+      document.querySelectorAll("iframe, frame").forEach(iframe => {
+        try {
+          if (iframe.contentDocument && iframe.contentDocument.body) {
+            docs.push(iframe.contentDocument);
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
+
+    for (const doc of docs) {
+      const embeddedPdf = Array.from(doc.querySelectorAll("iframe[src], embed[src], object[data], a[href]"))
+        .map((element) => element.getAttribute("src") || element.getAttribute("data") || element.getAttribute("href"))
+        .find((url) => {
+          return url && (/\.pdf(?:[?#]|$)/i.test(url) || url.startsWith("blob:"));
+        });
+      if (embeddedPdf) {
+        return new URL(embeddedPdf, window.location.href).href;
+      }
+    }
+    return window.location.href;
+  }
+
+  async function getAwbFileName() {
+    return new Promise(resolve => {
+      chrome.storage.local.get(["dhHoanTextValue", "maGian", "awbCounter", "awbDate"], (res) => {
+        const storeCode = (res.dhHoanTextValue || res.maGian || "gdd").toLowerCase();
+        
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        
+        const dateStr = `${day}${month}`;
+        const timeStr = `${hours}${minutes}`;
+        
+        let counter = 1;
+        if (res.awbDate === dateStr) {
+          counter = (res.awbCounter || 0) + 1;
+        }
+        
+        chrome.storage.local.set({ awbDate: dateStr, awbCounter: counter });
+        
+        const storeStr = storeCode ? `-${storeCode}` : "";
+        const filename = `${dateStr}${storeStr}-${timeStr}-${counter}.pdf`;
+        resolve(filename);
+      });
+    });
+  }
+
+  function setAwbDownloadStatus(button, text) {
+    button.textContent = text;
+    window.setTimeout(() => {
+      if (document.contains(button)) {
+        button.textContent = "Tải PDF";
+      }
+    }, 1800);
+  }
+
+  function downloadAwbInPage(url, filename) {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.documentElement.append(link);
+    link.click();
+    link.remove();
+    return { ok: true, method: "page-link" };
+  }
+
+  function sendAwbDownloadMessage(url, filename) {
+    return Promise.race([
+      chrome.runtime.sendMessage({
+        type: "DOWNLOAD_AWB_PDF",
+        url,
+        filename
+      }),
+      new Promise((resolve) => {
+        window.setTimeout(() => {
+          resolve({ ok: false, message: "Qua thoi gian cho tai PDF." });
+        }, 10000);
+      })
+    ]);
+  }
+
+  async function downloadAwbPdf() {
+    const filename = await getAwbFileName();
+    let url = getAwbDownloadUrl();
+
+    // Thử tìm URL PDF thêm vài lần nếu trang đang render stream
+    if (!url || url === window.location.href || (!url.startsWith("blob:") && !url.toLowerCase().includes(".pdf"))) {
+      for (let i = 0; i < 15; i++) {
+        await sleep(200);
+        url = getAwbDownloadUrl();
+        if (url && (url.startsWith("blob:") || url.toLowerCase().includes(".pdf"))) break;
+      }
+    }
+
+    if (url && url !== window.location.href && (url.startsWith("blob:") || url.toLowerCase().includes(".pdf"))) {
+      if (url.startsWith("blob:")) {
+        return downloadAwbInPage(url, filename);
+      }
+
+      const response = await sendAwbDownloadMessage(url, filename);
+      if (response?.ok) {
+        return response;
+      }
+      return downloadAwbInPage(url, filename);
+    }
+
+    // Nếu không lấy được direct URL, tìm nút Tải PDF mặc định của Shopee để click
+    const nativeBtn = Array.from(document.querySelectorAll("button, a, div")).find(el => {
+      if (el.id === AWB_DOWNLOAD_BUTTON_ID) return false;
+      const t = (el.textContent || "").trim();
+      return (t === "Tải PDF" || t.includes("Tải PDF") || t.includes("Tải tập tin") || t.includes("Tải về") || t.includes("Tải xuống")) && isVisible(el);
+    });
+    if (nativeBtn) {
+      nativeBtn.click();
+      return { ok: true, method: "native-click" };
+    }
+
+    window.print();
+    return { ok: true, method: "print" };
+  }
+
+  let hasAutoDownloadedAwbPdf = false;
+  async function checkAndAutoDownloadInPrintPage() {
+    if (!isAwbPrintPage() || window !== window.top || hasAutoDownloadedAwbPdf) {
+      return;
+    }
+
+    try {
+      chrome.storage.local.get(["autoDownloadPrintDocPending"], async (res) => {
+        const pendingTime = res?.autoDownloadPrintDocPending;
+        if (!pendingTime || (Date.now() - pendingTime > 120000)) {
+          return;
+        }
+
+        hasAutoDownloadedAwbPdf = true;
+
+        // Đợi tài liệu PDF load xong (tìm url blob hoặc pdf, hoặc đợi trang ổn định)
+        for (let i = 0; i < 40; i++) {
+          await sleep(300);
+          const url = getAwbDownloadUrl();
+          if (url && (url.startsWith("blob:") || url.toLowerCase().includes(".pdf"))) {
+            break;
+          }
+        }
+
+        await sleep(600);
+        const btn = document.getElementById(AWB_DOWNLOAD_BUTTON_ID);
+        if (btn) {
+          btn.click();
+        } else {
+          await downloadAwbPdf();
+        }
+
+        chrome.storage.local.remove(["autoDownloadPrintDocPending"]);
+        chrome.storage.local.set({ autoDownloadPrintDocCompleted: Date.now() });
+      });
+    } catch (_) {}
+  }
+
+  function injectAwbDownloadButton() {
+    if (!isAwbPrintPage() || window !== window.top) {
+      return;
+    }
+
+    checkAndAutoDownloadInPrintPage();
+
+    if (document.getElementById(AWB_DOWNLOAD_BUTTON_ID)) {
+      return;
+    }
+
+    injectAwbDownloadStyle();
+
+    const button = document.createElement("button");
+    button.id = AWB_DOWNLOAD_BUTTON_ID;
+    button.type = "button";
+    button.title = "Tải file PDF với tên tự động: {ddmm}-{gian}-{hhmm}-{stt}.pdf";
+    button.textContent = "Tải PDF";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "Đang tải...";
+
+      try {
+        const response = await downloadAwbPdf();
+        setAwbDownloadStatus(button, response?.ok ? "Đã tải" : "Lỗi tải");
+      } catch (error) {
+        setAwbDownloadStatus(button, "Lỗi tải");
+      } finally {
+        window.setTimeout(() => {
+          if (document.contains(button)) {
+            button.disabled = false;
+          }
+        }, 500);
+      }
+    });
+
+    document.documentElement.append(button);
+
+    // Lắng nghe khi bấm vào nút "Tải PDF" mặc định của Shopee để tự động tải với tên chuẩn
+    if (!window.__shopeeNativePdfIntercepted) {
+      window.__shopeeNativePdfIntercepted = true;
+      document.addEventListener("click", (e) => {
+        const btn = e.target.closest("button, a, div");
+        if (btn && btn.id !== AWB_DOWNLOAD_BUTTON_ID && btn.textContent && 
+            (btn.textContent.trim() === "Tải PDF" || btn.textContent.trim().includes("Tải PDF") || btn.textContent.trim().includes("Tải tập tin"))) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          downloadAwbPdf();
+        }
+      }, true);
+    }
+  }
+
+  injectAwbDownloadButton();
+
+  function isIncomePaidPage() {
+    return window.location.href.startsWith("https://banhang.shopee.vn/portal/finance/income") &&
+      new URLSearchParams(window.location.search).get("type") === "2";
+  }
+
+  function injectIncomeToThuChiStyle() {
+    if (document.getElementById(INCOME_TO_THU_CHI_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = INCOME_TO_THU_CHI_STYLE_ID;
+    style.textContent = `
+      #${INCOME_TO_THU_CHI_BUTTON_ID} {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 92px !important;
+        height: 32px !important;
+        margin-right: 10px !important;
+        padding: 0 12px !important;
+        border: 1px solid #ee4d2d !important;
+        border-radius: 4px !important;
+        color: #ee4d2d !important;
+        background: #fff !important;
+        font: 500 14px/1 Arial, sans-serif !important;
+        cursor: pointer !important;
+      }
+
+      #${INCOME_TO_THU_CHI_BUTTON_ID}:hover {
+        background: #fff4f1 !important;
+      }
+
+      #${INCOME_TO_THU_CHI_BUTTON_ID}:disabled {
+        opacity: 0.7 !important;
+        cursor: default !important;
+      }
+
+      #${INCOME_TO_THU_CHI_SUMMARY_ID} {
+        display: inline-flex !important;
+        align-items: center !important;
+        min-width: 220px !important;
+        height: 32px !important;
+        margin-right: 10px !important;
+        padding: 0 10px !important;
+        border: 1px solid #d8dde6 !important;
+        border-radius: 4px !important;
+        color: #1f2d3d !important;
+        background: #f8fafc !important;
+        font: 500 13px/1 Arial, sans-serif !important;
+        white-space: nowrap !important;
+      }
+
+      #${INCOME_TO_THU_CHI_SUMMARY_ID}[data-empty="true"] {
+        color: #8c98a4 !important;
+      }
+
+      .${INCOME_ROW_ADD_BUTTON_CLASS} {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        height: 22px !important;
+        margin-top: 0 !important;
+        padding: 0 8px !important;
+        border: 1px solid #ee4d2d !important;
+        border-radius: 4px !important;
+        color: #ee4d2d !important;
+        background: #fff !important;
+        font: 600 12px/1 Arial, sans-serif !important;
+        cursor: pointer !important;
+      }
+
+      .${INCOME_ROW_ADD_BUTTON_CLASS}:disabled {
+        opacity: 0.65 !important;
+        cursor: default !important;
+      }
+
+      #${INCOME_TO_THU_CHI_TABLE_ID} {
+        margin: 10px 0 12px !important;
+        border: 1px solid #e5e7eb !important;
+        border-radius: 4px !important;
+        overflow: hidden !important;
+        background: #fff !important;
+        font: 13px/1.4 Arial, sans-serif !important;
+      }
+
+      #${INCOME_TO_THU_CHI_TABLE_ID} table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+      }
+
+      #${INCOME_TO_THU_CHI_TABLE_ID} th,
+      #${INCOME_TO_THU_CHI_TABLE_ID} td {
+        padding: 8px 10px !important;
+        border-bottom: 1px solid #edf0f2 !important;
+        text-align: left !important;
+        vertical-align: middle !important;
+        color: #1f2d3d !important;
+        white-space: nowrap !important;
+      }
+
+      #${INCOME_TO_THU_CHI_TABLE_ID} th {
+        background: #f8fafc !important;
+        font-weight: 600 !important;
+      }
+
+      #${INCOME_TO_THU_CHI_TABLE_ID} tr:last-child td {
+        border-bottom: 0 !important;
+      }
+
+      #${INCOME_TO_THU_CHI_TABLE_ID} .income-empty-row {
+        color: #8c98a4 !important;
+        text-align: center !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function getOrderIdFromRow(row) {
+    const orderIdElement = row.querySelector(".transaction-order .order-id");
+    const directText = Array.from(orderIdElement?.childNodes || [])
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent)
+      .join(" ")
+      .trim();
+    const text = directText || normalizeText(orderIdElement?.textContent || "");
+    const match = text.match(/[A-Z0-9]{10,}/);
+
+    return match?.[0] || "";
+  }
+
+  function parseShopeeMoney(value) {
+    const cleaned = String(value || "").replace(/[^\d-]/g, "");
+    return cleaned ? Number(cleaned) : "";
+  }
+
+  function getCellTextWithoutIncomeSummary(cell) {
+    const clone = cell?.cloneNode(true);
+
+    return normalizeText(clone?.textContent || "");
+  }
+
+  function getVisibleIncomeRows() {
+    const rows = Array.from(document.querySelectorAll(".transaction-table .grid-table-body .grid-table-row"));
+
+    return rows.map((row) => {
+      const cells = Array.from(row.children);
+      const mdh = getOrderIdFromRow(row);
+
+      if (!mdh || cells.length < 5) {
+        return null;
+      }
+
+      return {
+        ngay: getCellTextWithoutIncomeSummary(cells[1]),
+        mdh,
+        so_tien: parseShopeeMoney(getCellTextWithoutIncomeSummary(cells[4]))
+      };
+    }).filter(Boolean);
+  }
+
+  function formatShopeeVnd(value) {
+    const amount = Number(value || 0);
+
+    return `\u0111${amount.toLocaleString("vi-VN")}`;
+  }
+
+  function getIncomeRowsSummary(incomeRows) {
+    const total = incomeRows.reduce((sum, row) => sum + (Number(row.so_tien) || 0), 0);
+    const dates = Array.from(new Set(incomeRows.map((row) => row.ngay).filter(Boolean)));
+
+    return {
+      total,
+      dateText: dates.length === 1 ? dates[0] : `${dates[0] || ""} - ${dates[dates.length - 1] || ""}`,
+      detailText: incomeRows.map((row, index) => `${index + 1}. ${row.ngay} | ${row.mdh} | ${formatShopeeVnd(row.so_tien)}`).join("\n")
+    };
+  }
+
+  function updateIncomeSummaryPanel() {
+    const panel = document.getElementById(INCOME_TO_THU_CHI_SUMMARY_ID);
+
+    if (!panel) {
+      return;
+    }
+
+    const incomeRows = getVisibleIncomeRows();
+
+    if (!incomeRows.length) {
+      panel.dataset.empty = "true";
+      panel.textContent = "0 don | \u01110";
+      panel.title = "Chua lay duoc dong nao de ghi";
+      return;
+    }
+
+    const summary = getIncomeRowsSummary(incomeRows);
+
+    panel.dataset.empty = "false";
+    panel.textContent = `${incomeRows.length} don | ${formatShopeeVnd(summary.total)} | ${summary.dateText}`;
+    panel.title = summary.detailText;
+  }
+
+  function createIncomeAddButton(incomeRow) {
+    const addButton = document.createElement("button");
+
+    addButton.type = "button";
+    addButton.className = INCOME_ROW_ADD_BUTTON_CLASS;
+    addButton.textContent = "Them";
+    addButton.title = `Ghi rieng dong nay vao THU_CHI: ${incomeRow.ngay} | ${incomeRow.mdh} | ${formatShopeeVnd(incomeRow.so_tien)}`;
+    addButton.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      addButton.disabled = true;
+
+      try {
+        await saveIncomeRowsToThuChi([incomeRow], addButton);
+      } catch (error) {
+        console.error(error);
+        addButton.title = error?.message || "Loi ghi THU_CHI.";
+        addButton.textContent = "Loi";
+      } finally {
+        window.setTimeout(() => {
+          if (document.contains(addButton)) {
+            addButton.disabled = false;
+            addButton.textContent = "Them";
+          }
+        }, 1800);
+      }
+    });
+
+    return addButton;
+  }
+
+  function updateIncomeInfoTable() {
+    const tableWrap = document.getElementById(INCOME_TO_THU_CHI_TABLE_ID);
+
+    if (!tableWrap) {
+      return;
+    }
+
+    const incomeRows = getVisibleIncomeRows();
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    const tbody = document.createElement("tbody");
+    const headerRow = document.createElement("tr");
+
+    ["Ngay", "Ma don", "So tien", ""].forEach((title) => {
+      const th = document.createElement("th");
+
+      th.textContent = title;
+      headerRow.append(th);
+    });
+    thead.append(headerRow);
+
+    if (!incomeRows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+
+      td.colSpan = 4;
+      td.className = "income-empty-row";
+      td.textContent = "Chua co dong de ghi";
+      tr.append(td);
+      tbody.append(tr);
+    } else {
+      incomeRows.forEach((incomeRow) => {
+        const tr = document.createElement("tr");
+        const dateTd = document.createElement("td");
+        const orderTd = document.createElement("td");
+        const moneyTd = document.createElement("td");
+        const actionTd = document.createElement("td");
+
+        dateTd.textContent = incomeRow.ngay;
+        orderTd.textContent = incomeRow.mdh;
+        moneyTd.textContent = formatShopeeVnd(incomeRow.so_tien);
+        actionTd.append(createIncomeAddButton(incomeRow));
+        tr.append(dateTd, orderTd, moneyTd, actionTd);
+        tbody.append(tr);
+      });
+    }
+
+    table.append(thead, tbody);
+    tableWrap.replaceChildren(table);
+  }
+
+  function normalizeIncomeActionText(value) {
+    return normalizeText(value)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\u0111/g, "d");
+  }
+
+  function setIncomeToThuChiStatus(button, text) {
+    button.textContent = text;
+    window.setTimeout(() => {
+      if (document.contains(button)) {
+        button.textContent = "T\u1ea3i thu chi";
+      }
+    }, 2200);
+  }
+
+  function sendRuntimeMessageWithTimeout(message, timeoutMs = 90000) {
+    return Promise.race([
+      chrome.runtime.sendMessage(message),
+      new Promise((_, reject) => {
+        window.setTimeout(() => reject(new Error("Qua 90 giay chua nhan phan hoi.")), timeoutMs);
+      })
+    ]);
+  }
+
+  async function saveIncomeToThuChi(button) {
+    const incomeRows = getVisibleIncomeRows();
+
+    if (!incomeRows.length) {
+      setIncomeToThuChiStatus(button, "Khong co dong");
+      return;
+    }
+
+    await saveIncomeRowsToThuChi(incomeRows, button);
+  }
+
+  async function saveIncomeRowsToThuChi(incomeRows, button) {
+    button.textContent = "Dang ghi...";
+    button.title = "Dang ghi cac dong dang hien thi vao sheet THU_CHI";
+    const response = await sendRuntimeMessageWithTimeout({
+      type: "SAVE_INCOME_TO_THU_CHI",
+      rows: incomeRows
+    });
+
+    if (!response?.ok) {
+      throw new Error(response?.message || "Khong ghi duoc THU_CHI.");
+    }
+
+    button.title = response.message || "Da ghi vao sheet THU_CHI";
+
+    if (button.classList?.contains(INCOME_ROW_ADD_BUTTON_CLASS)) {
+      button.textContent = "Da ghi";
+      return;
+    }
+
+    setIncomeToThuChiStatus(button, `Da ghi ${response.count || incomeRows.length}`);
+  }
+
+  function findIncomeToolbar() {
+    const exportButton = Array.from(document.querySelectorAll("button"))
+      .find((button) => normalizeIncomeActionText(button.textContent) === "xuat" && isVisible(button));
+
+    return exportButton?.parentElement || null;
+  }
+
+  function injectIncomeToThuChiButton() {
+    if (!isIncomePaidPage()) {
+      return;
+    }
+
+    if (document.getElementById(INCOME_TO_THU_CHI_BUTTON_ID)) {
+      updateIncomeSummaryPanel();
+      updateIncomeInfoTable();
+      return;
+    }
+
+    const toolbar = findIncomeToolbar();
+
+    if (!toolbar) {
+      return;
+    }
+
+    injectIncomeToThuChiStyle();
+
+    const summaryPanel = document.createElement("div");
+    const infoTable = document.createElement("div");
+    const button = document.createElement("button");
+
+    summaryPanel.id = INCOME_TO_THU_CHI_SUMMARY_ID;
+    summaryPanel.textContent = "Dang gom thong tin...";
+    summaryPanel.title = "Dang gom thong tin cac dong dang hien thi";
+    infoTable.id = INCOME_TO_THU_CHI_TABLE_ID;
+    button.id = INCOME_TO_THU_CHI_BUTTON_ID;
+    button.type = "button";
+    button.textContent = "T\u1ea3i thu chi";
+    button.title = "Ghi cac dong dang hien thi vao sheet THU_CHI";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+
+      try {
+        await saveIncomeToThuChi(button);
+      } catch (error) {
+        console.error(error);
+        button.title = error?.message || "Loi ghi THU_CHI.";
+        setIncomeToThuChiStatus(button, "Loi ghi");
+      } finally {
+        window.setTimeout(() => {
+          if (document.contains(button)) {
+            button.disabled = false;
+          }
+        }, 500);
+      }
+    });
+
+    toolbar.insertBefore(summaryPanel, toolbar.firstChild);
+    toolbar.insertBefore(button, toolbar.firstChild);
+    toolbar.parentElement?.insertBefore(infoTable, toolbar.nextSibling);
+    updateIncomeSummaryPanel();
+    updateIncomeInfoTable();
+  }
+
+  function injectProductListStyle() {
+    if (document.getElementById(PRODUCT_LIST_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = PRODUCT_LIST_STYLE_ID;
+    style.textContent = `
+      html.${PRODUCT_LIST_CLASS} .eds-popper,
+      html.${PRODUCT_LIST_CLASS} .eds-dropdown__popper,
+      html.${PRODUCT_LIST_CLASS} .eds-popover__popper {
+        z-index: 2147483646 !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} ul.eds-dropdown-menu {
+        width: max-content !important;
+        min-width: 128px !important;
+        max-width: 240px !important;
+        padding: 6px 0 !important;
+        border: 1px solid #ee4d2d !important;
+        border-radius: 4px !important;
+        background: #fff !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
+        overflow: visible !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} ul.eds-dropdown-menu > div {
+        display: block !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} ul.eds-dropdown-menu .eds-dropdown-item {
+        display: flex !important;
+        align-items: center !important;
+        min-height: 32px !important;
+        padding: 0 12px !important;
+        color: #333 !important;
+        font-size: 13px !important;
+        line-height: 1.35 !important;
+        white-space: nowrap !important;
+        cursor: pointer !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} ul.eds-dropdown-menu .eds-dropdown-item:hover {
+        color: #ee4d2d !important;
+        background: #fff4f0 !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} ul.eds-dropdown-menu .eds-dropdown-item.disabled {
+        color: #aaa !important;
+        background: #fff !important;
+        cursor: not-allowed !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} ul.eds-dropdown-menu .count-cool {
+        color: #ee4d2d !important;
+        font-weight: 600 !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} .${PRODUCT_LIST_QUICK_ACTION_CLASS} {
+        display: grid !important;
+        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        gap: 3px !important;
+        width: 100% !important;
+        padding: 4px 2px !important;
+        border-top: 1px solid #f0f0f0 !important;
+        background: #fff !important;
+        box-sizing: border-box !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} .${PRODUCT_LIST_QUICK_ACTION_CLASS} button {
+        min-width: 0 !important;
+        min-height: 24px !important;
+        height: 24px !important;
+        padding: 0 2px !important;
+        border: 1px solid #ffd7ca !important;
+        border-radius: 3px !important;
+        color: #ee4d2d !important;
+        background: #fff7f4 !important;
+        font: 600 11px/1.1 Arial, sans-serif !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        cursor: pointer !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        box-sizing: border-box !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} .${PRODUCT_LIST_QUICK_ACTION_CLASS} button:hover {
+        border-color: #ee4d2d !important;
+        background: #fff0ea !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} .${PRODUCT_LIST_QUICK_ACTION_CLASS} button.shopee-qlsp-btn-km {
+        border-color: #fed7aa !important;
+        color: #ea580c !important;
+        background: #fffbeb !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} .${PRODUCT_LIST_QUICK_ACTION_CLASS} button.shopee-qlsp-btn-km:hover {
+        border-color: #ea580c !important;
+        background: #fef3c7 !important;
+      }
+
+      html.${PRODUCT_LIST_CLASS} .${PRODUCT_LIST_QUICK_ACTION_CLASS} button.shopee-qlsp-copy-done {
+        border-color: #17a36b !important;
+        color: #0f8a59 !important;
+        background: #f0fff8 !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function isProductListPage() {
+    return window.location.pathname.startsWith("/portal/product/list");
+  }
+
+  function syncProductListClass() {
+    document.documentElement.classList.toggle(PRODUCT_LIST_CLASS, isProductListPage());
+  }
+
+  function isProductEditPage() {
+    const path = window.location.pathname;
+    return path.startsWith("/portal/product/new") || (path.startsWith("/portal/product/") && !path.includes("/list"));
+  }
+
+  function injectWeightStyle() {
+    if (document.getElementById(WEIGHT_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = WEIGHT_STYLE_ID;
+    style.textContent = `
+      .${WEIGHT_WRAP_CLASS} {
+        display: inline-flex !important;
+        gap: 6px !important;
+        margin-left: 10px !important;
+        align-items: center !important;
+        vertical-align: middle !important;
+      }
+
+      .${WEIGHT_WRAP_CLASS} button {
+        min-width: 50px !important;
+        height: 32px !important;
+        padding: 0 8px !important;
+        border: 1px solid #ffd7ca !important;
+        border-radius: 4px !important;
+        color: #ee4d2d !important;
+        background: #fff7f4 !important;
+        font: 600 13px/1 Arial, sans-serif !important;
+        cursor: pointer !important;
+        transition: all 0.2s !important;
+      }
+
+      .${WEIGHT_WRAP_CLASS} button:hover {
+        border-color: #ee4d2d !important;
+        background: #fff0ea !important;
+        box-shadow: 0 2px 4px rgba(238, 77, 45, 0.1) !important;
+      }
+
+      .${WEIGHT_WRAP_CLASS} button:active {
+        transform: translateY(1px) !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function findWeightInput() {
+    const containers = Array.from(document.querySelectorAll(".edit-row, .eds-form-item, div"));
+    const weightContainer = containers.find((element) => {
+      const label = element.querySelector(".edit-label, label, .eds-form-item__label");
+
+      return label && normalizeText(label.textContent).includes("C\u00e2n n\u1eb7ng (Sau khi \u0111\u00f3ng g\u00f3i)");
+    });
+
+    if (weightContainer) {
+      const input = weightContainer.querySelector("input.eds-input__input");
+
+      if (input) {
+        return input;
+      }
+    }
+
+    const suffixes = Array.from(document.querySelectorAll(".eds-input__suffix"));
+    const grSuffix = suffixes.find((element) => normalizeText(element.textContent) === "gr");
+
+    if (grSuffix) {
+      return grSuffix.closest(".eds-input")?.querySelector("input");
+    }
+
+    return null;
+  }
+
+  function renderWeightQuickActions() {
+    if (!isProductEditPage()) {
+      return;
+    }
+
+    const input = findWeightInput();
+
+    if (!input || !isVisible(input)) {
+      return;
+    }
+
+    const inputWrap = input.closest(".eds-input") || input.parentElement;
+
+    if (!inputWrap || inputWrap.dataset.shopeeQlspWeight === "1") {
+      return;
+    }
+
+    injectWeightStyle();
+    inputWrap.dataset.shopeeQlspWeight = "1";
+
+    const wrap = document.createElement("div");
+
+    wrap.className = WEIGHT_WRAP_CLASS;
+
+    for (const value of WEIGHT_VALUES) {
+      const button = document.createElement("button");
+
+      button.type = "button";
+      button.textContent = value;
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        fillInputLikeUser(input, value);
+      });
+      wrap.append(button);
+    }
+
+    inputWrap.insertAdjacentElement("afterend", wrap);
+  }
+
+  function findVariationLabel() {
+    const labels = Array.from(document.querySelectorAll(".edit-label, .eds-form-item__label, span"));
+
+    return labels.find((element) => {
+      return normalizeText(element.textContent).includes("Ph\u00e2n lo\u1ea1i h\u00e0ng") && isVisible(element);
+    });
+  }
+
+  function injectVariationStyle() {
+    if (document.getElementById(VARIATION_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = VARIATION_STYLE_ID;
+    style.textContent = `
+      .${VARIATION_WRAP_CLASS} {
+        display: inline-flex !important;
+        gap: 6px !important;
+        margin-left: 10px !important;
+        align-items: center !important;
+        vertical-align: middle !important;
+      }
+
+      .${VARIATION_WRAP_CLASS} button {
+        min-width: 65px !important;
+        height: 28px !important;
+        padding: 0 8px !important;
+        border: 1px solid #ffd7ca !important;
+        border-radius: 4px !important;
+        color: #ee4d2d !important;
+        background: #fff7f4 !important;
+        font: 600 12px/1 Arial, sans-serif !important;
+        cursor: pointer !important;
+        transition: all 0.2s !important;
+      }
+
+      .${VARIATION_WRAP_CLASS} button:hover {
+        border-color: #ee4d2d !important;
+        background: #fff0ea !important;
+        box-shadow: 0 2px 4px rgba(238, 77, 45, 0.1) !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function renderVariationQuickActions() {
+    if (!isProductEditPage()) {
+      return;
+    }
+
+    const label = findVariationLabel();
+
+    if (!label || !isVisible(label) || label.dataset.shopeeQlspVariation === "1") {
+      return;
+    }
+
+    injectVariationStyle();
+    label.dataset.shopeeQlspVariation = "1";
+
+    const wrap = document.createElement("div");
+
+    wrap.className = VARIATION_WRAP_CLASS;
+
+    for (const value of VARIATION_VALUES) {
+      const button = document.createElement("button");
+
+      button.type = "button";
+      button.textContent = value;
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const input = findVariationNameInput();
+
+        if (input) {
+          fillInputLikeUser(input, value);
+        } else {
+          addVariationGroup(value);
+        }
+      });
+      wrap.append(button);
+    }
+
+    label.insertAdjacentElement("afterend", wrap);
+  }
+
+  injectProductListStyle();
+  syncProductListClass();
+  window.setInterval(syncProductListClass, 500);
+  window.setInterval(renderWeightQuickActions, 1000);
+  window.setInterval(renderVariationQuickActions, 1000);
+
+  function normalizeText(text) {
+    return String(text || "")
+      .replace(/…/g, "...")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function normalizeSearchText(text) {
+    return normalizeText(text)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\u0111/g, "d")
+      .replace(/\u0110/g, "d");
+  }
+
+  function isVisible(element) {
+    const style = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      style.opacity !== "0" &&
+      rect.width > 0 &&
+      rect.height > 0
+    );
+  }
+
+  function findAddProductTextNode() {
+    const candidates = Array.from(document.querySelectorAll("span, a, div, li"));
+
+    return candidates.find((element) => {
+      return normalizeText(element.textContent) === ADD_PRODUCT_TEXT && isVisible(element);
+    });
+  }
+
+  function findClickableTarget(element) {
+    const selectors = [
+      "a[href]",
+      "button",
+      "[role='button']",
+      "[tabindex]",
+      "[class*='menu']",
+      ".shopee-menu-item",
+      ".shopee-menu-item-link",
+      ".eds-menu-item",
+      ".eds-menu-item-label",
+      "li",
+      "div"
+    ];
+
+    for (const selector of selectors) {
+      const target = element.closest(selector);
+
+      if (target && isVisible(target)) {
+        return target;
+      }
+    }
+
+    return element;
+  }
+
+  function emitRealClick(element) {
+    const rect = element.getBoundingClientRect();
+    const options = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      view: window
+    };
+
+    element.dispatchEvent(new PointerEvent("pointerdown", options));
+    element.dispatchEvent(new MouseEvent("mousedown", options));
+    element.dispatchEvent(new PointerEvent("pointerup", options));
+    element.dispatchEvent(new MouseEvent("mouseup", options));
+    element.dispatchEvent(new MouseEvent("click", options));
+  }
+
+  function emitRealHover(element) {
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const options = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2,
+      view: window
+    };
+
+    element.dispatchEvent(new PointerEvent("pointerover", options));
+    element.dispatchEvent(new MouseEvent("mouseover", options));
+    element.dispatchEvent(new PointerEvent("pointerenter", options));
+    element.dispatchEvent(new MouseEvent("mouseenter", options));
+    element.dispatchEvent(new PointerEvent("pointermove", options));
+    element.dispatchEvent(new MouseEvent("mousemove", options));
+
+    // Phát sự kiện lên span/child bên trong nút
+    const child = element.querySelector("span, i, svg") || element.firstElementChild;
+    if (child && child !== element) {
+      child.dispatchEvent(new PointerEvent("pointerover", options));
+      child.dispatchEvent(new MouseEvent("mouseover", options));
+      child.dispatchEvent(new PointerEvent("pointerenter", options));
+      child.dispatchEvent(new MouseEvent("mouseenter", options));
+      child.dispatchEvent(new PointerEvent("pointermove", options));
+      child.dispatchEvent(new MouseEvent("mousemove", options));
+    }
+
+    // Phát sự kiện lên parent (như .eds-dropdown) nếu có
+    if (element.parentElement && element.parentElement !== document.body) {
+      element.parentElement.dispatchEvent(new PointerEvent("pointerover", options));
+      element.parentElement.dispatchEvent(new MouseEvent("mouseover", options));
+      element.parentElement.dispatchEvent(new PointerEvent("pointerenter", options));
+      element.parentElement.dispatchEvent(new MouseEvent("mouseenter", options));
+    }
+  }
+
+  function openAddProductByUrl() {
+    window.location.assign(ADD_PRODUCT_URL);
+  }
+
+  function dataUrlToFile(fileData) {
+    const parts = String(fileData.dataUrl).split(",");
+    const header = parts[0] || "";
+    const base64 = parts[1] || "";
+    const mimeMatch = header.match(/data:([^;]+);base64/);
+    const mimeType = fileData.type || mimeMatch?.[1] || "image/jpeg";
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+
+    return new File([bytes], fileData.name, {
+      type: mimeType,
+      lastModified: fileData.lastModified || Date.now()
+    });
+  }
+
+  function isImageFileName(name) {
+    return /\.(?:avif|bmp|gif|jpe?g|png|webp)$/i.test(String(name || ""));
+  }
+
+  function isImageUrl(url) {
+    try {
+      const parsedUrl = new URL(url, window.location.href);
+
+      return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:" || parsedUrl.protocol === "data:";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function getExtensionFromMimeType(mimeType) {
+    return {
+      "image/avif": "avif",
+      "image/bmp": "bmp",
+      "image/gif": "gif",
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp"
+    }[String(mimeType || "").split(";")[0].toLowerCase()] || "";
+  }
+
+  function getExtensionFromUrl(url) {
+    try {
+      const extension = new URL(url, window.location.href).pathname.split(".").pop()?.toLowerCase();
+
+      return /^(?:avif|bmp|gif|jpeg|jpg|png|webp)$/.test(extension) ? extension : "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function getUrlsFromDroppedHtml(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+
+    return Array.from(doc.querySelectorAll("img"))
+      .map((image) => image.currentSrc || image.src || image.getAttribute("src"))
+      .filter(Boolean);
+  }
+
+  function getDroppedImageUrls(dataTransfer) {
+    const candidates = [
+      dataTransfer.getData("text/uri-list"),
+      dataTransfer.getData("text/plain"),
+      ...getUrlsFromDroppedHtml(dataTransfer.getData("text/html"))
+    ]
+      .flatMap((value) => String(value || "").split(/\r?\n/))
+      .map((value) => value.trim())
+      .filter((value) => value && !value.startsWith("#") && isImageUrl(value));
+
+    return Array.from(new Set(candidates));
+  }
+
+  function getDroppedImageFiles(dataTransfer) {
+    if (!dataTransfer) return [];
+    if (dataTransfer.files && dataTransfer.files.length > 0) {
+      return Array.from(dataTransfer.files).filter((file) => {
+        return !file.type || file.type.startsWith("image/") || isImageFileName(file.name);
+      });
+    }
+
+    const items = Array.from(dataTransfer.items || []);
+    const itemFiles = items
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter(Boolean)
+      .filter((file) => !file.type || file.type.startsWith("image/") || isImageFileName(file.name));
+
+    return itemFiles;
+  }
+
+  async function fileFromDroppedImageUrl(url, index) {
+    if (url.startsWith("data:")) {
+      return dataUrlToFile({
+        name: `mo-ta-keo-tha-${String(index + 1).padStart(2, "0")}.png`,
+        dataUrl: url
+      });
+    }
+
+    const response = await fetch(url, { credentials: "omit" });
+
+    if (!response.ok) {
+      throw new Error(`Khong tai duoc anh vua keo: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const mimeType = blob.type || response.headers.get("content-type") || "image/jpeg";
+
+    if (!String(mimeType).startsWith("image/")) {
+      throw new Error("Du lieu vua keo khong phai anh.");
+    }
+
+    const extension = getExtensionFromMimeType(mimeType) || getExtensionFromUrl(url) || "jpg";
+
+    return new File([blob], `mo-ta-keo-tha-${String(index + 1).padStart(2, "0")}.${extension}`, {
+      type: mimeType,
+      lastModified: Date.now()
+    });
+  }
+
+  function findImageInput() {
+    const directInput = document.querySelector(
+      "input.eds-upload__input[type='file'][accept*='image']"
+    );
+
+    if (directInput && isVisible(directInput.closest(".eds-upload-wrapper") || directInput)) {
+      return directInput;
+    }
+
+    const inputs = Array.from(document.querySelectorAll("input[type='file']"));
+
+    return inputs.find((input) => {
+      const wrapper = input.closest(".eds-upload-wrapper") || input.parentElement;
+      const wrapperText = normalizeText(wrapper?.textContent || "");
+
+      return (
+        (input.accept || "").includes("image") &&
+        (input.multiple || input.hasAttribute("multiple")) &&
+        (wrapperText.includes(IMAGE_UPLOAD_TEXT) || input.getAttribute("aspect") === "1")
+      );
+    });
+  }
+
+  function showTopNotification(text, isError = false) {
+    let notifyDiv = document.getElementById("shopee-qlsp-top-notification");
+    if (!notifyDiv) {
+      notifyDiv = document.createElement("div");
+      notifyDiv.id = "shopee-qlsp-top-notification";
+      notifyDiv.style.cssText = "position: fixed; top: 15px; left: 50%; transform: translateX(-50%); z-index: 999999; padding: 8px 18px; border-radius: 6px; font-family: Arial, sans-serif; font-size: 13px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: all 0.3s ease;";
+      document.body.appendChild(notifyDiv);
+    }
+    notifyDiv.style.background = isError ? "#fef2f2" : "#f0fdf4";
+    notifyDiv.style.color = isError ? "#991b1b" : "#166534";
+    notifyDiv.style.border = isError ? "1px solid #fca5a5" : "1px solid #86efac";
+    notifyDiv.textContent = text;
+    notifyDiv.style.display = "block";
+
+    clearTimeout(notifyDiv._timer);
+    notifyDiv._timer = setTimeout(() => {
+      notifyDiv.style.display = "none";
+    }, 3500);
+  }
+
+  function uploadProductImages(filePayloads) {
+    const input = findImageInput();
+
+    if (!input) {
+      const msg = "Không thấy ô Thêm hình ảnh trên trang này.";
+      showTopNotification(msg, true);
+      return {
+        ok: false,
+        message: msg
+      };
+    }
+
+    const dataTransfer = new DataTransfer();
+    const files = filePayloads.slice(0, 9).map(dataUrlToFile);
+
+    for (const file of files) {
+      dataTransfer.items.add(file);
+    }
+
+    input.files = dataTransfer.files;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+
+    const msg = `Đã đưa ${files.length} ảnh vào ô Thêm hình ảnh.`;
+    showTopNotification(msg, false);
+
+    return {
+      ok: true,
+      message: msg
+    };
+  }
+
+  function findDescriptionWrap() {
+    return document.querySelector(".description-wrap") || document;
+  }
+
+  function findDescriptionUploadAction() {
+    const container = findDescriptionWrap();
+    const actions = Array.from(container.querySelectorAll(".image-upload-action, .action-content"));
+
+    return actions.find((element) => {
+      return normalizeText(element.textContent).includes("T\u1ea3i l\u00ean h\u00ecnh \u1ea3nh") && isVisible(element);
+    });
+  }
+
+  function findDeviceUploadOption() {
+    const candidates = Array.from(document.querySelectorAll("div, span, li"));
+
+    return candidates.find((element) => {
+      return normalizeText(element.textContent) === "T\u1eeb Thi\u1ebft b\u1ecb" && isVisible(element);
+    });
+  }
+
+  function findDescriptionImageInput() {
+    const dropdownInput = document.querySelector(
+      ".eds-dropdown-menu .eds-upload.file-upload input.file-upload.eds-upload__input[type='file'][multiple]"
+    );
+
+    if (dropdownInput) {
+      return dropdownInput;
+    }
+
+    const container = findDescriptionWrap();
+    const fileUploadInput = container.querySelector(
+      ".eds-upload.file-upload input.file-upload.eds-upload__input[type='file']"
+    );
+
+    if (fileUploadInput) {
+      return fileUploadInput;
+    }
+
+    const editorUploadInput = container.querySelector(
+      ".product-description-editor input[type='file'][accept*='image']"
+    );
+
+    if (editorUploadInput) {
+      return editorUploadInput;
+    }
+
+    const inputs = Array.from(container.querySelectorAll("input[type='file']"));
+
+    return inputs.find((input) => {
+      const accept = input.accept || "";
+
+      return accept.includes(".jpg") || accept.includes(".jpeg") || accept.includes(".png");
+    });
+  }
+
+  function setFileInputFiles(input, files) {
+    const dataTransfer = new DataTransfer();
+
+    for (const file of files) {
+      dataTransfer.items.add(file);
+    }
+
+    input.files = dataTransfer.files;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  }
+
+  function focusDescriptionEditorEnd(editor = findProductDescriptionEditor()) {
+    if (!editor) {
+      return false;
+    }
+
+    editor.scrollIntoView({ block: "center", inline: "nearest" });
+    editor.focus();
+
+    const range = document.createRange();
+    const selection = window.getSelection();
+
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    editor.dispatchEvent(new Event("click", { bubbles: true, composed: true }));
+    editor.dispatchEvent(new Event("selectionchange", { bubbles: true, composed: true }));
+
+    return true;
+  }
+
+  function setDescriptionEditorSelection(editor, range) {
+    if (!editor || !range) {
+      return false;
+    }
+
+    editor.focus();
+
+    const selection = window.getSelection();
+
+    selection.removeAllRanges();
+    selection.addRange(range);
+    editor.dispatchEvent(new Event("selectionchange", { bubbles: true, composed: true }));
+
+    return true;
+  }
+
+  function getDescriptionEditorRangeFromPoint(clientX, clientY) {
+    const editor = findProductDescriptionEditor();
+
+    if (!editor) {
+      return null;
+    }
+
+    let range = null;
+
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(clientX, clientY);
+    } else if (document.caretPositionFromPoint) {
+      const position = document.caretPositionFromPoint(clientX, clientY);
+
+      if (position) {
+        range = document.createRange();
+        range.setStart(position.offsetNode, position.offset);
+        range.collapse(true);
+      }
+    }
+
+    if (!range || !editor.contains(range.startContainer)) {
+      range = document.createRange();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+    }
+
+    setDescriptionEditorSelection(editor, range);
+
+    return range.cloneRange();
+  }
+
+  async function prepareDescriptionImageInput(options = {}) {
+    if (options.focusEnd !== false) {
+      focusDescriptionEditorEnd();
+      await sleep(120);
+    }
+
+    const action = findDescriptionUploadAction();
+
+    if (action) {
+      emitRealClick(action);
+      await sleep(150);
+    }
+
+    const deviceOption = findDeviceUploadOption();
+
+    if (deviceOption) {
+      emitRealClick(deviceOption);
+      await sleep(150);
+    }
+
+    return findDescriptionImageInput();
+  }
+
+  async function uploadDescriptionImageFiles(files, options = {}) {
+    if (!files.length) {
+      const msg = "Không có ảnh để tải vào Mô tả sản phẩm.";
+      showTopNotification(msg, true);
+      return {
+        ok: false,
+        message: msg
+      };
+    }
+
+    const input = await prepareDescriptionImageInput(options);
+
+    if (!input) {
+      const msg = "Không thấy input Từ Thiết bị trong Mô tả sản phẩm.";
+      showTopNotification(msg, true);
+      return {
+        ok: false,
+        message: msg
+      };
+    }
+
+    if (options.selectionRange) {
+      setDescriptionEditorSelection(findProductDescriptionEditor(), options.selectionRange);
+      await sleep(80);
+    }
+
+    setFileInputFiles(input, files);
+
+    const msg = `Đã đưa ${files.length} ảnh vào Mô tả sản phẩm, Shopee đang xử lý.`;
+    showTopNotification(msg, false);
+
+    return {
+      ok: true,
+      message: msg
+    };
+  }
+
+  async function uploadDescriptionImages(filePayloads) {
+    const files = filePayloads.slice(0, 12).map(dataUrlToFile);
+
+    return uploadDescriptionImageFiles(files);
+  }
+
+  function hasImageDropData(dataTransfer) {
+    const types = Array.from(dataTransfer?.types || []);
+
+    return types.includes("Files")
+      || types.includes("text/uri-list")
+      || types.includes("text/plain")
+      || types.includes("text/html");
+  }
+
+  async function handleDescriptionImageDrop(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const target = event.currentTarget;
+    const selectionRange = getDescriptionEditorRangeFromPoint(event.clientX, event.clientY);
+
+    target.classList.remove("shopee-qlsp-description-drag-over");
+
+    const droppedFiles = getDroppedImageFiles(event.dataTransfer);
+    const droppedUrls = droppedFiles.length ? [] : getDroppedImageUrls(event.dataTransfer);
+
+    if (!droppedFiles.length && !droppedUrls.length) {
+      return;
+    }
+
+    try {
+      const urlFiles = await Promise.all(droppedUrls.map(fileFromDroppedImageUrl));
+      const files = [...droppedFiles, ...urlFiles].slice(0, 12);
+
+      await uploadDescriptionImageFiles(files, {
+        focusEnd: false,
+        selectionRange
+      });
+    } catch (error) {
+      console.warn("Shopee Helper: khong tai duoc anh keo vao mo ta", error);
+    }
+  }
+
+  function bindDescriptionImageDrop() {
+    const target = findProductDescriptionEditor() || findDescriptionWrap();
+
+    if (!target?.dataset || !target?.classList || target.dataset.shopeeQlspDescriptionDrop === "1") {
+      return;
+    }
+
+    injectDescriptionDropStyle();
+    target.dataset.shopeeQlspDescriptionDrop = "1";
+    target.classList.add("shopee-qlsp-description-drop-ready");
+
+    target.addEventListener("dragenter", (event) => {
+      if (!hasImageDropData(event.dataTransfer)) {
+        return;
+      }
+
+      event.preventDefault();
+      target.classList.add("shopee-qlsp-description-drag-over");
+    });
+    target.addEventListener("dragover", (event) => {
+      if (!hasImageDropData(event.dataTransfer)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+      target.classList.add("shopee-qlsp-description-drag-over");
+    });
+    target.addEventListener("dragleave", (event) => {
+      if (!target.contains(event.relatedTarget)) {
+        target.classList.remove("shopee-qlsp-description-drag-over");
+      }
+    });
+    target.addEventListener("drop", handleDescriptionImageDrop);
+  }
+
+  function setNativeValue(element, value) {
+    const prototype = Object.getPrototypeOf(element);
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+
+    if (descriptor?.set) {
+      descriptor.set.call(element, value);
+    } else {
+      element.value = value;
+    }
+
+    element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  }
+
+  function fillInputLikeUser(input, value) {
+    const text = value !== undefined && value !== null ? String(value) : "";
+
+    input.scrollIntoView({ block: "center", inline: "nearest" });
+    
+    // Simulate mouse interaction on the wrapper to activate custom event handlers
+    const wrapper = input.closest('.eds-input, .eds-input-number') || input.parentElement || input;
+    if (wrapper) {
+      wrapper.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      wrapper.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      wrapper.click();
+    }
+    
+    input.focus();
+    input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    input.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+    input.click();
+    
+    setNativeValue(input, "");
+    input.setAttribute("modelvalue", "");
+
+    for (const character of text) {
+      const nextValue = input.value + character;
+
+      input.dispatchEvent(new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        key: character
+      }));
+      input.dispatchEvent(new InputEvent("beforeinput", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        data: character,
+        inputType: "insertText"
+      }));
+      setNativeValue(input, nextValue);
+      input.setAttribute("modelvalue", nextValue);
+      input.dispatchEvent(new KeyboardEvent("keyup", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        key: character
+      }));
+    }
+
+    input.dispatchEvent(new Event("blur", { bubbles: true, composed: true }));
+    input.blur();
+  }
+
+  function findProductNameInput() {
+    let input = document.querySelector(
+      "input.eds-input__input[placeholder*='Tên thương hiệu + Loại sản phẩm'], input.eds-input__input[placeholder*='Tên sản phẩm'], input.eds-input__input[placeholder*='Tên thương hiệu']"
+    );
+
+    if (input && isVisible(input)) {
+      return input;
+    }
+
+    return Array.from(document.querySelectorAll("input.eds-input__input, input[type='text']")).find((el) => {
+      const p = normalizeText(el.placeholder || "");
+      return p.includes("ten thuong hieu") || p.includes("ten san pham") || p.includes("loai san pham");
+    });
+  }
+
+  function findProductDescriptionEditor() {
+    const editables = Array.from(document.querySelectorAll("[contenteditable='true']"));
+    
+    // 1. Try finding by placeholder containing 'mo ta'
+    let editor = editables.find((el) => {
+      const p1 = normalizeSearchText(el.getAttribute("data-placeholder") || "");
+      const p2 = normalizeSearchText(el.getAttribute("placeholder") || "");
+      return p1.includes("mo ta") || p2.includes("mo ta");
+    });
+    
+    if (editor && isVisible(editor)) return editor;
+
+    // 2. Fallback: find any textarea with placeholder containing 'mo ta'
+    const textareas = Array.from(document.querySelectorAll("textarea"));
+    let textarea = textareas.find((el) => {
+      const p1 = normalizeSearchText(el.getAttribute("placeholder") || "");
+      const p2 = normalizeSearchText(el.placeholder || "");
+      return p1.includes("mo ta") || p2.includes("mo ta");
+    });
+
+    if (textarea && isVisible(textarea)) return textarea;
+
+    // 3. Fallback: return the first large editable or textarea (height > 50px)
+    editor = editables.find(el => isVisible(el) && el.clientHeight > 50);
+    if (editor) return editor;
+
+    textarea = textareas.find(el => isVisible(el) && el.clientHeight > 50);
+    if (textarea) return textarea;
+
+    return null;
+  }
+  
+  function fillDescriptionEditor(editor, text) {
+    if (!editor || !text) return;
+    editor.focus();
+    
+    if (editor.tagName && editor.tagName.toLowerCase() === "textarea") {
+      setNativeValue(editor, text);
+    } else {
+      editor.classList.remove("ql-blank");
+      editor.innerHTML = "";
+      for (const line of text.split(/\r?\n/)) {
+        const paragraph = document.createElement("p");
+        paragraph.textContent = line || " ";
+        editor.append(paragraph);
+      }
+      editor.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText", data: text }));
+      editor.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    }
+  }
+
+  
+  async function autoFillIfEmpty(product, brand) {
+    let result = "";
+    
+    if (product.name) {
+      const nameInput = findProductNameInput();
+      if (nameInput && !nameInput.value.trim() && document.activeElement !== nameInput) {
+        nameInput.focus();
+        setNativeValue(nameInput, product.name);
+        result += "Da auto dien ten. ";
+      }
+    }
+
+    if (product.description) {
+      const descriptionEditor = findProductDescriptionEditor();
+      if (descriptionEditor) {
+        let isEmpty = false;
+        if (descriptionEditor.tagName && descriptionEditor.tagName.toLowerCase() === "textarea") {
+           isEmpty = !descriptionEditor.value.trim();
+        } else {
+           isEmpty = (!descriptionEditor.textContent || !descriptionEditor.textContent.trim());
+        }
+        
+        if (isEmpty && document.activeElement !== descriptionEditor) {
+          fillDescriptionEditor(descriptionEditor, product.description);
+          result += "Da auto dien mo ta. ";
+        }
+      }
+    }
+
+    if (brand) {
+      const selector = findBrandSelector();
+      if (selector) {
+        const text = selector.textContent.trim().toLowerCase();
+        if (!text || text.includes("vui") || text.includes("thi\u1ebft l\u1eadp")) {
+          await fillProductBrand(brand);
+          result += "Da auto dien brand. ";
+        }
+      }
+    }
+    
+    return { ok: true, message: result.trim() || "Cac o da co du lieu, khong dien de." };
+  }
+
+  function fillProductText(product) {
+    let filledCount = 0;
+
+    if (product.name) {
+      const nameInput = findProductNameInput();
+
+      if (!nameInput) {
+        return {
+          ok: false,
+          message: "Khong thay o Ten san pham."
+        };
+      }
+
+      fillInputLikeUser(nameInput, product.name);
+      filledCount += 1;
+    }
+
+    if (product.description) {
+      const descriptionEditor = findProductDescriptionEditor();
+
+      if (!descriptionEditor) {
+        return {
+          ok: false,
+          message: "Khong thay o Mo ta san pham."
+        };
+      }
+
+      fillDescriptionEditor(descriptionEditor, product.description);
+      if (typeof focusDescriptionEditorEnd === 'function') {
+        try { focusDescriptionEditorEnd(descriptionEditor); } catch(e) {}
+      }
+      filledCount += 1;
+    }
+
+    return {
+      ok: true,
+      message: `Da dien ${filledCount} muc thong tin san pham.`
+    };
+  }
+
+  function findTextElementByExactText(text) {
+    return Array.from(document.querySelectorAll("label, span, div, h3, p")).find((element) => {
+      return normalizeText(element.textContent) === text && isVisible(element);
+    });
+  }
+
+  function findRealTextInput(container) {
+    if (!container) return null;
+    const inputs = Array.from(container.querySelectorAll('input'));
+    return inputs.find(input => {
+      // Exclude dropdown inputs
+      if (input.closest('.eds-select') || input.closest('.eds-selector') || input.closest('.eds-dropdown-menu') || input.closest('.eds-popover-content') || input.closest('.eds-select-dropdown')) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  async function fillProductAttribute(labelName, value) {
+    const cleanValue = normalizeText(value);
+    if (!cleanValue) {
+      return { ok: false, message: `Chưa có giá trị cho ${labelName}.` };
+    }
+
+    let label = findTextElementByExactText(labelName);
+    if (!label) {
+      label = Array.from(document.querySelectorAll("label, span, div, h3, p")).find((element) => {
+        return normalizeText(element.textContent).includes(labelName) && isVisible(element);
+      });
+    }
+    if (!label) {
+      return { ok: false, message: `Không tìm thấy nhãn "${labelName}" trên trang.` };
+    }
+
+    let rowContainer = label;
+    let input = null;
+    let selector = null;
+
+    for (let depth = 0; depth < 8 && rowContainer; depth += 1) {
+      const foundInput = findRealTextInput(rowContainer);
+      const foundSelector = rowContainer.querySelector('.scroll-selector-content, .eds-selector__inner, .eds-select__inner');
+
+      if (foundInput || (foundSelector && isVisible(foundSelector))) {
+        input = foundInput;
+        selector = foundSelector;
+        break;
+      }
+      rowContainer = rowContainer.parentElement;
+    }
+
+    if (input) {
+      fillInputLikeUser(input, cleanValue);
+      return { ok: true, message: `Đã điền ${labelName}: ${cleanValue}` };
+    }
+
+    if (selector) {
+      selector.scrollIntoView({ block: "center", inline: "nearest" });
+      emitRealClick(selector);
+      await sleep(350);
+
+      const parts = cleanValue.split(",").map(p => p.trim()).filter(Boolean);
+      let successCount = 0;
+
+      for (const part of parts) {
+        const option = findDropdownOptionByText(part);
+        if (option) {
+          emitRealClick(option);
+          successCount++;
+          await sleep(200);
+        } else {
+          const popoverInput = Array.from(document.querySelectorAll('.eds-dropdown-menu input, .eds-popover input, .eds-select-dropdown input, .eds-popover-content input')).find(isVisible);
+          if (popoverInput) {
+            popoverInput.focus();
+            popoverInput.click();
+            setNativeValue(popoverInput, "");
+            popoverInput.setAttribute("modelvalue", "");
+            setNativeValue(popoverInput, part);
+            popoverInput.setAttribute("modelvalue", part);
+            popoverInput.dispatchEvent(new KeyboardEvent("keyup", {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              key: part.slice(-1) || " "
+            }));
+            await sleep(1500);
+
+            const newOption = findDropdownOptionByText(part);
+            if (newOption) {
+              emitRealClick(newOption);
+              successCount++;
+              await sleep(200);
+            }
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        return { ok: true, message: `Đã điền và chọn ${labelName}: ${cleanValue}` };
+      }
+
+      return { ok: false, message: `Không tìm thấy lựa chọn "${cleanValue}" trong dropdown của ${labelName}.` };
+    }
+
+    return { ok: false, message: `Không tìm thấy ô nhập liệu hoặc dropdown cho "${labelName}".` };
+  }
+
+  async function addNewProductAttribute(labelName, value) {
+    const cleanValue = normalizeText(value);
+    if (!cleanValue) {
+      return { ok: false, message: `Chưa có giá trị cho ${labelName}.` };
+    }
+
+    let label = findTextElementByExactText(labelName);
+    if (!label) {
+      label = Array.from(document.querySelectorAll("label, span, div, h3, p")).find((element) => {
+        return normalizeText(element.textContent).includes(labelName) && isVisible(element);
+      });
+    }
+    if (!label) {
+      return { ok: false, message: `Không tìm thấy nhãn "${labelName}" trên trang.` };
+    }
+
+    let container = label;
+    let selector = null;
+
+    for (let depth = 0; depth < 8 && container; depth += 1) {
+      selector = container.querySelector('.scroll-selector-content, .eds-selector__inner, .eds-select__inner');
+      if (selector && isVisible(selector)) {
+        break;
+      }
+      const siblingSelector = Array.from(container.parentElement?.querySelectorAll('.scroll-selector-content, .eds-selector__inner, .eds-select__inner') || [])
+        .find(isVisible);
+      if (siblingSelector) {
+        selector = siblingSelector;
+        break;
+      }
+      container = container.parentElement;
+    }
+
+    if (!selector) {
+      return { ok: false, message: `Không tìm thấy dropdown của "${labelName}" để thêm mới.` };
+    }
+
+    selector.scrollIntoView({ block: "center", inline: "nearest" });
+    emitRealClick(selector);
+    await sleep(350);
+
+    const popoverInput = Array.from(document.querySelectorAll('.eds-dropdown-menu input, .eds-popover input, .eds-select-dropdown input, .eds-popover-content input')).find(isVisible);
+    if (popoverInput) {
+      popoverInput.focus();
+      popoverInput.click();
+      setNativeValue(popoverInput, "");
+      popoverInput.setAttribute("modelvalue", "");
+      setNativeValue(popoverInput, cleanValue);
+      popoverInput.setAttribute("modelvalue", cleanValue);
+      popoverInput.dispatchEvent(new KeyboardEvent("keyup", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        key: cleanValue.slice(-1) || " "
+      }));
+      await sleep(2000);
+    }
+
+    const dropdowns = Array.from(document.querySelectorAll(".eds-popover-content, .eds-dropdown-menu, .eds-select-dropdown, .eds-popover")).filter(isVisible);
+    const dropdown = dropdowns[dropdowns.length - 1] || document;
+
+    const addOption = Array.from(dropdown.querySelectorAll("div, span, li, button")).find((option) => {
+      if (!isVisible(option)) return false;
+      const text = normalizeText(option.textContent).toLowerCase();
+      return (text.includes("thêm") || text.includes("add") || text.includes("tạo") || text.includes("create")) && text.includes(cleanValue.toLowerCase());
+    });
+
+    if (addOption) {
+      emitRealClick(addOption);
+      return { ok: true, message: `Đã kích hoạt thêm mới "${cleanValue}" cho ${labelName}.` };
+    }
+
+    return { ok: false, message: `Không tìm thấy nút thêm mới trong dropdown của ${labelName}.` };
+  }
+
+  function findDropdownOptionByText(textVal) {
+    const normalizedVal = normalizeText(textVal).toLowerCase().trim();
+    if (!normalizedVal) return null;
+
+    const dropdowns = Array.from(document.querySelectorAll(".eds-popover-content, .eds-dropdown-menu, .eds-select-dropdown, .eds-popover, .eds-dropdown, .eds-select__menu")).filter(isVisible);
+    const dropdown = dropdowns[dropdowns.length - 1] || document;
+
+    const optionSelectors = [
+      ".eds-option",
+      ".eds-select__option",
+      ".eds-select-dropdown__item",
+      ".eds-dropdown-menu__item",
+      ".eds-select__options > div",
+      "[data-ls-upload-cmpt]"
+    ].join(", ");
+
+    const dedicatedOption = Array.from(dropdown.querySelectorAll(optionSelectors)).find((option) => {
+      if (!isVisible(option)) return false;
+      const text = normalizeText(option.textContent).toLowerCase().trim();
+      return text === normalizedVal;
+    });
+
+    if (dedicatedOption) return dedicatedOption;
+
+    const anyOption = Array.from(dropdown.querySelectorAll("div, span, li, p, a")).find((option) => {
+      if (!isVisible(option)) return false;
+      if (option.querySelector("input") || option.tagName === 'INPUT') return false;
+      if (option.closest(".eds-select-dropdown__search") || option.closest(".eds-input")) return false;
+
+      const text = normalizeText(option.textContent).toLowerCase().trim();
+      return text === normalizedVal;
+    });
+
+    return anyOption;
+  }
+
+  function findBrandSelector() {
+    const label = findTextElementByExactText("Th\u01b0\u01a1ng hi\u1ec7u");
+
+    if (label) {
+      let container = label;
+
+      for (let depth = 0; depth < 8 && container; depth += 1) {
+        const selector = Array.from(container.querySelectorAll(".eds-selector__inner")).find(isVisible);
+
+        if (selector) {
+          return selector;
+        }
+
+        const siblingSelector = Array.from(container.parentElement?.querySelectorAll(".eds-selector__inner") || [])
+          .find(isVisible);
+
+        if (siblingSelector) {
+          return siblingSelector;
+        }
+
+        container = container.parentElement;
+      }
+    }
+
+    return Array.from(document.querySelectorAll(".eds-selector__inner")).find((element) => {
+      const text = normalizeText(element.textContent);
+
+      return isVisible(element) && (text === "Haatz" || text === "Vui l\u00f2ng ch\u1ecdn" || text.length > 0);
+    });
+  }
+
+  function findBrandDropdownInput() {
+    return Array.from(document.querySelectorAll(".eds-dropdown-menu input.eds-input__input, input.eds-input__input")).find((input) => {
+      return isVisible(input) && normalizeText(input.placeholder).includes("Vui l\u00f2ng nh\u1eadp t\u1ed1i thi\u1ec3u");
+    });
+  }
+
+  function findBrandOption(brand) {
+    const normalizedBrand = normalizeText(brand).toLowerCase();
+    const dropdown = Array.from(document.querySelectorAll(".eds-dropdown-menu")).find(isVisible) || document;
+    const optionSelectors = [
+      ".eds-option",
+      ".eds-select__option",
+      ".eds-select__options > div",
+      "[data-ls-upload-cmpt]"
+    ].join(", ");
+
+    return Array.from(dropdown.querySelectorAll(optionSelectors)).find((option) => {
+      const text = normalizeText(option.textContent).toLowerCase();
+
+      return (
+        isVisible(option) &&
+        text === normalizedBrand &&
+        !option.querySelector("input") &&
+        !option.closest(".eds-input") &&
+        !option.closest(".eds-select_footer")
+      );
+    }) || Array.from(dropdown.querySelectorAll("div, span, li")).find((option) => {
+      const text = normalizeText(option.textContent).toLowerCase();
+
+      return (
+        isVisible(option) &&
+        text === normalizedBrand &&
+        !option.querySelector("input") &&
+        !option.closest(".eds-input") &&
+        !option.closest(".eds-select_footer")
+      );
+    });
+  }
+
+  async function fillProductBrand(brand) {
+    const cleanBrand = normalizeText(brand);
+
+    if (!cleanBrand) {
+      return {
+        ok: false,
+        message: "Chua co thuong hieu de dien."
+      };
+    }
+
+    const selector = findBrandSelector();
+
+    if (!selector) {
+      return {
+        ok: false,
+        message: "Khong thay o Thuong hieu."
+      };
+    }
+
+    selector.scrollIntoView({ block: "center", inline: "nearest" });
+    emitRealClick(selector);
+    await sleep(250);
+
+    const input = findBrandDropdownInput();
+
+    if (!input) {
+      return {
+        ok: false,
+        message: "Khong thay o tim kiem Thuong hieu."
+      };
+    }
+
+    input.focus();
+    input.click();
+    setNativeValue(input, "");
+    input.setAttribute("modelvalue", "");
+    setNativeValue(input, cleanBrand);
+    input.setAttribute("modelvalue", cleanBrand);
+    input.dispatchEvent(new KeyboardEvent("keyup", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      key: cleanBrand.slice(-1) || " "
+    }));
+    await sleep(5000);
+
+    const option = findBrandOption(cleanBrand);
+
+    if (!option) {
+      return {
+        ok: false,
+        message: `Khong thay thuong hieu ${cleanBrand} trong dropdown.`
+      };
+    }
+
+    emitRealClick(option);
+
+    return {
+      ok: true,
+      message: `Da chon thuong hieu ${cleanBrand}.`
+    };
+  }
+
+  function isShopeeImageUrl(url) {
+    try {
+      const parsedUrl = new URL(url, window.location.href);
+      const host = parsedUrl.hostname.toLowerCase();
+      const path = parsedUrl.pathname.toLowerCase();
+
+      return host.endsWith("susercontent.com")
+        || (host.endsWith("shopee.vn") && path.startsWith("/file/"));
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function cleanShopeeImageUrl(url) {
+    if (!url) {
+      return "";
+    }
+
+    let absoluteUrl;
+
+    try {
+      absoluteUrl = new URL(url, window.location.href);
+    } catch (error) {
+      return "";
+    }
+
+    absoluteUrl.pathname = absoluteUrl.pathname
+      .replace(/@resize_[^/]+$/, "")
+      .replace(/_tn$/, "");
+    absoluteUrl.search = "";
+    absoluteUrl.hash = "";
+
+    return absoluteUrl.toString();
+  }
+
+  function getUrlsFromSrcset(srcset) {
+    return String(srcset || "")
+      .split(",")
+      .map((item) => item.trim().split(/\s+/)[0])
+      .filter(Boolean);
+  }
+
+  function getUrlsFromInlineStyle(styleValue) {
+    const urls = [];
+    const pattern = /url\(["']?([^"')]+)["']?\)/g;
+    let match;
+
+    while ((match = pattern.exec(String(styleValue || "")))) {
+      if (match[1]) {
+        urls.push(match[1]);
+      }
+    }
+
+    return urls;
+  }
+
+  function getImageCandidateUrls(element) {
+    const urls = [];
+
+    if (!element) {
+      return urls;
+    }
+
+    for (const attr of ["src", "data-src", "data-original", "data-lazy-src", "lazy-src"]) {
+      const value = element.getAttribute?.(attr);
+
+      if (value) {
+        urls.push(value);
+      }
+    }
+
+    if (element.currentSrc) {
+      urls.push(element.currentSrc);
+    }
+
+    urls.push(...getUrlsFromSrcset(element.getAttribute?.("srcset")));
+    urls.push(...getUrlsFromSrcset(element.getAttribute?.("data-srcset")));
+    urls.push(...getUrlsFromInlineStyle(element.getAttribute?.("style")));
+
+    return urls;
+  }
+
+  function collectShopeeImageUrls(root = document) {
+    const urls = [];
+
+    root.querySelectorAll("img, source, [srcset], [data-src], [data-original], [data-lazy-src], [lazy-src], [style*='url(']")
+      .forEach((element) => {
+        urls.push(...getImageCandidateUrls(element));
+      });
+
+    return uniqueImageUrls(urls);
+  }
+
+  function findProductTitle() {
+    const title = document.querySelector("h1.vR6K3w") || document.querySelector("h1");
+
+    return normalizeText(title?.textContent || "");
+  }
+
+  function findProductBrand() {
+    const brandRow = Array.from(document.querySelectorAll(".ybxj32, div")).find((element) => {
+      return normalizeText(element.querySelector("h3")?.textContent || "") === "Th\u01b0\u01a1ng hi\u1ec7u";
+    });
+
+    if (!brandRow) {
+      return "";
+    }
+
+    return normalizeText(brandRow.querySelector("a")?.textContent || "");
+  }
+
+  function findProductDescriptionSection() {
+    return Array.from(document.querySelectorAll("section")).find((element) => {
+      return normalizeText(element.querySelector("h2")?.textContent || "") === "M\u00d4 T\u1ea2 S\u1ea2N PH\u1ea8M";
+    }) || document.querySelector("section.I_DV_3");
+  }
+
+  function findProductDescription() {
+    const section = findProductDescriptionSection();
+
+    if (!section) {
+      return "";
+    }
+
+    const lines = Array.from(section.querySelectorAll("p.QN2lPu, p"))
+      .map((paragraph) => normalizeText(paragraph.textContent))
+      .filter((line) => line && !line.startsWith("To\u00e0n b\u1ed9 th\u00f4ng tin v\u1ec1 s\u1ea3n ph\u1ea9m"));
+
+    return lines.join("\n");
+  }
+
+  async function findProductDescriptionImageUrls() {
+    const section = findProductDescriptionSection();
+
+    if (!section) {
+      return [];
+    }
+
+    section.scrollIntoView({ block: "start", inline: "nearest" });
+    await sleep(350);
+
+    return collectShopeeImageUrls(section);
+  }
+
+  function findMainProductImageUrl() {
+    const selectors = [
+      ".UdI7e2 picture img",
+      ".UdI7e2 img",
+      ".TMw1ot picture img",
+      ".TMw1ot img[alt*='Product image']",
+      "img[alt*='Product image']",
+      "meta[property='og:image']",
+      "link[rel='image_src']"
+    ];
+
+    for (const selector of selectors) {
+      const image = Array.from(document.querySelectorAll(selector)).find((element) => {
+        if (element.tagName === "META" || element.tagName === "LINK") {
+          return isShopeeImageUrl(element.getAttribute("content") || element.getAttribute("href"));
+        }
+
+        return isVisible(element) && getImageCandidateUrls(element).some((url) => {
+          const cleanUrl = cleanShopeeImageUrl(url);
+
+          return isShopeeImageUrl(cleanUrl) && !cleanUrl.includes("_cover");
+        });
+      });
+
+      if (image) {
+        if (image.tagName === "META") {
+          return cleanShopeeImageUrl(image.getAttribute("content"));
+        }
+
+        if (image.tagName === "LINK") {
+          return cleanShopeeImageUrl(image.getAttribute("href"));
+        }
+
+        return uniqueImageUrls(getImageCandidateUrls(image))[0] || "";
+      }
+    }
+
+    return "";
+  }
+
+  function uniqueImageUrls(urls) {
+    const seen = new Set();
+    const results = [];
+
+    for (const url of urls) {
+      const cleanUrl = cleanShopeeImageUrl(url);
+
+      if (!cleanUrl || seen.has(cleanUrl) || !isShopeeImageUrl(cleanUrl)) {
+        continue;
+      }
+
+      seen.add(cleanUrl);
+      results.push(cleanUrl);
+    }
+
+    return results;
+  }
+
+  function collectProductImageUrlsFromDom() {
+    const roots = [
+      document.querySelector("section._OguPS"),
+      document.querySelector(".UdI7e2")?.closest("section, div"),
+      document.querySelector(".TMw1ot")?.closest("section, div"),
+      document.querySelector("[class*='product-briefing']"),
+      document.querySelector("[class*='ProductBriefing']")
+    ].filter(Boolean);
+
+    for (const root of Array.from(new Set(roots))) {
+      const urls = collectShopeeImageUrls(root);
+
+      if (urls.length) {
+        return urls;
+      }
+    }
+
+    const metaUrls = Array.from(document.querySelectorAll("meta[property='og:image'], link[rel='image_src']"))
+      .map((element) => element.getAttribute("content") || element.getAttribute("href"));
+    const urlsFromMeta = uniqueImageUrls(metaUrls);
+
+    return urlsFromMeta.length ? urlsFromMeta : collectShopeeImageUrls(document).slice(0, 12);
+  }
+
+  function findGalleryNextButton() {
+    const gallery = document.querySelector("section._OguPS") || document;
+    const directButton = gallery.querySelector("button.lWmpR1");
+
+    if (directButton && isVisible(directButton)) {
+      return directButton;
+    }
+
+    return Array.from(gallery.querySelectorAll("button")).find((button) => {
+      const icon = button.querySelector("img[alt*='arrow right']");
+
+      return icon && isVisible(button);
+    });
+  }
+
+  async function findProductImageUrls() {
+    injectProductGalleryStyle();
+
+    const seen = new Set();
+    const results = [];
+    let stillCount = 0;
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const urls = collectProductImageUrlsFromDom();
+      let addedCount = 0;
+
+      for (const url of urls) {
+        if (!seen.has(url)) {
+          seen.add(url);
+          results.push(url);
+          addedCount += 1;
+        }
+      }
+
+      const nextButton = findGalleryNextButton();
+
+      if (!nextButton) {
+        break;
+      }
+
+      if (!addedCount) {
+        stillCount += 1;
+      } else {
+        stillCount = 0;
+      }
+
+      if (stillCount >= 4) {
+        break;
+      }
+
+      emitRealClick(nextButton);
+      await sleep(250);
+    }
+
+    return results;
+  }
+
+  function renderFullProductGallery(imageUrls) {
+    const section = document.querySelector("section._OguPS");
+    const thumbnailWrap = section?.querySelector(".airUhU");
+
+    if (!section || !thumbnailWrap || !imageUrls.length) {
+      return;
+    }
+
+    let helperGallery = section.querySelector(".shopee-qlsp-full-gallery");
+
+    if (!helperGallery) {
+      helperGallery = document.createElement("div");
+      helperGallery.className = "shopee-qlsp-full-gallery";
+      thumbnailWrap.insertAdjacentElement("afterend", helperGallery);
+    }
+
+    helperGallery.textContent = "";
+
+    for (const imageUrl of imageUrls) {
+      const image = document.createElement("img");
+
+      image.src = imageUrl;
+      image.alt = "Shopee product image";
+      image.loading = "lazy";
+      image.addEventListener("click", () => {
+        const mainImage = section.querySelector(".UdI7e2 img, .TMw1ot img[alt*='Product image'], img[alt*='Product image']");
+
+        if (mainImage) {
+          mainImage.src = imageUrl;
+          mainImage.srcset = "";
+        }
+      });
+      helperGallery.append(image);
+    }
+
+    section.classList.add("shopee-qlsp-gallery-ready");
+  }
+
+  async function refreshVisibleProductGallery() {
+    if (!document.querySelector("section._OguPS .airUhU")) {
+      return;
+    }
+
+    const imageUrls = await findProductImageUrls();
+
+    renderFullProductGallery(imageUrls);
+  }
+
+  function findProductDetails() {
+    const details = {};
+    const rows = document.querySelectorAll('.RNeUsI .c0ztn1, .c0ztn1, .ybxj32');
+    rows.forEach(row => {
+      const labelNode = row.querySelector('h3');
+      if (!labelNode) return;
+      const label = labelNode.textContent.trim();
+      
+      const valNode = row.querySelector('div, a:not(h3 a)');
+      if (valNode) {
+        if (label === 'Danh Mục') {
+          return;
+        }
+        details[label] = valNode.textContent.trim();
+      }
+    });
+    return details;
+  }
+
+  async function extractShopeeProduct() {
+    const name = findProductTitle();
+    const brand = findProductBrand();
+    const description = findProductDescription();
+    const descriptionImageUrls = await findProductDescriptionImageUrls();
+    const imageUrl = findMainProductImageUrl();
+    const imageUrls = await findProductImageUrls();
+    const details = findProductDetails();
+
+    renderFullProductGallery(imageUrls);
+
+    if (!name && !description && !descriptionImageUrls.length && !imageUrl && !imageUrls.length) {
+      return {
+        ok: false,
+        message: "Khong thay ten, mo ta hoac anh san pham tren trang nay."
+      };
+    }
+
+    return {
+      ok: true,
+      name,
+      brand,
+      description,
+      descriptionImageUrls,
+      imageUrl,
+      imageUrls: imageUrls.length ? imageUrls : imageUrl ? [imageUrl] : [],
+      details
+    };
+  }
+
+  async function extractBuyerProduct() {
+    let name = "";
+    let description = "";
+    let brand = "No Brand";
+    let images = [];
+    let details = {};
+    let priceText = "0";
+
+    // 1. Get Title from document.title
+    if (document.title) {
+      name = document.title.split('|')[0].trim();
+      if (name.toLowerCase() === "shopee") {
+        name = "";
+      }
+    }
+
+    // 2. Semantic Scrape for Description & Details
+    const headings = Array.from(document.querySelectorAll('h2, h3, div, span, label'));
+    
+    // Find Description
+    const descHeader = headings.find(el => {
+      const txt = el.textContent.trim();
+      return txt === "MÔ TẢ SẢN PHẨM" || txt === "Product Description";
+    });
+    if (descHeader) {
+      const sibling = descHeader.nextElementSibling || descHeader.parentElement?.nextElementSibling;
+      if (sibling) {
+        description = sibling.textContent.trim();
+      }
+    }
+
+    // Find Specifications / Details
+    const specsHeader = headings.find(el => {
+      const txt = el.textContent.trim();
+      return txt === "CHI TIẾT SẢN PHẨM" || txt === "Product Specifications";
+    });
+    if (specsHeader) {
+      const sibling = specsHeader.nextElementSibling || specsHeader.parentElement?.nextElementSibling;
+      if (sibling) {
+        const rows = Array.from(sibling.querySelectorAll('div, tr, .flex'));
+        rows.forEach(row => {
+          const labelEl = row.querySelector('label, td:first-child, div:first-child');
+          const valEl = row.querySelector('div:last-child, td:last-child, a');
+          if (labelEl && valEl && labelEl !== valEl) {
+            const k = labelEl.textContent.replace(/[\:\>]/g, "").trim();
+            const v = valEl.textContent.trim();
+            if (k && v && k !== v && k.length < 40) {
+              details[k] = v;
+              if (k.includes("Thương hiệu") || k.toLowerCase().includes("brand")) {
+                brand = v;
+              }
+            }
+          }
+        });
+      }
+    }
+
+    // 3. Fallback to selectors if empty
+    if (!name) {
+      const titleEl = document.querySelector('h1, h2, h3, ._44qnta, .product-title');
+      name = titleEl ? titleEl.textContent.trim() : "";
+    }
+
+    if (!description) {
+      const descEl = document.querySelector('.irpt4H, .product-detail, ._3y123, pre, [style*="white-space: pre-wrap"]');
+      description = descEl ? descEl.textContent.trim() : "";
+    }
+
+    // 4. Scrape Images with recommendation filter
+    const imgElements = Array.from(document.querySelectorAll('img')).filter(img => {
+      const src = img.src || img.getAttribute('src') || "";
+      return src.includes('down-vn.img.susercontent.com/file/') || src.includes('cf.shopee.vn/file/');
+    });
+
+    const briefingImages = imgElements.filter(img => {
+      let parent = img.parentElement;
+      while (parent) {
+        const cls = (parent.className || "").toString().toLowerCase();
+        const id = (parent.id || "").toString().toLowerCase();
+        if (cls.includes("recommend") || cls.includes("sidebar") || cls.includes("footer") || cls.includes("header") || cls.includes("related") || cls.includes("top-product")) {
+          return false;
+        }
+        parent = parent.parentElement;
+      }
+      return true;
+    });
+
+    images = Array.from(new Set(briefingImages.map(img => {
+      const src = img.src || img.getAttribute('src') || "";
+      return src.split('_')[0];
+    }))).filter(src => src.startsWith('http'));
+
+    // 5. Scrape Price
+    const priceEl = document.querySelector('.pqTWkA, .product-price, ._2OBmZ7');
+    if (priceEl) {
+      priceText = priceEl.textContent.replace(/[đ\.\s₫đ]/g, "").trim();
+    }
+
+    // Clean up details keys/values
+    const cleanDetails = {};
+    for (const [k, v] of Object.entries(details)) {
+      if (k && v && k.length < 50) {
+        cleanDetails[k] = v;
+      }
+    }
+
+    return {
+      ok: true,
+      name,
+      description,
+      brand: brand || cleanDetails["Thương hiệu"] || "No Brand",
+      images,
+      details: cleanDetails,
+      priceText
+    };
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  function isMoreIconPath(path) {
+    const d = path?.getAttribute?.("d") || "";
+
+    return d.includes("M3.5,7") && d.includes("13.5");
+  }
+
+  function findProductMoreClickTarget(path, row) {
+    const pathRect = path.getBoundingClientRect();
+    const pathX = pathRect.left + pathRect.width / 2;
+    const pathY = pathRect.top + pathRect.height / 2;
+    let current = path.parentElement;
+    let bestTarget = path.closest("svg") || path.parentElement;
+
+    while (current && current !== row.parentElement) {
+      const rect = current.getBoundingClientRect();
+      const containsIcon = (
+        rect.left <= pathX &&
+        rect.right >= pathX &&
+        rect.top <= pathY &&
+        rect.bottom >= pathY
+      );
+
+      if (
+        containsIcon &&
+        rect.width >= 20 &&
+        rect.width <= 90 &&
+        rect.height >= 20 &&
+        rect.height <= 60 &&
+        isVisible(current)
+      ) {
+        bestTarget = current;
+      }
+
+      if (current === row) {
+        break;
+      }
+
+      current = current.parentElement;
+    }
+
+    return bestTarget;
+  }
+
+  function findProductActionRows() {
+    const rows = [];
+    const paths = Array.from(document.querySelectorAll("path")).filter(isMoreIconPath);
+
+    for (const path of paths) {
+      let current = path.parentElement;
+
+      for (let depth = 0; current && depth < 8; depth += 1) {
+        const rect = current.getBoundingClientRect();
+
+        if (
+          rect.width >= 120 &&
+          rect.width <= 260 &&
+          rect.height >= 24 &&
+          rect.height <= 70 &&
+          current.querySelector("svg") &&
+          isVisible(current)
+        ) {
+          rows.push({
+            row: current,
+            moreTarget: findProductMoreClickTarget(path, current)
+          });
+          break;
+        }
+
+        current = current.parentElement;
+      }
+    }
+
+    return rows.filter((entry, index) => {
+      return rows.findIndex((item) => item.row === entry.row) === index;
+    });
+  }
+
+  function findVisibleDropdownItem(text) {
+    const items = Array.from(document.querySelectorAll("ul.eds-dropdown-menu .eds-dropdown-item"));
+
+    return items.find((item) => {
+      return normalizeText(item.textContent) === text && isVisible(item);
+    });
+  }
+
+  function clickElementAtCenter(element) {
+    const rect = element.getBoundingClientRect();
+    const clientX = rect.left + rect.width / 2;
+    const clientY = rect.top + rect.height / 2;
+    const target = document.elementFromPoint(clientX, clientY) || element;
+    const options = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX,
+      clientY,
+      view: window
+    };
+
+    target.dispatchEvent(new PointerEvent("pointerdown", options));
+    target.dispatchEvent(new MouseEvent("mousedown", options));
+    target.dispatchEvent(new PointerEvent("pointerup", options));
+    target.dispatchEvent(new MouseEvent("mouseup", options));
+    target.dispatchEvent(new MouseEvent("click", options));
+
+    if (typeof target.click === "function") {
+      target.click();
+    }
+  }
+
+  function hoverElementAtCenter(element) {
+    const rect = element.getBoundingClientRect();
+    const clientX = rect.left + rect.width / 2;
+    const clientY = rect.top + rect.height / 2;
+    const target = document.elementFromPoint(clientX, clientY) || element;
+    const options = {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX,
+      clientY,
+      view: window
+    };
+
+    target.dispatchEvent(new PointerEvent("pointerover", options));
+    target.dispatchEvent(new MouseEvent("mouseover", options));
+    target.dispatchEvent(new PointerEvent("pointerenter", options));
+    target.dispatchEvent(new MouseEvent("mouseenter", options));
+    target.dispatchEvent(new PointerEvent("pointermove", options));
+    target.dispatchEvent(new MouseEvent("mousemove", options));
+  }
+
+  async function waitForVisibleDropdownItem(text) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const item = findVisibleDropdownItem(text);
+
+      if (item) {
+        return item;
+      }
+
+      await sleep(80);
+    }
+
+    return null;
+  }
+
+  function openProductListPreview(productCard) {
+    const url = getProductListLink(productCard);
+
+    if (!url) {
+      return false;
+    }
+
+    window.open(url, "_blank", "noopener");
+    return true;
+  }
+
+  async function clickProductListAction(moreButton, actionText, productCard) {
+    if (actionText === PRODUCT_LIST_ACTIONS[0] && openProductListPreview(productCard)) {
+      return;
+    }
+
+    hoverElementAtCenter(moreButton);
+    await sleep(180);
+    clickElementAtCenter(moreButton);
+
+    const item = await waitForVisibleDropdownItem(actionText);
+
+    if (!item) {
+      return;
+    }
+
+    if (item.classList.contains("disabled")) {
+      return;
+    }
+
+    clickElementAtCenter(item);
+  }
+
+  function findProductCardFromActionRow(row) {
+    return row.closest(".product-item") || row.closest(".product-card-item") || row;
+  }
+
+  function getProductListName(productCard) {
+    const nameElement = productCard.querySelector(".product-name .eds-popover__ref")
+      || productCard.querySelector(".product-name-wrap")
+      || productCard.querySelector(".product-name");
+
+    return normalizeText(nameElement?.textContent || "");
+  }
+
+  function getProductListItemId(productCard) {
+    const link = productCard.querySelector("a[href*='/portal/product/']");
+
+    if (link) {
+      const match = link.getAttribute("href")?.match(/\/portal\/product\/(\d+)/);
+
+      if (match?.[1]) {
+        return match[1];
+      }
+    }
+
+    const checkbox = productCard.querySelector(".product-checkbox input[name]");
+
+    return checkbox?.name?.match(/^\d+$/) ? checkbox.name : "";
+  }
+
+  function isLikelyShopeeId(value) {
+    return /^\d{6,16}$/.test(String(value || ""));
+  }
+
+  function findShopIdInObject(value, depth = 0) {
+    if (!value || depth > 5) {
+      return "";
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const shopId = findShopIdInObject(item, depth + 1);
+
+        if (shopId) {
+          return shopId;
+        }
+      }
+
+      return "";
+    }
+
+    if (typeof value !== "object") {
+      return "";
+    }
+
+    for (const [key, item] of Object.entries(value)) {
+      if (/^(shopid|shop_id|shopId|shopID)$/.test(key) && isLikelyShopeeId(item)) {
+        return String(item);
+      }
+
+      const nestedShopId = findShopIdInObject(item, depth + 1);
+
+      if (nestedShopId) {
+        return nestedShopId;
+      }
+    }
+
+    return "";
+  }
+
+  function findShopIdInStorageValue(value) {
+    const text = String(value || "");
+    const directMatch = text.match(/["']?(?:shopid|shop_id|shopId|shopID)["']?\s*[:=]\s*["']?(\d{6,16})/);
+
+    if (directMatch?.[1]) {
+      return directMatch[1];
+    }
+
+    try {
+      return findShopIdInObject(JSON.parse(text));
+    } catch {
+      return "";
+    }
+  }
+
+  function getProductListShopId() {
+    if (cachedProductListShopId) {
+      return cachedProductListShopId;
+    }
+
+    for (const storage of [window.localStorage, window.sessionStorage]) {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        const shopId = findShopIdInStorageValue(storage.getItem(key));
+
+        if (shopId) {
+          cachedProductListShopId = shopId;
+          return shopId;
+        }
+      }
+    }
+
+    return "";
+  }
+
+  function getProductListLink(productCard) {
+    const itemId = getProductListItemId(productCard);
+    const shopId = getProductListShopId();
+
+    if (!itemId || !shopId) {
+      return "";
+    }
+
+    return `https://shopee.vn/product/${shopId}/${itemId}/`;
+  }
+
+  async function copyTextToClipboard(text) {
+    if (!text) {
+      return false;
+    }
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+
+    const textarea = document.createElement("textarea");
+
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    document.body.append(textarea);
+    textarea.select();
+
+    const ok = document.execCommand("copy");
+
+    textarea.remove();
+    return ok;
+  }
+
+  function showCopyButtonState(button, successText) {
+    const oldText = button.textContent;
+
+    button.textContent = successText;
+    button.classList.add("shopee-qlsp-copy-done");
+    window.setTimeout(() => {
+      button.textContent = oldText;
+      button.classList.remove("shopee-qlsp-copy-done");
+    }, 1000);
+  }
+
+  function createCopyButton(text, getValue) {
+    const button = document.createElement("button");
+
+    button.type = "button";
+    button.textContent = text;
+    button.title = text;
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const value = await Promise.resolve(getValue());
+
+      if (value && await copyTextToClipboard(value)) {
+        showCopyButtonState(button, "Đã copy");
+      } else {
+        showCopyButtonState(button, "Trống");
+      }
+    });
+
+    return button;
+  }
+
+  function isOrderListPage() {
+    return window.location.pathname.startsWith("/portal/sale/order");
+  }
+
+  function injectOrderSnCopyStyle() {
+    if (document.getElementById(ORDER_SN_COPY_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+
+    style.id = ORDER_SN_COPY_STYLE_ID;
+    style.textContent = `
+      .${ORDER_SN_COPY_BUTTON_CLASS} {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 28px !important;
+        min-width: 28px !important;
+        height: 24px !important;
+        margin-left: 6px !important;
+        padding: 0 !important;
+        border: 1px solid #d8dee8 !important;
+        border-radius: 4px !important;
+        color: #2673dd !important;
+        background: #fff !important;
+        font: 700 12px/1 Arial, sans-serif !important;
+        cursor: pointer !important;
+        vertical-align: middle !important;
+      }
+
+      .${ORDER_SN_COPY_BUTTON_CLASS}:hover {
+        border-color: #2673dd !important;
+        background: #eef5ff !important;
+      }
+
+      .${ORDER_SN_COPY_BUTTON_CLASS}.shopee-qlsp-copy-done {
+        border-color: #17a36b !important;
+        color: #0f8a59 !important;
+        background: #f0fff8 !important;
+      }
+      .ud-ct-badge {
+        display: inline-flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 2px !important;
+        margin: 0 8px !important;
+        vertical-align: middle !important;
+      }
+
+      .ud-ct-badge-row {
+        display: inline-flex !important;
+        align-items: center !important;
+        max-width: 760px !important;
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        color: #fff !important;
+        font: 700 12px/1.35 Arial, sans-serif !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+      }
+    `;
+    document.documentElement.append(style);
+  }
+
+  function cleanOrderCode(val) {
+    if (!val) return "";
+    let s = String(val).trim();
+    s = s.replace(/(?:Copy(?:\s*All)?|Sao\s*ch[eéê]p|SaoChep|Excel|In\s*đơn|In\s*phiếu|\bC\b)+$/gi, '').trim();
+    s = s.replace(/copy$/i, '').trim();
+    return s;
+  }
+
+  function getOrderSnFromText(text) {
+    if (!text) return "";
+    let clean = text.replace(/(?:Copy(?:\s*All)?|Sao\s*ch[eéê]p|SaoChep|Excel|In\s*đơn|In\s*phiếu)+$/gi, ' ').trim();
+    const normalized = normalizeText(clean);
+    const match = normalized.match(/(?:M[\u00e3a]\s*\u0111\u01a1n\s*h[\u00e0a]ng|ma\s*don\s*hang)?\s*([A-Z0-9]{10,})/i);
+
+    let sn = match?.[1] || "";
+    return cleanOrderCode(sn);
+  }
+
+  
+  function getCustomExcelFilename(maGian = "bce") {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    
+    const dateKey = `shopee_excel_stt_${dd}${mm}`;
+    let dailyStt = parseInt(localStorage.getItem(dateKey) || '0', 10) + 1;
+    localStorage.setItem(dateKey, dailyStt);
+    
+    const cleanGian = String(maGian || "").trim().toLowerCase();
+    return `${dd}${mm}-${cleanGian}-${hh}${m}-${dailyStt}.xlsx`;
+  }
+
+  function extractBuyerUsernameFromOrder(orderSnElement) {
+    if (!orderSnElement) return "";
+
+    try {
+      // 1. Tìm container chứa đơn hàng này (Card / Table Row / Wrapper)
+      let targetCard = orderSnElement.closest(
+        '.order-card, [class*="order-card"], [class*="orderCard"], [class*="order-box"], [class*="order-item"], tr.shopee-table__row, .shopee-table__row, [data-testid="order-item"], .order-item-wrapper, tbody, tr'
+      );
+
+      if (!targetCard) {
+        let cur = orderSnElement;
+        while (cur && cur.parentElement && cur !== document.body && cur !== document.documentElement) {
+          if (cur.querySelectorAll && cur.querySelectorAll("span.order-sn, .order-sn").length > 1) break;
+          if (cur.querySelector && (cur.querySelector("div.item-name") || cur.querySelector(".user-name") || cur.querySelector('[class*="buyer"]'))) {
+            targetCard = cur;
+          }
+          cur = cur.parentElement;
+        }
+      }
+
+      if (!targetCard) targetCard = orderSnElement.parentElement || document.body;
+
+      // 2. Quét các selector phổ biến của Shopee
+      const buyerSelectors = [
+        '.buyer-username',
+        '[data-testid="buyer-username"]',
+        '[class*="buyer-username"]',
+        '[class*="buyerName"]',
+        '[class*="buyer-name"]',
+        '[class*="buyerUserName"]',
+        '[class*="buyer_username"]',
+        '.order-item-header__buyer-name',
+        '.order-item-header__buyer',
+        '.order-item-header .buyer',
+        '.order-item-header .name',
+        '.order-item-header .user-name',
+        '.order-item-header [class*="buyer"]',
+        '.order-item-header [class*="user"]',
+        '.buyer .name',
+        '.buyer .user-name',
+        '.buyer',
+        '[class*="buyer"] .name',
+        '[class*="buyer"] [class*="name"]',
+        '.user-name',
+        '[class*="user-name"]',
+        '[class*="buyer-wrap"] a',
+        '[class*="buyer-wrap"] span',
+        '[class*="buyer"] a',
+        '[class*="buyer"] span',
+        '[class*="buyer"] div',
+        '.shopee-avatar + span',
+        '.shopee-avatar + div',
+        '.eds-avatar + span',
+        '.eds-avatar + div',
+        '[class*="avatar"] + span',
+        '[class*="avatar"] + div',
+        '[class*="avatar"] ~ span',
+        '[class*="avatar"] ~ div',
+        '[class*="avatar"] ~ a'
+      ];
+
+      for (const sel of buyerSelectors) {
+        const el = targetCard.querySelector(sel);
+        if (el) {
+          const clone = el.cloneNode(true);
+          clone.querySelectorAll('button, svg, i, [role="button"], [class*="chat"], .eds-icon, .shopee-qlsp-order-sn-copy, .ud-ct-badge').forEach(n => n.remove());
+          let name = clone.textContent.replace(/\s+/g, ' ').trim();
+          name = name.replace(/^(?:Người mua|Khách hàng|Buyer|Tên người mua)[:\s]*/i, '').trim();
+          if (name && name.length >= 2 && !/^(chat|xem|chi tiết|liên hệ|in đơn|tất cả|chờ xác nhận|chờ lấy hàng|đang giao|đã giao|đã hủy|mã đơn|sao chép|copy)$/i.test(name)) {
+            return name;
+          }
+        }
+      }
+
+      // 3. Quét các thẻ a, button, icon chat trong targetCard
+      const chatLinks = targetCard.querySelectorAll('a[href*="/buyer/"], a[href*="/user/"], [title*="chat" i], [aria-label*="chat" i], button[class*="chat"], [class*="chat-btn"], [class*="chat"]');
+      for (const link of chatLinks) {
+        const txt = link.textContent.trim() || link.getAttribute('title') || link.getAttribute('aria-label') || '';
+        const m = txt.match(/chat\s*(?:với)?\s*([a-zA-Z0-9._-]+)/i);
+        if (m && m[1] && !/^(shop|khách|người|bán|ngay)$/i.test(m[1])) return m[1].trim();
+
+        // Kiểm tra phần tử liền kề nút chat
+        const prev = link.previousElementSibling;
+        if (prev) {
+          const pTxt = (prev.textContent || "").trim();
+          if (pTxt && pTxt.length >= 2 && pTxt.length <= 35 && !pTxt.includes(" ") && !/^(chat|xem|mã đơn|in đơn)$/i.test(pTxt)) {
+            return pTxt;
+          }
+        }
+      }
+
+      // 4. Quét header của order card
+      const headerEl = targetCard.querySelector('.order-item-header, .order-header, [class*="header"]') || targetCard;
+      const spansInHeader = Array.from(headerEl.querySelectorAll('span, div, a')).filter(el => el.children.length === 0);
+      for (const sp of spansInHeader) {
+        if (sp.closest('button, .shopee-qlsp-order-sn-copy, .order-sn, [class*="order-sn"]')) continue;
+        const text = (sp.textContent || "").trim();
+        if (text && text.length >= 3 && text.length <= 30 && !text.includes(" ") && !text.includes(":") && !text.includes("/") && !text.includes("₫")) {
+          if (!/^(chat|xem|chitiet|detail|indon|indonhang|shopee|spx|nhanh|choxacnhan|cholayhang|danggiao|dagiao|dahuy|nhantin)$/i.test(text)) {
+            if (!/^[0-9]{6}[A-Z0-9]{6,14}$/i.test(text) && !/^\d{10,}$/.test(text)) {
+              return text;
+            }
+          }
+        }
+      }
+
+      // 5. Fallback quét text toàn bộ orderCard
+      const cardText = targetCard.innerText || targetCard.textContent || "";
+      const mText = cardText.match(/(?:Người mua|Khách hàng|Buyer)[:\s]+([a-zA-Z0-9._-]+)/i);
+      if (mText && mText[1] && !/^(shop|khách|người|bán|ngay)$/i.test(mText[1])) {
+        return mText[1].trim();
+      }
+    } catch (err) {
+      console.warn("[Shopee Ext] Lỗi extractBuyerUsernameFromOrder:", err);
+    }
+
+    return "";
+  }
+
+  function renderOrderSnCopyButtons() {
+    updateDonHangMdhCache().then(() => updateCopyAllButtonColors());
+    if (!isOrderListPage()) {
+      return;
+    }
+
+    updateUdCtMdhIdsCache().then(() => updateUdCtBadgeColors());
+    updateUdCtBadgeColors();
+
+    injectOrderSnCopyStyle();
+
+    for (const orderSnElement of document.querySelectorAll("span.order-sn")) {
+      if (orderSnElement.dataset.shopeeQlspOrderSnCopy === "1") {
+        continue;
+      }
+
+      const orderSn = getOrderSnFromText(orderSnElement.textContent);
+
+      if (!orderSn) {
+        continue;
+      }
+
+      const button = document.createElement("button");
+
+      orderSnElement.dataset.shopeeQlspOrderSnCopy = "1";
+      
+      // Inject custom checkbox for bulk export
+      if (!orderSnElement.parentNode.querySelector('.shopee-qlsp-bulk-checkbox')) {
+        const customCb = document.createElement("input");
+        customCb.type = "checkbox";
+        customCb.className = "shopee-qlsp-bulk-checkbox";
+        customCb.style.marginRight = "10px";
+        customCb.style.transform = "scale(1.5)";
+        customCb.style.cursor = "pointer";
+        customCb.title = "Tích để tải file Excel hàng loạt";
+        orderSnElement.parentNode.insertBefore(customCb, orderSnElement);
+      }
+
+
+      const badge = document.createElement("span");
+      badge.textContent = "UD_CT...";
+      badge.className = "ud-ct-badge";
+      badge.dataset.shopeeQlspOrderId = orderSn;
+      badge.dataset.shopeeQlspUdCtFilled = "0";
+      badge.style.padding = "2px 6px";
+      badge.style.borderRadius = "4px";
+      badge.style.fontSize = "12px";
+      badge.style.fontWeight = "bold";
+      badge.style.border = "none";
+      
+      if (cachedUdCtMdhIds.has(orderSn)) {
+          badge.innerHTML = cachedUdCtMdhIds.get(orderSn);
+          badge.style.backgroundColor = "#22c55e";
+          badge.style.color = "white";
+      } else {
+          badge.style.backgroundColor = "transparent";
+          badge.style.color = "#64748b";
+      }
+      
+      let tempContainer = orderSnElement;
+      let orderContainer = null;
+      while (tempContainer && tempContainer.tagName !== "BODY") {
+          const snCount = tempContainer.querySelectorAll("span.order-sn").length;
+          if (snCount > 1) break;
+          // shoppe lists order in a card. we can usually identify it by containing item-name or tracking-number or specific classes
+          if (tempContainer.querySelector(".eds-button--link") || tempContainer.querySelector("button")) {
+              orderContainer = tempContainer;
+          }
+          tempContainer = tempContainer.parentElement;
+      }
+      
+      let xemChiTietBtn = null;
+      if (orderContainer) {
+          const btns = Array.from(orderContainer.querySelectorAll("button"));
+          xemChiTietBtn = btns.find(b => (b.textContent || b.innerText || "").trim() === "Xem chi tiết");
+      }
+      
+      if (xemChiTietBtn) {
+          let badgeWrapper = document.createElement("div");
+          badgeWrapper.style.marginTop = "8px";
+          badgeWrapper.style.width = "100%";
+          badgeWrapper.style.display = "flex";
+          badgeWrapper.style.justifyContent = "center"; // center or flex-end depending on the layout, looking at the image it's on the right
+          badgeWrapper.style.alignItems = "center";
+          badgeWrapper.appendChild(badge);
+          xemChiTietBtn.parentElement.appendChild(badgeWrapper);
+      } else {
+          orderSnElement.parentNode.insertBefore(badge, orderSnElement);
+      }
+      button.type = "button";
+      button.className = ORDER_SN_COPY_BUTTON_CLASS;
+      button.textContent = "C";
+      button.title = `Copy ma don hang ${orderSn}`;
+      button.setAttribute("aria-label", `Copy ma don hang ${orderSn}`);
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (await copyTextToClipboard(orderSn)) {
+          showCopyButtonState(button, "OK");
+        } else {
+          showCopyButtonState(button, "Loi");
+        }
+      });
+
+      const copyAllBtn = document.createElement("button");
+      copyAllBtn.type = "button";
+      copyAllBtn.className = ORDER_SN_COPY_BUTTON_CLASS + " btn-copy-all-check";
+      copyAllBtn.dataset.shopeeQlspCopyAllOrderId = orderSn;
+      copyAllBtn.textContent = "Copy All";
+      if (cachedDonHangMdhIndices.has(orderSn) || cachedDhHoanIds.has(orderSn)) {
+          copyAllBtn.style.backgroundColor = "#cbb89d"; // màu be
+          copyAllBtn.style.borderColor = "#b7a285";
+          copyAllBtn.style.color = "#3d3124";
+          copyAllBtn.style.fontWeight = "bold";
+      }
+      copyAllBtn.title = `Copy toan bo thong tin don hang ${orderSn}`;
+      copyAllBtn.setAttribute("aria-label", `Copy toan bo thong tin don hang ${orderSn}`);
+      copyAllBtn.style.width = "auto";
+      copyAllBtn.style.padding = "0 8px";
+      copyAllBtn.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        let orderContainer = orderSnElement;
+        let lastValidContainer = null;
+        while (orderContainer && orderContainer.tagName !== "BODY") {
+          const snCount = orderContainer.querySelectorAll("span.order-sn").length;
+          if (snCount > 1) break;
+          if (orderContainer.querySelector("div.item-name")) {
+            lastValidContainer = orderContainer;
+          }
+          orderContainer = orderContainer.parentElement;
+        }
+        orderContainer = lastValidContainer;
+
+        if (!orderContainer) {
+          showCopyButtonState(copyAllBtn, "Loi");
+          return;
+        }
+
+        const getCleanText = (el) => {
+          if (!el) return "";
+          const clone = el.cloneNode(true);
+          clone.querySelectorAll('button, .shopee-qlsp-sku-display, .shopee-qlsp-copy-button, .btn-copy-price, .injected-sku-ct, .tracking-copy-btn, .order-copy-btn').forEach(n => n.remove());
+          return clone.textContent.replace(/\s+/g, ' ').trim();
+        };
+
+        const trackingEl = orderContainer.querySelector("div.tracking-number");
+        const trackingText = getCleanText(trackingEl);
+
+        const productInfos = [];
+        for (const nameEl of orderContainer.querySelectorAll("div.item-name")) {
+          const nameText = getCleanText(nameEl);
+          const varEl = nameEl.parentElement.querySelector("div.item-description");
+          const varText = getCleanText(varEl);
+          
+          let skuText = "";
+          let sibling = (varEl || nameEl).nextElementSibling;
+          while (sibling) {
+            if (sibling.classList.contains("shopee-qlsp-sku-display")) {
+              skuText = getCleanText(sibling);
+              break;
+            }
+            if (sibling.classList.contains("item-name")) break;
+            sibling = sibling.nextElementSibling;
+          }
+          
+          productInfos.push({ name: nameText, variation: varText, sku: skuText });
+        }
+
+        let copyText = `Mã vận đơn: ${trackingText || "Chưa có"}\nMã đơn hàng: ${orderSn}`;
+        for (const p of productInfos) {
+          copyText += `\n-----\n`;
+          if (p.sku) copyText += `${p.sku}\n`;
+          copyText += `Tên SP: ${p.name}`;
+          if (p.variation) copyText += `\nPhân loại: ${p.variation}`;
+        }
+
+        if (await copyTextToClipboard(copyText)) {
+          showCopyButtonState(copyAllBtn, "OK");
+        } else {
+          showCopyButtonState(copyAllBtn, "Loi");
+        }
+      });
+
+
+      const excelBtn = document.createElement("button");
+      excelBtn.type = "button";
+      excelBtn.className = ORDER_SN_COPY_BUTTON_CLASS;
+      excelBtn.textContent = "Excel";
+      excelBtn.title = "Tải Excel đơn hàng";
+      excelBtn.style.width = "auto";
+      excelBtn.style.padding = "0 8px";
+      excelBtn.style.marginLeft = "6px";
+      excelBtn.style.backgroundColor = "#107c41"; // Excel green
+      excelBtn.style.color = "white";
+      excelBtn.style.borderColor = "#107c41";
+      
+      excelBtn.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        let orderContainer = orderSnElement;
+        let lastValidContainer = null;
+        while (orderContainer && orderContainer.tagName !== "BODY") {
+          const snCount = orderContainer.querySelectorAll("span.order-sn").length;
+          if (snCount > 1) break;
+          if (orderContainer.querySelector("div.item-name")) {
+            lastValidContainer = orderContainer;
+          }
+          orderContainer = orderContainer.parentElement;
+        }
+        orderContainer = lastValidContainer;
+
+        if (!orderContainer) {
+          showCopyButtonState(excelBtn, "Loi");
+          return;
+        }
+
+        const getCleanText = (el) => {
+          if (!el) return "";
+          const clone = el.cloneNode(true);
+          clone.querySelectorAll('button, .shopee-qlsp-sku-display, .shopee-qlsp-copy-button, .btn-copy-price, .injected-sku-ct, .tracking-copy-btn, .order-copy-btn').forEach(n => n.remove());
+          return clone.textContent.replace(/\s+/g, ' ').trim();
+        };
+
+        const trackingEl = orderContainer.querySelector("div.tracking-number");
+        const trackingText = getCleanText(trackingEl);
+
+        const priceEl = orderContainer.querySelector("div.total-price");
+        const priceText = getCleanText(priceEl).replace(/[^\d]/g, '');
+
+        const items = orderContainer.querySelectorAll("div.item");
+        
+        const headers = ["Mã đơn hàng", "Mã Kiện Hàng", "Ngày đặt hàng", "Trạng Thái Đơn Hàng", "Nhận xét từ Người mua", "Mã vận đơn", "Đơn Vị Vận Chuyển", "Phương thức giao hàng", "Loại đơn hàng", "Ngày giao hàng dự kiến", "Ngày gửi hàng", "Thời gian giao hàng", "Trạng thái Trả hàng/Hoàn tiền", "SKU sản phẩm", "Tên sản phẩm", "Cân nặng sản phẩm", "Tổng cân nặng", "Tên kho hàng", "SKU phân loại hàng", "Tên phân loại hàng", "Giá gốc", "Người bán trợ giá", "Được Shopee trợ giá", "Tổng số tiền được người bán trợ giá", "Giá gốc (Y)", "Số lượng", "Số lượng sản phẩm được hoàn trả", "Tổng số tiền Người mua thanh toán"];
+        
+        const rowsData = [headers];
+        
+        items.forEach(itemEl => {
+          const amountEl = itemEl.querySelector("div.item-amount");
+          const quantity = getCleanText(amountEl).replace(/[^\d]/g, '') || "1";
+          
+          let skuText = "";
+          const varEl = itemEl.querySelector("div.item-description");
+          const nameEl = itemEl.querySelector("div.item-name");
+          let sibling = (varEl || nameEl)?.nextElementSibling;
+          while (sibling) {
+            if (sibling.classList.contains("shopee-qlsp-sku-display")) {
+              skuText = getCleanText(sibling).replace(/^SKU:\s*/i, '');
+              break;
+            }
+            if (sibling.classList.contains("item-name")) break;
+            sibling = sibling.nextElementSibling;
+          }
+          
+          let row = new Array(28).fill("");
+          row[0] = orderSn; // A
+          row[5] = trackingText; // F
+          row[6] = "Nhanh-SPX Express"; // G
+          row[18] = skuText; // S
+          row[24] = priceText ? String(parseInt(priceText, 10) * 10 + 10000000) : ""; // Y
+          row[25] = quantity; // Z
+          
+          rowsData.push(row);
+        });
+        
+        chrome.storage.local.get(["maGian", "dhHoanTextValue"], (res) => {
+          const maGian = res.maGian || res.dhHoanTextValue || "bce";
+          try {
+            if (typeof XLSX === "undefined") {
+              alert("Đang tải thư viện Excel, vui lòng thử lại sau 1-2 giây!");
+              return;
+            }
+            const ws = XLSX.utils.aoa_to_sheet(rowsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Orders");
+            downloadExcelFileBypass(wb, getCustomExcelFilename(maGian));
+            showCopyButtonState(excelBtn, "OK");
+          } catch (e) {
+            console.error(e);
+            showCopyButtonState(excelBtn, "Loi");
+          }
+        });
+      });
+
+      const chatKhachBtn = document.createElement("button");
+      chatKhachBtn.type = "button";
+      chatKhachBtn.className = ORDER_SN_COPY_BUTTON_CLASS + " btn-chat-khach";
+      chatKhachBtn.textContent = "💬 Chat khách";
+      chatKhachBtn.title = `Copy tên khách và mở Webchat gửi tin nhắn cho đơn ${orderSn}`;
+      chatKhachBtn.style.width = "auto";
+      chatKhachBtn.style.padding = "0 8px";
+      chatKhachBtn.style.marginLeft = "6px";
+      chatKhachBtn.style.backgroundColor = "#0284c7";
+      chatKhachBtn.style.color = "white";
+      chatKhachBtn.style.borderColor = "#0284c7";
+      chatKhachBtn.style.fontWeight = "bold";
+
+      chatKhachBtn.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        try {
+          let buyerName = extractBuyerUsernameFromOrder(orderSnElement);
+          const messageToSend = DEFAULT_CHAT_KHACH_MESSAGE;
+
+          if (buyerName) {
+            await copyTextToClipboard(buyerName);
+            showCopyButtonState(chatKhachBtn, "✓ " + buyerName);
+          } else {
+            showCopyButtonState(chatKhachBtn, "Đang mở chat...");
+          }
+
+          // Lưu thông tin chờ gửi vào chrome.storage.local
+          await chrome.storage.local.set({
+            pendingAutoChat: {
+              buyerName: buyerName || "",
+              message: messageToSend,
+              timestamp: Date.now()
+            }
+          });
+
+          // Gửi message tới background để mở hoặc focus tab Webchat
+          let backgroundHandled = false;
+          chrome.runtime.sendMessage({
+            type: "OPEN_AND_SEND_WEBCHAT_MESSAGE",
+            buyerName: buyerName || "",
+            message: messageToSend
+          }, (response) => {
+            if (response && response.ok) {
+              backgroundHandled = true;
+            }
+          });
+
+          // Fallback an toàn: nếu background bị sleep sau 350ms, mở tab trực tiếp
+          setTimeout(() => {
+            if (chrome.runtime.lastError || !backgroundHandled) {
+              try {
+                window.open("https://banhang.shopee.vn/new-webchat/conversations", "_blank");
+              } catch (_) {}
+            }
+          }, 400);
+        } catch (err) {
+          console.error("Lỗi click Chat khách:", err);
+          window.open("https://banhang.shopee.vn/new-webchat/conversations", "_blank");
+        }
+      });
+
+      orderSnElement.insertAdjacentElement("afterend", chatKhachBtn);
+      orderSnElement.insertAdjacentElement("afterend", excelBtn);
+      orderSnElement.insertAdjacentElement("afterend", copyAllBtn);
+
+      orderSnElement.insertAdjacentElement("afterend", button);
+    }
+  }
+
+  function renderItemNameCopyButtons() {
+    if (!isOrderListPage()) {
+      return;
+    }
+
+    injectOrderSnCopyStyle();
+
+    for (const itemNameElement of document.querySelectorAll("div.item-name")) {
+      if (itemNameElement.dataset.shopeeQlspItemNameCopy === "1") {
+        continue;
+      }
+
+      const itemName = itemNameElement.textContent.trim();
+
+      if (!itemName) {
+        continue;
+      }
+
+      const button = document.createElement("button");
+
+      itemNameElement.dataset.shopeeQlspItemNameCopy = "1";
+      button.type = "button";
+      button.className = ORDER_SN_COPY_BUTTON_CLASS;
+      button.textContent = "C";
+      button.title = `Copy ten san pham ${itemName}`;
+      button.setAttribute("aria-label", `Copy ten san pham ${itemName}`);
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (await copyTextToClipboard(itemName)) {
+          showCopyButtonState(button, "OK");
+        } else {
+          showCopyButtonState(button, "Loi");
+        }
+      });
+
+      // Äáº·t nÃºt á»Ÿ Ä‘áº§u Ä‘á»ƒ khÃ´ng bá»‹ áº©n khi tÃªn sáº£n pháº©m quÃ¡ dÃ i (bá»‹ Shopee cáº¯t báº±ng dáº¥u ...)
+      button.style.marginLeft = "0";
+      button.style.marginRight = "6px";
+      itemNameElement.prepend(button);
+    }
+  }
+
+  function renderTrackingNumberCopyButtons() {
+    if (!isOrderListPage()) {
+      return;
+    }
+
+    injectOrderSnCopyStyle();
+
+    for (const trackingElement of document.querySelectorAll("div.tracking-number")) {
+      if (trackingElement.dataset.shopeeQlspTrackingCopy === "1") {
+        continue;
+      }
+
+      const trackingNumber = trackingElement.textContent.trim();
+
+      if (!trackingNumber) {
+        continue;
+      }
+
+      const button = document.createElement("button");
+
+      trackingElement.dataset.shopeeQlspTrackingCopy = "1";
+      button.type = "button";
+      button.className = ORDER_SN_COPY_BUTTON_CLASS;
+      button.textContent = "C";
+      button.title = `Copy ma van don ${trackingNumber}`;
+      button.setAttribute("aria-label", `Copy ma van don ${trackingNumber}`);
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (await copyTextToClipboard(trackingNumber)) {
+          showCopyButtonState(button, "OK");
+        } else {
+          showCopyButtonState(button, "Loi");
+        }
+      });
+
+      trackingElement.append(button);
+    }
+  }
+
+  let spShopeePromise = null;
+
+  function loadSpShopeeData() {
+    if (!spShopeePromise) {
+      spShopeePromise = new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: "FETCH_SP_SHOPEE" }, (response) => {
+          if (response && response.ok) {
+            resolve(response.values);
+          } else {
+            console.error("Loi khi lay du lieu SP_SHOPEE:", response?.error);
+            resolve(null);
+          }
+        });
+      });
+    }
+    return spShopeePromise;
+  }
+
+  function getShopeeSkuFromRow(row) {
+    const sku = String(row?.[5] || "").trim();
+    return sku || String(row?.[4] || "").trim();
+  }
+
+  function isShopeeSkuFallbackFromProductSku(row) {
+    return !String(row?.[5] || "").trim() && !!String(row?.[4] || "").trim();
+  }
+
+  function isShopeeProductNameMatch(sheetName, productName) {
+    const normSheetName = normalizeText(sheetName).toLowerCase();
+    const normProductName = normalizeText(productName).toLowerCase();
+
+    if (!normSheetName || !normProductName) return false;
+
+    const sheetPrefix = normSheetName.replace(/\.\.\.$/, "").trim();
+    const productPrefix = normProductName.replace(/\.\.\.$/, "").trim();
+
+    return normSheetName === normProductName ||
+      (normProductName.endsWith("...") && normSheetName.startsWith(productPrefix)) ||
+      (normSheetName.endsWith("...") && normProductName.startsWith(sheetPrefix)) ||
+      normProductName.includes(normSheetName) ||
+      normSheetName.includes(normProductName);
+  }
+
+  async function renderProductSkus() {
+    if (!isOrderListPage()) {
+      return;
+    }
+
+    const data = await loadSpShopeeData();
+    if (!data || !data.length) {
+      return;
+    }
+    
+    const storageRes = await new Promise(resolve => chrome.storage.local.get(["maGian", "dhHoanTextValue"], resolve));
+    const maGian = (storageRes.maGian || storageRes.dhHoanTextValue || "").trim().toLowerCase();
+
+    for (const nameEl of document.querySelectorAll("div.item-name, .order-item-name, [class*='product-name'], [class*='item-name'], [class*='goods-name']")) {
+      if (nameEl.classList?.contains('shopee-qlsp-sku-display') || nameEl.closest('.shopee-qlsp-sku-display')) continue;
+      const currentText = nameEl.textContent.trim();
+      if (nameEl.dataset.shopeeQlspSkuRendered === "1" && nameEl.dataset.shopeeQlspLastText === currentText) {
+        continue;
+      }
+
+      // Remove any existing sku display under the parent
+      const parent = nameEl.parentElement;
+      if (parent) {
+        parent.querySelectorAll(".shopee-qlsp-sku-display").forEach(el => el.remove());
+      }
+
+      const cloneName = nameEl.cloneNode(true);
+      cloneName.querySelectorAll('button, .shopee-qlsp-sku-display, .shopee-qlsp-copy-button').forEach(n => n.remove());
+      const itemNameClean = cloneName.textContent.replace(/\s+/g, ' ').trim();
+
+      if (!itemNameClean) {
+        continue;
+      }
+
+      const varEl = (parent ? parent.querySelector("div.item-description, .order-item-variation, [class*='item-description'], [class*='variation']") : null)
+        || nameEl.closest('div.item, .order-item, [class*="order-item"], tr')?.querySelector("div.item-description, .order-item-variation, [class*='item-description'], [class*='variation']");
+      let varText = "";
+      
+      if (varEl) {
+        const cloneVar = varEl.cloneNode(true);
+        cloneVar.querySelectorAll('button, .shopee-qlsp-sku-display, .shopee-qlsp-copy-button').forEach(n => n.remove());
+        varText = cloneVar.textContent.replace(/\s+/g, ' ').trim();
+      }
+
+      const normItemName = normalizeText(itemNameClean).toLowerCase();
+      const normItemVar = normalizeText(varText).toLowerCase();
+      const cleanItemVar = normItemVar.replace(/^(?:variation|ph\u00e2n lo\u1ea1i h\u00e0ng|ph\u00e2n lo\u1ea1i)\s*:\s*/i, "").trim();
+
+      let matchedSku = null;
+
+      // 2 vòng tìm kiếm: Vòng 1 ưu tiên đúng mã gian, Vòng 2 tìm toàn sheet SP_SHOPEE nếu không thấy
+      const gianPasses = maGian ? [maGian, null] : [null];
+      for (const curGianFilter of gianPasses) {
+        if (matchedSku) break;
+        for (const row of data) {
+          const sheetName = (row[1] || "").trim();
+          const sheetVar = (row[3] || "").trim();
+          const sheetSku = getShopeeSkuFromRow(row);
+          const isFallbackProductSku = isShopeeSkuFallbackFromProductSku(row);
+          const sheetGian = (row[11] || "").trim().toLowerCase(); // Col L (index 11)
+
+          if (!sheetName || !sheetSku) continue;
+          
+          // Filter by maGian if current pass specifies it
+          if (curGianFilter && sheetGian && sheetGian !== curGianFilter) continue;
+
+          const isNameMatch = isShopeeProductNameMatch(sheetName, itemNameClean);
+          if (!isNameMatch) continue;
+
+          const normSheetVar = normalizeText(sheetVar).toLowerCase();
+          
+          let isVarMatch = false;
+          if (isFallbackProductSku || (!normSheetVar && !cleanItemVar)) {
+            isVarMatch = true;
+          } else if (normSheetVar && cleanItemVar) {
+            if (normSheetVar === cleanItemVar || cleanItemVar.includes(normSheetVar) || normSheetVar.includes(cleanItemVar)) {
+              isVarMatch = true;
+            }
+          }
+
+          if (isNameMatch && isVarMatch) {
+            matchedSku = sheetSku;
+            break;
+          }
+        }
+      }
+
+      nameEl.dataset.shopeeQlspSkuRendered = "1";
+      nameEl.dataset.shopeeQlspLastText = currentText;
+
+      if (matchedSku) {
+        const skuDiv = document.createElement("div");
+        skuDiv.className = "shopee-qlsp-sku-display";
+        skuDiv.style.color = "#ee4d2d";
+        skuDiv.style.fontWeight = "bold";
+        skuDiv.style.marginTop = "4px";
+        skuDiv.style.fontSize = "13px";
+        skuDiv.textContent = `SKU: ${matchedSku}`;
+
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = ORDER_SN_COPY_BUTTON_CLASS;
+        copyBtn.textContent = "C";
+        copyBtn.title = `Copy SKU ${matchedSku}`;
+        copyBtn.setAttribute("aria-label", `Copy SKU ${matchedSku}`);
+        copyBtn.style.marginLeft = "6px";
+        copyBtn.addEventListener("click", async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          if (await copyTextToClipboard(matchedSku)) {
+            showCopyButtonState(copyBtn, "OK");
+          } else {
+            showCopyButtonState(copyBtn, "Loi");
+          }
+        });
+
+        skuDiv.append(copyBtn);
+        
+        if (varEl) {
+          varEl.insertAdjacentElement("afterend", skuDiv);
+        } else {
+          nameEl.insertAdjacentElement("afterend", skuDiv);
+        }
+      }
+    }
+  }
+
+  let globalSpShopeePromise = null;
+  function getSpShopeeDataList() {
+      if (window.cachedSpShopee) return Promise.resolve(window.cachedSpShopee);
+      if (!globalSpShopeePromise) {
+          globalSpShopeePromise = new Promise(resolve => {
+              chrome.runtime.sendMessage({ type: "FETCH_SP_SHOPEE" }, (res) => {
+                  if (res && res.ok && res.values) {
+                      window.cachedSpShopee = res.values;
+                  }
+                  resolve(window.cachedSpShopee || []);
+              });
+          });
+      }
+      return globalSpShopeePromise;
+  }
+
+  let globalCaiDatPromise = null;
+  function getCaiDatDataList(forceRefresh = false) {
+    if (!forceRefresh && window.cachedCaiDat) return Promise.resolve(window.cachedCaiDat);
+    if (!forceRefresh && globalCaiDatPromise) return globalCaiDatPromise;
+
+    globalCaiDatPromise = new Promise(resolve => {
+      chrome.runtime.sendMessage({ type: "FETCH_CAI_DAT" }, (res) => {
+        globalCaiDatPromise = null;
+        if (res && res.ok && res.values) {
+          window.cachedCaiDat = res.values;
+        }
+        resolve(window.cachedCaiDat || []);
+      });
+    });
+    return globalCaiDatPromise;
+  }
+
+  async function getLinkKmByMaGian(maGian) {
+    try {
+      const rows = await getCaiDatDataList();
+      if (!rows || rows.length <= 1) return "";
+
+      const headers = (rows[0] || []).map(h => String(h || "").trim().toLowerCase());
+
+      // Tìm cột gian: header là "gian", "mã gian", "ma gian", "ma_gian" hoặc mặc định index 1 (Cột B)
+      let gianIdx = headers.findIndex(h => h === "gian" || h === "ma gian" || h === "mã gian" || h === "ma_gian");
+      if (gianIdx === -1) gianIdx = 1;
+
+      // Tìm cột link_km: header là "link_km", "link km", "km", "khuyen mai", "link_giam_gia" hoặc mặc định index 8 (Cột I: A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8)
+      let linkKmIdx = headers.findIndex(h => h === "link_km" || h === "link km" || h === "link_giam_gia" || h === "km" || h === "khuyen mai" || h.includes("link_km") || h.includes("link km"));
+      if (linkKmIdx === -1) linkKmIdx = 8; // Cột I (index 8)
+
+      const targetGian = String(maGian || "").trim().toLowerCase();
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const rowGian = String(row[gianIdx] || "").trim().toLowerCase();
+        if (rowGian && (!targetGian || rowGian === targetGian)) {
+          const linkKm = String(row[linkKmIdx] || "").trim();
+          if (linkKm) return linkKm;
+        }
+      }
+
+      // Nếu không khớp mã gian cụ thể, nhưng có dòng chứa link KM ở cột I thì lấy dòng đầu tiên có link
+      for (let i = 1; i < rows.length; i++) {
+        const linkKm = String(rows[i][linkKmIdx] || "").trim();
+        if (linkKm) return linkKm;
+      }
+    } catch (e) {
+      console.warn("Lỗi đọc link_km từ sheet CAI_DAT:", e);
+    }
+    return "";
+  }
+
+  // Lấy ID Shop từ Cột G sheet CAI_DAT tương ứng với Mã gian tại Cột B
+  async function getShopIdByMaGian(maGian) {
+    try {
+      const rows = await getCaiDatDataList();
+      if (!rows || rows.length <= 1) return "";
+
+      const headers = (rows[0] || []).map(h => String(h || "").trim().toLowerCase());
+
+      // Cột B: Mã gian (index 1: A=0, B=1)
+      let gianIdx = headers.findIndex(h => h === "gian" || h === "mã gian" || h === "ma gian" || h === "ma_gian");
+      if (gianIdx === -1) gianIdx = 1;
+
+      // Cột G: ID Shop (index 6: A=0, B=1, C=2, D=3, E=4, F=5, G=6)
+      let shopIdIdx = headers.findIndex(h => 
+        h === "id_shop" || h === "id shop" || h === "shop_id" || h === "shopid" || 
+        h === "mã shop" || h === "ma shop" || h.includes("id_shop") || h.includes("shop_id") || 
+        h.includes("id shop") || h.includes("shopid")
+      );
+      if (shopIdIdx === -1) shopIdIdx = 6; // Cột G (index 6)
+
+      const targetGian = String(maGian || "").trim().toLowerCase();
+
+      // 1. Tìm đúng dòng có mã gian khớp với targetGian
+      if (targetGian) {
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i];
+          const rowGian = String(row[gianIdx] || "").trim().toLowerCase();
+          if (rowGian && rowGian === targetGian) {
+            const rawShopId = String(row[shopIdIdx] || "").trim();
+            const shopIdMatch = rawShopId.match(/\d{5,16}/);
+            if (shopIdMatch) return shopIdMatch[0];
+          }
+        }
+      }
+
+      // 2. Nếu không có targetGian hoặc chưa khớp, tìm dòng đầu tiên có ID Shop hợp lệ ở Cột G
+      for (let i = 1; i < rows.length; i++) {
+        const rawShopId = String(rows[i][shopIdIdx] || "").trim();
+        const shopIdMatch = rawShopId.match(/\d{5,16}/);
+        if (shopIdMatch) return shopIdMatch[0];
+      }
+    } catch (e) {
+      console.warn("Lỗi đọc id_shop từ sheet CAI_DAT:", e);
+    }
+
+    // 3. Fallback lấy ID Shop từ sessionStorage/localStorage nếu sheet chưa có
+    if (typeof getProductListShopId === "function") {
+      const fallbackId = getProductListShopId();
+      if (fallbackId) return fallbackId;
+    }
+
+    return "";
+  }
+
+  // =========================================================================
+  // TỰ ĐỘNG BẤM "CHỈNH SỬA" VÀ DÁN TÊN SẢN PHẨM VÀO Ô TÌM KIẾM TRÊN TRANG KM
+  // =========================================================================
+  let hasAutoClickedEditPromotion = false;
+  let hasAutoSearchedPromotion = false;
+
+  function findEditPromotionButton() {
+    // 1. Selector trực tiếp theo class của Shopee
+    const directBtn = document.querySelector("button.edit-button, button.eds-button--link.edit-button, button.eds-button.edit-button, .edit-button");
+    if (directBtn && isVisible(directBtn) && !directBtn.disabled && !directBtn.classList.contains("eds-button--disabled")) {
+      return directBtn;
+    }
+
+    // 2. Tìm theo text "Chỉnh sửa Chương Trình Khuyến Mãi" hoặc "Chỉnh sửa"
+    const allButtons = Array.from(document.querySelectorAll("button, .eds-button, a[role='button']"));
+    return allButtons.find((btn) => {
+      const text = normalizeText(btn.textContent);
+      const isDisabled = btn.disabled || btn.classList.contains("eds-button--disabled") || btn.getAttribute("aria-disabled") === "true";
+      return (
+        text.includes("chinh sua chuong trinh khuyen mai") ||
+        text.includes("chinh sua chuong trinh") ||
+        text === "chinh sua" ||
+        text.includes("chinh sua khuyen mai") ||
+        text.includes("edit promotion")
+      ) && isVisible(btn) && !isDisabled;
+    }) || null;
+  }
+
+  function fillShopeeEdsInput(input, text) {
+    if (!input) return;
+    const value = String(text || "");
+
+    input.scrollIntoView({ block: "center", inline: "nearest" });
+    input.focus();
+
+    // 1. Dùng document.execCommand để trình duyệt giả lập gõ ký tự thật
+    try {
+      input.select();
+      document.execCommand("selectAll", false, null);
+      document.execCommand("delete", false, null);
+      document.execCommand("insertText", false, value);
+    } catch (e) {
+      console.warn("execCommand insertText failed:", e);
+    }
+
+    // 2. Gán native setter để đảm bảo giá trị luôn được lưu trong Vue
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    if (nativeSetter) {
+      nativeSetter.call(input, value);
+    } else {
+      input.value = value;
+    }
+
+    if ("_value" in input) {
+      input._value = value;
+    }
+
+    // 3. Dispatch sự kiện input & change
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  }
+
+  function triggerSearchIconClick(searchBtn) {
+    if (!searchBtn) return;
+    // Tuyệt đối không bấm vào nút clear-btn xoá chữ của Shopee
+    if (searchBtn.classList.contains("eds-input__clear-btn") || searchBtn.closest(".eds-input__clear-btn")) {
+      return;
+    }
+
+    const searchIcon = searchBtn.querySelector(".search-btn i, .search-btn svg, i.icon, svg") || searchBtn;
+
+    emitRealHover(searchIcon);
+    if (typeof searchIcon.click === "function") searchIcon.click();
+    emitRealClick(searchIcon);
+  }
+
+  function findPromotionSearchInput() {
+    // 1. Tìm chính xác phần tử .search-btn (LOẠI TRỪ .eds-input__clear-btn)
+    const searchBtns = Array.from(document.querySelectorAll(".search-btn, [class*='search-btn']"))
+      .filter(el => isVisible(el) && !el.classList.contains("eds-input__clear-btn") && !el.closest(".eds-input__clear-btn"));
+
+    for (const btn of searchBtns) {
+      const container = btn.closest(".eds-input__inner, .eds-input, .eds-input-number, div");
+      const input = container?.querySelector("input.eds-input__input, input[type='text'], input");
+      if (input && isVisible(input)) {
+        const searchIcon = btn.querySelector("i.icon, i.eds-icon, svg") || btn;
+        return { input, searchBtn: btn, icon: searchIcon };
+      }
+    }
+
+    // 2. Fallback tìm theo input
+    const allInputs = Array.from(document.querySelectorAll("input.eds-input__input, input[type='text']")).filter(isVisible);
+    for (const input of allInputs) {
+      const parent = input.closest(".eds-input__inner, .eds-input, .search-container, div");
+      const searchBtn = parent?.querySelector(".search-btn");
+      if (searchBtn && isVisible(searchBtn)) {
+        const searchIcon = searchBtn.querySelector("i.icon, i.eds-icon, svg") || searchBtn;
+        return { input, searchBtn, icon: searchIcon };
+      }
+    }
+
+    return null;
+  }
+
+  async function autoFillAndSearchPromotionProduct(productName) {
+    if (!productName || hasAutoSearchedPromotion) return;
+
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const searchTarget = findPromotionSearchInput();
+      if (searchTarget && searchTarget.input) {
+        hasAutoSearchedPromotion = true;
+        chrome.storage.local.remove(["autoSearchKmProductName"]);
+
+        const { input, searchBtn, icon } = searchTarget;
+
+        input.scrollIntoView({ block: "center", inline: "nearest" });
+        await sleep(200);
+
+        // 1. Điền tên sản phẩm vào ô tìm kiếm qua execCommand + Vue setter
+        fillShopeeEdsInput(input, productName);
+        await sleep(300);
+
+        // 2. Bấm chính xác vào .search-btn (không đụng vào clear-btn)
+        const targetSearchBtn = searchBtn || icon;
+        if (targetSearchBtn) {
+          targetSearchBtn.scrollIntoView({ block: "center", inline: "nearest" });
+          await sleep(150);
+          triggerSearchIconClick(targetSearchBtn);
+        }
+
+        // 3. Dispatch phím Enter trên ô input
+        input.dispatchEvent(new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13
+        }));
+        input.dispatchEvent(new KeyboardEvent("keyup", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13
+        }));
+
+        // 4. Đảm bảo sau khi search, input vẫn giữ nguyên text
+        await sleep(300);
+        if (input && input.value !== productName) {
+          fillShopeeEdsInput(input, productName);
+        }
+
+        console.log("Shopee QLSP: Đã dán tên sản phẩm và bấm Tìm kiếm:", productName);
+        break;
+      }
+      await sleep(300);
+    }
+  }
+
+  async function autoClickEditPromotionButton() {
+    const isMarketingPage = window.location.pathname.includes("/portal/marketing/") || window.location.href.includes("/portal/marketing/");
+    const hasAutoHash = window.location.hash.includes("auto_edit_km") || window.location.search.includes("auto_edit_km");
+
+    if (!isMarketingPage && !hasAutoHash) return;
+
+    // 1. Kiểm tra và bấm nút Chỉnh sửa nếu chưa bấm
+    if (!hasAutoClickedEditPromotion) {
+      const btn = findEditPromotionButton();
+      if (btn) {
+        hasAutoClickedEditPromotion = true;
+        chrome.storage.local.remove(["autoClickEditKmTimestamp"]);
+        btn.scrollIntoView({ block: "center", inline: "nearest" });
+        await sleep(150);
+        emitRealHover(btn);
+        await sleep(100);
+        if (typeof btn.click === "function") btn.click();
+        emitRealClick(btn);
+        console.log("Shopee QLSP: Đã tự động bấm nút Chỉnh sửa Chương Trình Khuyến Mãi");
+      }
+    }
+
+    // 2. Kiểm tra có tên sản phẩm cần tìm kiếm không
+    if (!hasAutoSearchedPromotion) {
+      chrome.storage.local.get(["autoSearchKmProductName"], (res) => {
+        const productName = res.autoSearchKmProductName ? String(res.autoSearchKmProductName).trim() : "";
+        if (productName) {
+          autoFillAndSearchPromotionProduct(productName);
+        }
+      });
+    }
+  }
+
+  function createProductListQuickActions(moreButton, productCard) {
+    const wrap = document.createElement("div");
+
+    wrap.className = PRODUCT_LIST_QUICK_ACTION_CLASS;
+
+    for (const actionText of PRODUCT_LIST_ACTIONS) {
+      const button = document.createElement("button");
+
+      button.type = "button";
+      button.textContent = actionText;
+      button.title = actionText;
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+
+        if (actionText === PRODUCT_LIST_ACTIONS[0]) {
+          const now = Date.now();
+          const lastPreviewClick = Number(button.dataset.shopeeQlspLastPreviewClick || "0");
+
+          if (now - lastPreviewClick < 1000) {
+            return;
+          }
+
+          button.dataset.shopeeQlspLastPreviewClick = String(now);
+        }
+
+        await clickProductListAction(moreButton, actionText, productCard);
+      });
+      wrap.append(button);
+    }
+
+    // Nút Mở KM (Tự động copy tên sản phẩm vào Clipboard + Mở link Cột I sheet CAI_DAT + Tự dán tìm kiếm)
+    const kmBtn = document.createElement("button");
+    kmBtn.type = "button";
+    kmBtn.textContent = PRODUCT_LIST_OPEN_KM_TEXT;
+    kmBtn.title = "Mở Khuyến Mãi & Copy Tên (Cột I sheet CAI_DAT)";
+    kmBtn.className = "shopee-qlsp-btn-km";
+    kmBtn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+
+      const productName = getProductListName(productCard).trim();
+
+      // 1. Tự động Copy tên sản phẩm vào Clipboard ngay lập tức
+      if (productName) {
+        await copyTextToClipboard(productName);
+      }
+
+      const origText = kmBtn.textContent;
+      kmBtn.textContent = "Đã copy tên & đang mở...";
+
+      chrome.storage.local.get(["maGian", "dhHoanTextValue"], async (res) => {
+        const maGian = (res.maGian || res.dhHoanTextValue || "").trim();
+        const linkKm = await getLinkKmByMaGian(maGian);
+
+        setTimeout(() => { kmBtn.textContent = origText; }, 1500);
+
+        if (linkKm) {
+          // Lưu cờ autoClickEditKm và tên sản phẩm để tab mới tự động click Chỉnh sửa + Dán tìm kiếm
+          chrome.storage.local.set({
+            autoClickEditKmTimestamp: Date.now(),
+            autoSearchKmProductName: productName
+          });
+
+          let finalUrl = (linkKm.startsWith("http://") || linkKm.startsWith("https://")) ? linkKm : `https://${linkKm}`;
+          if (!finalUrl.includes("#auto_edit_km")) {
+            finalUrl = finalUrl.includes("#") ? finalUrl.replace("#", "#auto_edit_km=1&") : `${finalUrl}#auto_edit_km=1`;
+          }
+          window.open(finalUrl, "_blank");
+        } else {
+          alert(`Không tìm thấy link KM cho mã gian "${maGian || '(chưa chọn)'}" tại Cột I (link_km) sheet CAI_DAT.\n\nVui lòng điền link KM vào Cột I sheet CAI_DAT!`);
+        }
+      });
+    });
+    wrap.append(kmBtn);
+
+    // Hàng 2: 3 nút Copy link, Copy tên, Copy ID
+    wrap.append(
+      createCopyButton(PRODUCT_LIST_COPY_LINK_TEXT, () => getProductListLink(productCard)),
+      createCopyButton(PRODUCT_LIST_COPY_NAME_TEXT, () => getProductListName(productCard)),
+      createCopyButton(PRODUCT_LIST_COPY_ID_TEXT, () => getProductListItemId(productCard))
+    );
+    
+    const skuContainer = document.createElement("div");
+    skuContainer.style.gridColumn = "1 / -1";
+    skuContainer.style.padding = "4px 0 0 0";
+    skuContainer.style.fontSize = "11px";
+    skuContainer.style.display = "flex";
+    skuContainer.style.flexWrap = "wrap";
+    skuContainer.style.gap = "4px";
+    skuContainer.style.maxHeight = "54px";
+    skuContainer.style.overflowY = "auto";
+    skuContainer.style.overflowX = "hidden";
+    skuContainer.className = "shopee-qlsp-custom-scrollbar"; // Will style scrollbar if needed
+    wrap.append(skuContainer);
+
+    const productName = getProductListName(productCard).trim();
+    if (productName) {
+        skuContainer.textContent = "Đang tải SKU...";
+        chrome.storage.local.get(["maGian", "dhHoanTextValue"], (res) => {
+            const maGian = (res.maGian || res.dhHoanTextValue || "").trim().toLowerCase();
+            getSpShopeeDataList().then(spData => {
+                const skus = [];
+                for (const row of spData) {
+                    const tenSp = String(row[1] || "").trim(); // Cột B
+                    const sku = getShopeeSkuFromRow(row); // Col F, fallback to Col E
+                    const gian = String(row[11] || "").trim().toLowerCase(); // Cột L
+                    
+                    if (isShopeeProductNameMatch(tenSp, productName) && (!maGian || gian === maGian) && sku) {
+                        if (!skus.includes(sku)) skus.push(sku);
+                    }
+                }
+                
+                if (skus.length > 0) {
+                    skuContainer.innerHTML = skus.map(s => {
+                        let shortSku = s;
+                        const match = s.match(/^[a-zA-Z0-9\-]+/);
+                        if (match) {
+                            shortSku = match[0].replace(/-+$/, '');
+                        }
+                        shortSku = shortSku.slice(0, 15);
+                        return `<span title="${s}" style="background:#f0fff8;color:#0f8a59;border:1px solid #17a36b;padding:2px 4px;border-radius:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;cursor:help;display:inline-block;">${shortSku}</span>`;
+                    }).join("");
+                } else {
+                    skuContainer.textContent = "";
+                    skuContainer.style.padding = "0";
+                }
+            });
+        });
+    }
+
+    return wrap;
+  }
+
+  function renderProductListQuickActions() {
+    if (!isProductListPage()) {
+      return;
+    }
+
+    for (const { row, moreTarget } of findProductActionRows()) {
+      if (row.dataset.shopeeQlspQuickActions === "1") {
+        continue;
+      }
+
+      if (row.nextElementSibling?.classList.contains(PRODUCT_LIST_QUICK_ACTION_CLASS)) {
+        continue;
+      }
+
+      row.dataset.shopeeQlspQuickActions = "1";
+      row.insertAdjacentElement("afterend", createProductListQuickActions(moreTarget, findProductCardFromActionRow(row)));
+    }
+  }
+
+  function findButtonByText(text) {
+    const buttons = Array.from(document.querySelectorAll("button"));
+
+    return buttons.find((button) => {
+      return normalizeText(button.textContent) === text && isVisible(button);
+    });
+  }
+
+  function findVariationNameInput() {
+    const directInput = document.querySelector(
+      "input.eds-input__input[placeholder='e.g. Color, etc']"
+    );
+
+    if (directInput && isVisible(directInput)) {
+      return directInput;
+    }
+
+    return Array.from(document.querySelectorAll("input[type='text']")).find((input) => {
+      return normalizeText(input.placeholder) === "e.g. Color, etc" && isVisible(input);
+    });
+  }
+
+  async function waitForVariationNameInput() {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const input = findVariationNameInput();
+
+      if (input) {
+        return input;
+      }
+
+      await sleep(150);
+    }
+
+    return null;
+  }
+
+  async function addVariationGroup(name) {
+    const button = findButtonByText(ADD_VARIATION_TEXT);
+
+    if (!button) {
+      return {
+        ok: false,
+        message: "Khong thay nut Them nhom phan loai."
+      };
+    }
+
+    button.scrollIntoView({ block: "center", inline: "nearest" });
+    emitRealClick(button);
+
+    const input = await waitForVariationNameInput();
+
+    if (!input) {
+      return {
+        ok: false,
+        message: "Da bam nut nhung khong thay o nhap ten phan loai."
+      };
+    }
+
+    fillInputLikeUser(input, name || "ph\u00e2n lo\u1ea1i");
+
+    return {
+      ok: true,
+      message: "Da them nhom phan loai va dien ten phan loai."
+    };
+  }
+
+  function clickAddProduct() {
+    const textNode = findAddProductTextNode();
+
+    if (!textNode) {
+      openAddProductByUrl();
+      return {
+        ok: true,
+        method: "fallback-url",
+        message: "Khong thay menu, da mo truc tiep trang Them San Pham."
+      };
+    }
+
+    const target = findClickableTarget(textNode);
+
+    target.scrollIntoView({ block: "center", inline: "nearest" });
+    const previousUrl = window.location.href;
+
+    emitRealClick(target);
+
+    window.setTimeout(() => {
+      if (window.location.href === previousUrl) {
+        openAddProductByUrl();
+      }
+    }, 400);
+
+    return {
+      ok: true,
+      method: "click",
+      message: "Da bam Them San Pham. Neu Shopee khong nhan click, extension se mo truc tiep."
+    };
+  }
+
+  function findStockBatchInput() {
+    const inputs = Array.from(document.querySelectorAll("input.eds-input__input, input"));
+
+    // Uu tien o nhap co placeholder Warehouse-Level (thuong la o sua hang loat)
+    const batchInput = inputs.find((input) => {
+      const placeholder = normalizeText(input.placeholder);
+      return (placeholder.includes("Warehouse-Level") || placeholder.includes("Kho h\u00e0ng(")) && isVisible(input);
+    });
+
+    if (batchInput) {
+      return batchInput;
+    }
+
+    // Tim o nhap Kho hang bat ky neu khong thay o hang loat
+    return inputs.find((input) => {
+      const placeholder = normalizeText(input.placeholder);
+      return (placeholder === "Kho h\u00e0ng" || placeholder.includes("Kho h\u00e0ng")) && isVisible(input);
+    });
+  }
+
+  function findApplyToAllButton() {
+    const directButton = document.querySelector("button.batch-apply-button");
+
+    if (directButton && isVisible(directButton)) {
+      return directButton;
+    }
+
+    const buttons = Array.from(document.querySelectorAll("button"));
+
+    return buttons.find((button) => {
+      return normalizeText(button.textContent).includes("\u00c1p d\u1ee5ng cho t\u1ea5t c\u1ea3 ph\u00e2n lo\u1ea1i") && isVisible(button);
+    });
+  }
+
+  function findSaveProductButton() {
+    const buttons = Array.from(document.querySelectorAll("button.eds-button--xl-large, button"));
+    return buttons.find((button) => {
+      const text = String(button.textContent || "").trim().toLowerCase();
+      const hasText = text.includes("cập nhật") || text.includes("save") || text.includes("lưu");
+      const isXlLarge = button.classList.contains("eds-button--xl-large") || button.className.includes("xl-large");
+      return hasText && isXlLarge && isVisible(button);
+    });
+  }
+
+  async function fillStockAndApply(value) {
+    const match = window.location.pathname.match(/\/portal\/product\/(\d+)/);
+    const itemId = match ? match[1] : null;
+    const sendStatus = (status, color = '#faad14') => {
+      if (itemId) {
+        chrome.runtime.sendMessage({ type: "UPDATE_AUTOMATION_STATUS", itemId, status, color });
+      }
+    };
+
+    if (window.location.href.includes('banhang.shopee.vn/portal/marketing/shop-flash-sale')) {
+      const rows = document.querySelectorAll('.ant-table-row');
+      let count = 0;
+      for (const row of rows) {
+        const inputs = row.querySelectorAll('.ant-input-number-input');
+        if (inputs.length >= 3) {
+          const stockInput = inputs[2];
+          if (!isDisabledControl(stockInput) && !stockInput.closest('.ant-input-number-disabled')) {
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+            nativeSetter.call(stockInput, value);
+            stockInput.dispatchEvent(new Event('input', { bubbles: true }));
+            stockInput.dispatchEvent(new Event('change', { bubbles: true }));
+            count++;
+          }
+        }
+      }
+      return { ok: true, message: `Da dien kho ${value} cho ${count} phan loai.` };
+    }
+
+    const input = findStockBatchInput();
+
+    if (!input) {
+      sendStatus("Lỗi: Không tìm thấy ô nhập kho", "#ef4444");
+      return { ok: false, message: "Khong thay o nhap kho hang." };
+    }
+
+    sendStatus("Đang điền số lượng...");
+    fillInputLikeUser(input, value);
+    await sleep(350);
+
+    const applyButton = findApplyToAllButton();
+
+    if (applyButton && isVisible(applyButton)) {
+      sendStatus("Đang áp dụng phân loại...");
+      emitRealClick(applyButton);
+      
+      // Wait and poll for the Save/Cập nhật button to be enabled (up to 3 seconds)
+      let saveBtn = null;
+      for (let i = 0; i < 6; i++) {
+        await sleep(500);
+        saveBtn = findSaveProductButton();
+        if (saveBtn && !saveBtn.disabled && !saveBtn.classList.contains('is-disabled') && !saveBtn.classList.contains('eds-button--disabled')) {
+          break;
+        }
+      }
+      
+      if (saveBtn) {
+        sendStatus("Đang lưu sản phẩm...");
+        emitRealClick(saveBtn);
+        sendStatus("Đã hoàn thành!", "#52c41a");
+        return { ok: true, message: `Da dien kho ${value}, Ap dung va bam Cap nhat.` };
+      }
+      sendStatus("Đã áp dụng, hãy tự bấm Cập nhật", "#ef4444");
+      return { ok: true, message: `Da dien kho ${value} va bam Ap dung.` };
+    }
+
+    sendStatus("Không tìm thấy nút Áp dụng", "#ef4444");
+    return { ok: true, message: `Da dien kho ${value}.` };
+  }
+
+  function isElementInteractable(element) {
+    if (!element) return false;
+    const style = window.getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden";
+  }
+
+  function isDisabledControl(element) {
+    const control = element.closest("button, [aria-disabled='true'], .disabled, .is-disabled, .eds-checkbox--disabled");
+    return Boolean(control?.disabled || control?.getAttribute?.("aria-disabled") === "true" || control?.classList?.contains("disabled") || control?.classList?.contains("is-disabled"));
+  }
+
+  function findMassShipFilterRow(keyword) {
+    const norm = normalizeSearchText(keyword);
+    const candidates = Array.from(document.querySelectorAll("label, span, div, p, h4, h5, .filter-label, .eds-form-item__label"));
+
+    // Ưu tiên 1: Tìm phần tử có text trùng khớp chính xác với nhãn
+    for (const el of candidates) {
+      if (el.children.length <= 1) {
+        const txt = normalizeSearchText(el.textContent).trim();
+        if (txt === norm) {
+          let cur = el.parentElement;
+          for (let depth = 0; depth < 5; depth++) {
+            if (!cur || cur === document.body) break;
+            const tags = cur.querySelectorAll("button, .eds-tag, .eds-radio, .eds-radio-button, [role='radio'], [class*='tag']");
+            if (tags.length >= 2) {
+              return { labelEl: el, container: cur };
+            }
+            cur = cur.parentElement;
+          }
+        }
+      }
+    }
+
+    // Ưu tiên 2: Bắt đầu bằng norm nhưng không chứa ngoặc đơn số lượng (tránh nhận nhầm thẻ nút radio có số)
+    for (const el of candidates) {
+      if (el.children.length <= 1) {
+        const txt = normalizeSearchText(el.textContent).trim();
+        if (txt.startsWith(norm) && !/\(\d+\)/.test(txt) && txt.length < norm.length + 15) {
+          let cur = el.parentElement;
+          for (let depth = 0; depth < 5; depth++) {
+            if (!cur || cur === document.body) break;
+            const tags = cur.querySelectorAll("button, .eds-tag, .eds-radio, .eds-radio-button, [role='radio'], [class*='tag']");
+            if (tags.length >= 2) {
+              return { labelEl: el, container: cur };
+            }
+            cur = cur.parentElement;
+          }
+        }
+      }
+    }
+
+    const rows = Array.from(document.querySelectorAll(".eds-row, .filter-row, .filter-item, .eds-form-item, div"));
+    for (const row of rows) {
+      const text = normalizeSearchText(row.textContent || "");
+      if (text.includes(norm)) {
+        const tags = row.querySelectorAll("button, .eds-tag, .eds-radio, [role='radio'], [class*='tag']");
+        if (tags.length >= 2) {
+          return { labelEl: null, container: row };
+        }
+      }
+    }
+    return null;
+  }
+
+  function triggerShopeeRadioClick(element) {
+    if (!element) return;
+    const label = element.closest("label.eds-radio-button, .eds-radio-button, label.eds-radio, .eds-radio, [role='radio'], button") || element;
+    const input = label.querySelector ? label.querySelector("input[type='radio']") : (label.tagName === "INPUT" ? label : null);
+    const inner = label.querySelector ? label.querySelector(".eds-radio-button__inner, .eds-radio__label, span") : null;
+
+    if (typeof label.scrollIntoView === "function") {
+      label.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+
+    const clickTarget = inner || label;
+    if (typeof clickTarget.click === "function") {
+      try { clickTarget.click(); } catch (_) {}
+    }
+    emitRealClick(clickTarget);
+
+    if (input) {
+      if (!input.checked) {
+        input.checked = true;
+        input.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+        input.dispatchEvent(new Event("input", { bubbles: true, cancelable: true }));
+      }
+      try { input.click(); } catch (_) {}
+    }
+  }
+
+  function getMassShipTags(container, labelEl) {
+    if (!container) return [];
+
+    let candidateElements = Array.from(
+      container.querySelectorAll("label.eds-radio-button, .eds-radio-button, label.eds-radio, .eds-radio, [role='radio'], button, .eds-tag, .filter-item")
+    ).filter(isElementInteractable);
+
+    if (!candidateElements.length) {
+      candidateElements = Array.from(
+        container.querySelectorAll("label, button, [role='button'], div")
+      ).filter(el => isElementInteractable(el) && el !== labelEl && (!labelEl || !labelEl.contains(el)) && el.children.length <= 2);
+    }
+
+    const validTags = [];
+    const seenNames = new Set();
+
+    for (const el of candidateElements) {
+      if (el === labelEl || (labelEl && labelEl.contains(el))) continue;
+
+      const clickable = el.closest("label.eds-radio-button, .eds-radio-button, label.eds-radio, .eds-radio, button, [role='radio'], [role='button'], .eds-tag, .filter-item") || el;
+
+      const raw = (clickable.textContent || el.textContent || "").trim();
+      if (!raw || raw.length > 80) continue;
+
+      const countMatch = raw.match(/^(.*?)\s*\((\d+)\)$/);
+      let name = "";
+      let count = null;
+
+      if (countMatch) {
+        name = countMatch[1].trim();
+        count = parseInt(countMatch[2], 10);
+      } else {
+        if (/^\(?\d+\)?$/.test(raw)) continue;
+        name = raw.trim();
+      }
+
+      if (!name || name.length < 2) continue;
+
+      const normName = normalizeSearchText(name);
+      if (seenNames.has(normName)) continue;
+
+      // Chỉ bỏ qua nhãn tiêu đề khi không có số lượng đơn
+      if (count === null && (normName === "don vi van chuyen" || normName === "hang dat truoc" || normName === "han giao hang")) continue;
+
+      const isDisabled = isDisabledControl(clickable) ||
+        clickable.classList?.contains("is-disabled") ||
+        Boolean(clickable.querySelector?.("input:disabled, [disabled]"));
+
+      validTags.push({
+        element: clickable,
+        name: name,
+        text: count !== null ? `${name} (${count})` : name,
+        normText: normName,
+        hasCount: count !== null,
+        count: count,
+        isDisabled
+      });
+      seenNames.add(normName);
+    }
+
+    return validTags;
+  }
+
+  async function selectMassShipCarrier(carrierWanted) {
+    const row = findMassShipFilterRow("don vi van chuyen");
+    if (!row) {
+      return { ok: false, message: "Không thấy mục Đơn vị vận chuyển" };
+    }
+
+    const tags = getMassShipTags(row.container, row.labelEl);
+    if (!tags.length) {
+      return { ok: false, message: "Không thấy các thẻ ĐVVC" };
+    }
+
+    let targetTag = null;
+    const wanted = normalizeSearchText(carrierWanted || "auto");
+
+    if (wanted === "auto") {
+      targetTag = tags.find(t => t.count !== null && t.count > 0);
+      if (!targetTag) {
+        targetTag = tags[0];
+      }
+    } else if (wanted === "all") {
+      targetTag = tags.find(t => t.normText.includes("tat ca")) || tags[0];
+    } else {
+      targetTag = tags.find(t => t.normText === wanted) ||
+                  tags.find(t => t.normText.includes(wanted) || wanted.includes(t.normText));
+    }
+
+    if (targetTag && targetTag.element) {
+      if (targetTag.count === 0 && targetTag.isDisabled) {
+        return {
+          ok: false,
+          message: `⚠️ ĐVVC "${targetTag.name}" có 0 đơn (Shopee đã khóa không cho chọn)`
+        };
+      }
+
+      triggerShopeeRadioClick(targetTag.element);
+      await sleep(150);
+      return { ok: true, message: `Đã chọn ĐVVC: ${targetTag.text}` };
+    }
+
+    return { ok: false, message: `Không tìm thấy ĐVVC "${carrierWanted}"` };
+  }
+
+  async function selectMassShipPreOrder(preOrderWanted) {
+    const row = findMassShipFilterRow("hang dat truoc");
+    if (!row) {
+      return { ok: false, message: "Không thấy mục Hàng đặt trước" };
+    }
+
+    const tags = getMassShipTags(row.container, row.labelEl);
+    if (!tags.length) {
+      return { ok: false, message: "Không thấy các thẻ Hàng đặt trước" };
+    }
+
+    let targetTag = null;
+    const wanted = normalizeSearchText(preOrderWanted || "none");
+
+    if (wanted === "none" || wanted.includes("khong phai") || wanted.includes("khong dat truoc")) {
+      targetTag = tags.find(t => t.normText.includes("khong phai"));
+    } else if (wanted === "preorder" || wanted.includes("hang dat truoc") || wanted.includes("dat truoc")) {
+      targetTag = tags.find(t => t.normText.includes("hang dat truoc") && !t.normText.includes("khong phai") && !t.normText.includes("tat ca"));
+    } else if (wanted === "all" || wanted.includes("tat ca")) {
+      targetTag = tags.find(t => t.normText.includes("tat ca"));
+    }
+
+    if (!targetTag) {
+      targetTag = tags.find(t => t.normText.includes(wanted) || wanted.includes(t.normText)) || tags[0];
+    }
+
+    if (targetTag && targetTag.element) {
+      triggerShopeeRadioClick(targetTag.element);
+      await sleep(150);
+      return { ok: true, message: `Đã chọn: ${targetTag.text}` };
+    }
+
+    return { ok: false, message: `Không tìm thấy tùy chọn Đặt trước "${preOrderWanted}"` };
+  }
+
+  function findMassShipFilterApplyButton() {
+    const buttons = Array.from(document.querySelectorAll("button, .eds-button, [role='button']")).filter(isElementInteractable);
+    return buttons.find(b => {
+      const txt = normalizeSearchText(b.textContent).trim();
+      return (txt === "ap dung" || txt === "apply" || txt === "loc don") && isVisible(b);
+    }) || null;
+  }
+
+  async function applyMassShipFilters(carrier = "auto", preOrder = "none") {
+    let msg1 = "";
+    let msg2 = "";
+
+    const res1 = await selectMassShipCarrier(carrier);
+    msg1 = res1.message;
+    await sleep(250);
+
+    const res2 = await selectMassShipPreOrder(preOrder);
+    msg2 = res2.message;
+    await sleep(250);
+
+    const applyBtn = findMassShipFilterApplyButton();
+    if (applyBtn) {
+      applyBtn.scrollIntoView({ block: "center", inline: "nearest" });
+      await sleep(100);
+      if (typeof applyBtn.click === "function") applyBtn.click();
+      emitRealClick(applyBtn);
+      await sleep(800);
+    }
+
+    return {
+      ok: res1.ok && res2.ok,
+      message: `${msg1} | ${msg2}${applyBtn ? " -> Đã bấm Áp dụng." : "."}`
+    };
+  }
+
+  async function getMassShipFilterOptions() {
+    const carrierRow = findMassShipFilterRow("don vi van chuyen");
+    const preOrderRow = findMassShipFilterRow("hang dat truoc");
+
+    function findActiveTagName(container) {
+      if (!container) return "";
+      const activeEl = container.querySelector(
+        "label.is-active, label.is-checked, [aria-checked='true'], .eds-radio-button--checked, .is-active, .is-checked, input:checked"
+      );
+      if (activeEl) {
+        const parent = activeEl.closest("label, .eds-radio-button, button, div") || activeEl;
+        const raw = (parent.textContent || "").trim();
+        const m = raw.match(/^(.*?)\s*\((\d+)\)$/);
+        return m ? m[1].trim() : raw;
+      }
+      return "";
+    }
+
+    let activeCarrier = "";
+    const carriers = [];
+    if (carrierRow) {
+      activeCarrier = findActiveTagName(carrierRow.container);
+      const tags = getMassShipTags(carrierRow.container, carrierRow.labelEl);
+      for (const t of tags) {
+        carriers.push({
+          name: t.name,
+          count: t.count,
+          text: t.text,
+          isDisabled: t.isDisabled
+        });
+      }
+    }
+
+    let activePreOrder = "";
+    const preOrders = [];
+    if (preOrderRow) {
+      activePreOrder = findActiveTagName(preOrderRow.container);
+      const tags = getMassShipTags(preOrderRow.container, preOrderRow.labelEl);
+      for (const t of tags) {
+        preOrders.push({
+          name: t.name,
+          count: t.count,
+          text: t.text,
+          isDisabled: t.isDisabled
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      carriers,
+      preOrders,
+      activeCarrier,
+      activePreOrder
+    };
+  }
+
+  function findPrintFlowCheckboxIndicator() {
+    // 1. Nhắm trực diện vào data-testid chuẩn của Shopee
+    const directTestId = document.querySelector("[data-testid='mass-ship-checkbox-all']");
+    if (directTestId && isVisible(directTestId) && !isDisabledControl(directTestId)) {
+      return directTestId.querySelector(".eds-checkbox__indicator") || directTestId;
+    }
+
+    // 2. Nhắm vào class header bảng giao hàng loạt của Shopee
+    const headerCb = document.querySelector(".mass-ship-header.checkbox .eds-checkbox__indicator, .mass-ship-header.checkbox label, .mass-ship-header .eds-checkbox__indicator");
+    if (headerCb && isVisible(headerCb) && !isDisabledControl(headerCb)) {
+      return headerCb.classList.contains("eds-checkbox__indicator") ? headerCb : (headerCb.querySelector(".eds-checkbox__indicator") || headerCb);
+    }
+
+    // 3. Fallback: Quét tất cả thẻ indicator hiển thị từ trên xuống dưới
+    const indicators = Array.from(document.querySelectorAll("span.eds-checkbox__indicator, .eds-checkbox__indicator"));
+    const visibleIndicators = indicators
+      .filter((indicator) => isVisible(indicator) && !isDisabledControl(indicator))
+      .sort((left, right) => {
+        const leftRect = left.getBoundingClientRect();
+        const rightRect = right.getBoundingClientRect();
+        return leftRect.top - rightRect.top || leftRect.left - rightRect.left;
+      });
+
+    return visibleIndicators[0] || null;
+  }
+
+  async function selectPrintFlowCheckbox() {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const indicator = findPrintFlowCheckboxIndicator();
+
+      if (indicator) {
+        const target = indicator.closest("[data-testid='mass-ship-checkbox-all'], label.eds-checkbox, .eds-checkbox, [role='checkbox']") || indicator;
+        const input = target.querySelector ? target.querySelector("input[type='checkbox']") : null;
+
+        target.scrollIntoView({ block: "center", inline: "nearest" });
+        await sleep(100);
+
+        // Kích hoạt click trực tiếp vào indicator
+        if (typeof indicator.click === "function") indicator.click();
+        emitRealClick(indicator);
+
+        // Kích hoạt click vào thẻ label/container
+        if (target !== indicator) {
+          if (typeof target.click === "function") target.click();
+          emitRealClick(target);
+        }
+
+        // Kích hoạt click vào thẻ input nếu có
+        if (input && typeof input.click === "function" && !input.checked) {
+          input.click();
+        }
+
+        return {
+          ok: true,
+          message: "Đã bấm chọn hộp kiểm tất cả đơn."
+        };
+      }
+
+      await sleep(200);
+    }
+
+    return {
+      ok: false,
+      message: "Không thấy hộp kiểm trên trang in đơn."
+    };
+  }
+
+  function findPrintWarehouseSelect() {
+    const directSelect = document.querySelector("[data-testid='warehouse-filter'], [data-testid*='warehouse']");
+    if (directSelect && isElementInteractable(directSelect)) {
+      return directSelect;
+    }
+
+    // 1. Tìm label "Kho"
+    const allLabels = Array.from(document.querySelectorAll("label, .eds-form-item__label, span, div.filter-label, div")).filter(isElementInteractable);
+    const khoLabel = allLabels.find(el => {
+      const t = normalizeSearchText(el.textContent).trim();
+      return (t === "kho" || t === "kho hang" || t === "kho xu ly") && el.children.length === 0;
+    });
+
+    if (khoLabel) {
+      const container = khoLabel.closest(".eds-form-item, .filter-item, .filter-row, div.filter, div") || khoLabel.parentElement;
+      const select = container ? container.querySelector(".eds-select, .shopee-selector, div[class*='select']") : null;
+      if (select && isElementInteractable(select)) return select;
+    }
+
+    // 2. Fallback: Tìm .eds-select có text "Hà Nội" hoặc "Hồ Chí Minh"
+    const selects = Array.from(document.querySelectorAll(".eds-select, .shopee-selector")).filter(isElementInteractable);
+    return selects.find(s => {
+      const txt = normalizeSearchText(s.textContent);
+      const isWarehouse = (txt === "ho chi minh" || txt === "ha noi" || txt.includes("ho chi minh") || txt.includes("ha noi"));
+      const isNotLangOrSort = !txt.includes("vietnamese") && !txt.includes("english") && !txt.includes("don hang") && !txt.includes("san pham") && !txt.includes("han gui");
+      return isWarehouse && isNotLangOrSort;
+    }) || null;
+  }
+
+  function getPrintWarehouseSelectTarget(select) {
+    return select?.querySelector(".eds-selector") || select;
+  }
+
+  function findVisibleWarehouseOptions() {
+    return Array.from(document.querySelectorAll(".eds-select__options .eds-option, .eds-dropdown-item, .eds-popover .eds-option, .eds-option, li.eds-dropdown-item"))
+      .filter(isElementInteractable)
+      .map((option) => ({
+        element: option,
+        name: normalizeText(option.textContent),
+        selected: option.classList.contains("selected") || option.classList.contains("eds-option--selected")
+      }))
+      .filter((option) => {
+        const norm = normalizeSearchText(option.name);
+        const isLangOrFilter = norm.includes("vietnamese") || norm.includes("english") || norm.includes("don hang") || norm.includes("san pham") || norm.includes("nguoi mua") || norm.includes("dat don") || norm.includes("han gui") || norm.includes("sku");
+        return !isLangOrFilter && (norm.includes("ha noi") || norm.includes("ho chi minh") || norm.includes("kho"));
+      });
+  }
+
+  async function openPrintWarehouseMenu() {
+    const select = findPrintWarehouseSelect();
+    if (!select) return null;
+
+    const target = getPrintWarehouseSelectTarget(select);
+    target.scrollIntoView({ block: "center", inline: "nearest" });
+    await sleep(80);
+    if (typeof target.click === "function") target.click();
+    emitRealClick(target);
+    await sleep(250);
+    return select;
+  }
+
+  async function getPrintWarehouses() {
+    // 1. Check direct tabs
+    const directButtons = Array.from(document.querySelectorAll("button, [role='tab'], .eds-radio, .eds-tag, .filter-item, span, div")).filter(isElementInteractable);
+    const directTabs = directButtons.filter(el => {
+      const txt = normalizeSearchText(el.textContent);
+      const isWarehouse = (txt.includes("ha noi") || txt.includes("ho chi minh")) && !txt.includes("vietnamese") && !txt.includes("english");
+      return isWarehouse && (el.tagName === "BUTTON" || el.getAttribute("role") === "tab" || el.classList.contains("eds-radio") || el.classList.contains("filter-item"));
+    });
+
+    if (directTabs.length > 0) {
+      return {
+        ok: true,
+        warehouses: directTabs.map(t => ({ name: normalizeText(t.textContent), selected: t.classList.contains("active") || t.classList.contains("selected") })),
+        message: `Đã tìm ${directTabs.length} kho.`
+      };
+    }
+
+    // 2. Check dropdown
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await openPrintWarehouseMenu();
+      const options = findVisibleWarehouseOptions();
+      if (options.length) {
+        return {
+          ok: true,
+          warehouses: options.map((option) => ({
+            name: option.name,
+            selected: option.selected
+          })),
+          message: `Đã tìm ${options.length} kho.`
+        };
+      }
+      await sleep(200);
+    }
+
+    return {
+      ok: false,
+      warehouses: [],
+      message: "Không tìm thấy danh sách kho."
+    };
+  }
+
+  async function selectPrintWarehouse(name) {
+    const wantedName = normalizeSearchText(name);
+    if (!wantedName) {
+      return { ok: false, message: "Chưa có tên kho để chọn." };
+    }
+
+    // 1. Check direct tab / button
+    const directButtons = Array.from(document.querySelectorAll("button, [role='tab'], .eds-radio, .eds-tag, .filter-item, span, div")).filter(isElementInteractable);
+    const directTab = directButtons.find(el => {
+      const txt = normalizeSearchText(el.textContent);
+      return (txt === wantedName || txt === `kho ${wantedName}`) &&
+             (el.tagName === "BUTTON" || el.getAttribute("role") === "tab" || el.classList.contains("eds-radio") || el.classList.contains("eds-tag") || el.classList.contains("filter-item"));
+    });
+
+    if (directTab) {
+      directTab.scrollIntoView({ block: "center", inline: "nearest" });
+      await sleep(80);
+      if (typeof directTab.click === "function") directTab.click();
+      emitRealClick(directTab);
+      return { ok: true, message: `Đã chọn kho ${name}.` };
+    }
+
+    // 2. Dropdown
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      await openPrintWarehouseMenu();
+      const options = findVisibleWarehouseOptions();
+      const option = options.find((item) => {
+        const itemNorm = normalizeSearchText(item.name);
+        if (wantedName.includes("ha noi")) {
+          return itemNorm.includes("ha noi") || itemNorm.includes("hn");
+        }
+        if (wantedName.includes("ho chi minh") || wantedName.includes("hcm")) {
+          return itemNorm.includes("ho chi minh") || itemNorm.includes("hcm");
+        }
+        return itemNorm.includes(wantedName);
+      });
+
+      if (option?.element) {
+        option.element.scrollIntoView({ block: "nearest", inline: "nearest" });
+        await sleep(80);
+        if (typeof option.element.click === "function") option.element.click();
+        emitRealClick(option.element);
+        return { ok: true, message: `Đã chọn kho ${option.name}.` };
+      }
+      await sleep(200);
+    }
+
+    return { ok: false, message: `Không tìm thấy kho ${name}.` };
+  }
+
+  function findChangePickupAddressButton() {
+    // 1. Nhắm trực diện vào data-testid chuẩn của nút Đổi trên Shopee
+    const directButton = document.querySelector("[data-testid='change-pickup-address-button']");
+    if (directButton && isVisible(directButton)) {
+      return directButton;
+    }
+
+    // 2. Nhắm vào class action chứa chữ "Đổi"
+    const actionBtn = Array.from(document.querySelectorAll(".action, .eds-link, button, [role='button'], span, div")).find(el => {
+      const txt = normalizeSearchText(el.textContent).trim();
+      return (txt === "doi" || txt === "thay doi" || txt === "chinh sua" || txt === "change") && isVisible(el) && !el.closest(".eds-modal__content");
+    });
+    if (actionBtn) return actionBtn;
+
+    return null;
+  }
+
+  function findPickupAddressModal() {
+    return Array.from(document.querySelectorAll(".eds-modal__box, .eds-modal__content, div[role='dialog']")).find((modal) => {
+      const title = modal.querySelector(".eds-modal__title")?.textContent || modal.textContent || "";
+      const text = normalizeSearchText(title);
+      return (text.includes("dia chi lay hang") || text.includes("chon dia chi") || modal.querySelector(".modal-address, .pickup-address-select-item")) && isVisible(modal);
+    }) || null;
+  }
+
+  async function openPickupAddressModal() {
+    let modal = findPickupAddressModal();
+    if (modal) return modal;
+
+    const changeButton = findChangePickupAddressButton();
+    if (!changeButton) return null;
+
+    changeButton.scrollIntoView({ block: "center", inline: "nearest" });
+    await sleep(100);
+    if (typeof changeButton.click === "function") changeButton.click();
+    emitRealClick(changeButton);
+
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await sleep(150);
+      modal = findPickupAddressModal();
+      if (modal) return modal;
+    }
+
+    return null;
+  }
+
+  function getPickupAddressItems(modal) {
+    const root = modal || document;
+    const items = Array.from(root.querySelectorAll(".pickup-address-select-item"));
+    if (items.length > 0) {
+      return items.map((item, index) => {
+        const input = item.querySelector("input.eds-radio__input") || item.querySelector("input[type='radio']");
+        const radioIndicator = item.querySelector(".eds-radio__indicator") || item.querySelector(".eds-radio");
+        const name = normalizeText(item.querySelector(".name")?.textContent || "");
+        const addr = normalizeText(item.querySelector(".addr")?.innerText || item.querySelector(".addr")?.textContent || "");
+        const selected = Boolean(input?.checked || item.querySelector(".eds-radio--checked") || item.querySelector("input:checked"));
+        const normalized = normalizeSearchText(addr + " " + name);
+        const shortText = (normalized.includes("ha noi") || normalized.includes("hn") || normalized.includes("ha dong") || normalized.includes("phu luong"))
+          ? "Hà Nội"
+          : (normalized.includes("ho chi minh") || normalized.includes("hcm") || normalized.includes("thu duc") || normalized.includes("linh xuan"))
+            ? "Hồ Chí Minh"
+            : `Địa chỉ ${index + 1}`;
+
+        return {
+          element: item,
+          radioIndicator,
+          input,
+          id: input?.value || String(index),
+          name,
+          addr,
+          shortText,
+          selected,
+          fullText: [name, addr].filter(Boolean).join(" - ")
+        };
+      });
+    }
+
+    // Fallback nếu không có class pickup-address-select-item
+    return Array.from(root.querySelectorAll(".eds-radio, label.eds-radio")).map((radio, index) => {
+      const input = radio.querySelector("input[type='radio']") || (radio.tagName === "INPUT" ? radio : null);
+      const container = radio.closest(".pickup-address-select-item, div") || radio;
+      const addr = normalizeText(container.textContent || "");
+      const normalized = normalizeSearchText(addr);
+      const shortText = (normalized.includes("ha noi") || normalized.includes("hn")) ? "Hà Nội" : "Hồ Chí Minh";
+      return {
+        element: container,
+        radioIndicator: radio.querySelector(".eds-radio__indicator") || radio,
+        input,
+        id: input?.value || String(index),
+        name: "",
+        addr,
+        shortText,
+        selected: Boolean(input?.checked),
+        fullText: addr
+      };
+    });
+  }
+
+  function findConfirmPickupAddressButton(modal) {
+    const root = modal || document;
+    // Nút Confirm dạng primary trong footer của modal
+    const footerPrimary = root.querySelector(".eds-modal__footer-buttons button.eds-button--primary, .eds-modal__footer button.eds-button--primary");
+    if (footerPrimary && isVisible(footerPrimary)) {
+      return footerPrimary;
+    }
+
+    return Array.from(root.querySelectorAll("button, [role='button'], .eds-button")).find((button) => {
+      const text = normalizeSearchText(button.textContent);
+      return (text === "confirm" || text === "xac nhan" || text === "dong y" || text === "luu") && isVisible(button);
+    }) || null;
+  }
+
+  async function getPickupAddresses() {
+    const modal = await openPickupAddressModal();
+    if (!modal) {
+      return {
+        ok: false,
+        addresses: [],
+        message: "Không thấy nút Đổi địa chỉ lấy hàng trên trang."
+      };
+    }
+
+    const addresses = getPickupAddressItems(modal);
+    return {
+      ok: addresses.length > 0,
+      addresses: addresses.map((address) => ({
+        id: address.id,
+        name: address.name,
+        addr: address.addr,
+        shortText: address.shortText,
+        selected: address.selected,
+        fullText: address.fullText
+      })),
+      message: addresses.length ? `Đã tìm ${addresses.length} địa chỉ.` : "Không thấy địa chỉ trong popup."
+    };
+  }
+
+  async function selectPickupAddressLocation(location) {
+    const modal = await openPickupAddressModal();
+    if (!modal) {
+      return {
+        ok: false,
+        message: "Không mở được popup Chọn địa chỉ lấy hàng."
+      };
+    }
+
+    await sleep(200);
+    const normalizedLocation = normalizeSearchText(location);
+    const addresses = getPickupAddressItems(modal);
+
+    const address = addresses.find((item) => {
+      const text = normalizeSearchText(item.fullText + " " + item.addr + " " + item.name);
+      if (normalizedLocation.includes("ha noi") || normalizedLocation.includes("hn")) {
+        return text.includes("ha noi") || text.includes("hn") || text.includes("ha dong") || text.includes("phu luong");
+      }
+      if (normalizedLocation.includes("ho chi minh") || normalizedLocation.includes("hcm") || normalizedLocation.includes("thu duc")) {
+        return text.includes("ho chi minh") || text.includes("hcm") || text.includes("thu duc") || text.includes("linh xuan");
+      }
+      return text.includes(normalizedLocation);
+    });
+
+    if (!address) {
+      return {
+        ok: false,
+        message: `Không tìm thấy địa chỉ ${location} trong popup.`
+      };
+    }
+
+    // 1. Kích hoạt chọn radio của địa chỉ
+    const clickTarget = address.radioIndicator || address.input?.closest("label") || address.element;
+    clickTarget.scrollIntoView({ block: "center", inline: "nearest" });
+    await sleep(100);
+
+    if (typeof clickTarget.click === "function") clickTarget.click();
+    emitRealClick(clickTarget);
+
+    if (address.input && typeof address.input.click === "function" && !address.input.checked) {
+      address.input.click();
+    }
+
+    await sleep(250);
+
+    // 2. Bấm nút Confirm để lưu
+    const confirmButton = findConfirmPickupAddressButton(modal);
+    if (confirmButton) {
+      confirmButton.scrollIntoView({ block: "center", inline: "nearest" });
+      await sleep(100);
+      if (typeof confirmButton.click === "function") confirmButton.click();
+      emitRealClick(confirmButton);
+      await sleep(350);
+
+      return {
+        ok: true,
+        message: `Đã chọn địa chỉ ${address.shortText} và bấm Xác nhận.`
+      };
+    }
+
+    return {
+      ok: true,
+      message: `Đã chọn địa chỉ ${address.shortText}.`
+    };
+  }
+
+  function findArrangePickupConfirmButton() {
+    const directButton = document.querySelector("[data-testid='arrange-pickup-confirm-button']");
+
+    if (directButton && isVisible(directButton)) {
+      return directButton;
+    }
+
+    return Array.from(document.querySelectorAll("button, [role='button'], .eds-button")).find((button) => {
+      const text = normalizeSearchText(button.textContent);
+      return (text.includes("yeu cau don vi van chuyen") || 
+              text.includes("yeu cau vc") || 
+              text.includes("yeu cau lay hang") || 
+              text.includes("sap xep giao hang") || 
+              text.includes("gui hang") ||
+              (text.includes("xac nhan") && button.closest(".eds-modal__footer, .mass-ship-action"))) && isVisible(button);
+    }) || null;
+  }
+
+  function isPickupAddressHanoiText(text) {
+    const norm = normalizeSearchText(text);
+    return norm.includes("ha noi") || norm.includes("ha dong") || norm.includes("phu luong") || norm.includes("hn");
+  }
+
+  function isPickupAddressHcmText(text) {
+    const norm = normalizeSearchText(text);
+    return norm.includes("ho chi minh") || norm.includes("thu duc") || norm.includes("linh xuan") || norm.includes("hcm") || norm.includes("sai gon");
+  }
+
+  function getDisplayedPickupAddressText() {
+    const changeBtn = findChangePickupAddressButton();
+    if (changeBtn) {
+      let el = changeBtn.parentElement;
+      for (let i = 0; i < 5 && el && el !== document.body; i++) {
+        const raw = el.innerText || el.textContent || "";
+        if (raw.length > 700) break;
+        if (isPickupAddressHanoiText(raw) || isPickupAddressHcmText(raw)) {
+          return raw;
+        }
+        el = el.parentElement;
+      }
+    }
+
+    const addressLabels = Array.from(document.querySelectorAll("div, span, label, p")).filter((el) => {
+      const t = normalizeSearchText(el.textContent).trim();
+      return (t === "dia chi lay hang" || t.startsWith("dia chi lay hang")) && el.children.length <= 2 && isVisible(el);
+    });
+    for (const lbl of addressLabels) {
+      let el = lbl.parentElement;
+      for (let i = 0; i < 4 && el && el !== document.body; i++) {
+        const raw = el.innerText || el.textContent || "";
+        if (raw.length > 700) break;
+        if (isPickupAddressHanoiText(raw) || isPickupAddressHcmText(raw)) {
+          return raw;
+        }
+        el = el.parentElement;
+      }
+    }
+    return "";
+  }
+
+  let cachedPickupOnlyHanoi = true;
+  try {
+    chrome.storage?.local?.get(["printFlowPickupOnlyHanoi"], (res) => {
+      if (res && typeof res.printFlowPickupOnlyHanoi === "boolean") {
+        cachedPickupOnlyHanoi = res.printFlowPickupOnlyHanoi;
+      }
+    });
+    chrome.storage?.onChanged?.addListener((changes, area) => {
+      if (area === "local" && changes.printFlowPickupOnlyHanoi) {
+        cachedPickupOnlyHanoi = Boolean(changes.printFlowPickupOnlyHanoi.newValue);
+      }
+    });
+  } catch (_) {}
+
+  // Đồng bộ khóa/mở nút Yêu cầu ĐVVC đến lấy hàng trực tiếp trên trang Shopee khi tích Chỉ HN
+  setInterval(() => {
+    if (!location.pathname.includes("/portal/sale/mass/ship")) return;
+    const confirmBtn = findArrangePickupConfirmButton();
+    if (!confirmBtn) return;
+
+    if (!cachedPickupOnlyHanoi) {
+      if (confirmBtn.dataset.lockedByHanoiCheck === "1") {
+        delete confirmBtn.dataset.lockedByHanoiCheck;
+        confirmBtn.style.opacity = "";
+        confirmBtn.style.pointerEvents = "";
+        confirmBtn.title = "";
+      }
+      return;
+    }
+
+    const addrText = getDisplayedPickupAddressText();
+    if (addrText && !isPickupAddressHanoiText(addrText)) {
+      confirmBtn.dataset.lockedByHanoiCheck = "1";
+      confirmBtn.style.opacity = "0.45";
+      confirmBtn.style.pointerEvents = "none";
+      confirmBtn.title = "Chỉ cho phép ấn khi Địa chỉ lấy hàng ở Hà Nội";
+    } else if (confirmBtn.dataset.lockedByHanoiCheck === "1") {
+      delete confirmBtn.dataset.lockedByHanoiCheck;
+      confirmBtn.style.opacity = "";
+      confirmBtn.style.pointerEvents = "";
+      confirmBtn.title = "";
+    }
+  }, 600);
+
+  async function arrangePickupConfirm(onlyHanoiParam) {
+    const mustBeHanoi = typeof onlyHanoiParam === "boolean" ? onlyHanoiParam : cachedPickupOnlyHanoi;
+
+    if (mustBeHanoi) {
+      const addrText = getDisplayedPickupAddressText();
+      if (addrText && !isPickupAddressHanoiText(addrText)) {
+        return {
+          ok: false,
+          message: "⚠️ Địa chỉ kho/lấy hàng trên Shopee chưa phải ở Hà Nội! Chỉ cho phép ấn khi Địa chỉ ở Hà Nội."
+        };
+      }
+    }
+
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const confirmButton = findArrangePickupConfirmButton();
+
+      if (confirmButton) {
+        if (mustBeHanoi) {
+          const addrTextNow = getDisplayedPickupAddressText();
+          if (addrTextNow && !isPickupAddressHanoiText(addrTextNow)) {
+            return {
+              ok: false,
+              message: "⚠️ Địa chỉ kho/lấy hàng trên Shopee chưa phải ở Hà Nội! Chỉ cho phép ấn khi Địa chỉ ở Hà Nội."
+            };
+          }
+        }
+
+        confirmButton.scrollIntoView({ block: "center", inline: "nearest" });
+        await sleep(100);
+        emitRealClick(confirmButton);
+
+        // Check if there is an additional confirmation modal
+        for (let m = 0; m < 5; m += 1) {
+          await sleep(300);
+          const modalConfirm = document.querySelector(".eds-modal__footer button.eds-button--primary, [role='dialog'] button.eds-button--primary, .eds-modal button.eds-button--primary");
+          if (modalConfirm && isVisible(modalConfirm) && !modalConfirm.disabled) {
+            emitRealClick(modalConfirm);
+            await sleep(300);
+            break;
+          }
+        }
+
+        return {
+          ok: true,
+          message: "Đã bấm Yêu cầu đơn vị vận chuyển đến lấy hàng."
+        };
+      }
+
+      await sleep(200);
+    }
+
+    return {
+      ok: false,
+      message: "Không tìm thấy nút Yêu cầu đơn vị vận chuyển đến lấy hàng."
+    };
+  }
+
+  function findGenerateDocButton() {
+    // 1. Tìm trực diện theo data-testid của Shopee trên toàn document
+    const directButton = document.querySelector("[data-testid='generate-doc-for-arranged-shipment-orders']");
+    if (directButton && isVisible(directButton) && !directButton.disabled && !directButton.classList.contains("eds-button--disabled")) {
+      return directButton;
+    }
+
+    let container = document;
+    const modals = Array.from(document.querySelectorAll(".eds-modal__content")).filter(isVisible);
+    if (modals.length > 0) {
+      container = modals[modals.length - 1];
+      const modalBtn = container.querySelector("[data-testid='generate-doc-for-arranged-shipment-orders']");
+      if (modalBtn && isVisible(modalBtn) && !modalBtn.disabled && !modalBtn.classList.contains("eds-button--disabled")) {
+        return modalBtn;
+      }
+    }
+
+    return Array.from(document.querySelectorAll("button, [role='button'], .eds-button, .eds-dropdown")).find((button) => {
+      const text = normalizeSearchText(button.textContent);
+      const isDisabled = button.disabled || button.classList.contains("eds-button--disabled") || button.getAttribute("aria-disabled") === "true";
+      return (text === "tao" || text.startsWith("tao ") || text.includes("tao phieu") || text.includes("in phieu") || text.includes("in don") || text.includes("tao tai lieu") || text.includes("generate")) && isVisible(button) && !isDisabled;
+    }) || null;
+  }
+
+  function findNormalPdfDocOption() {
+    // 1. Nhắm trực diện vào data-testid của Shopee (kể cả khi popper đang display: none)
+    const directOptions = Array.from(document.querySelectorAll("[data-testid='doc-type-NORMAL_PDF'], [data-testid*='NORMAL_PDF']"));
+    const visibleDirect = directOptions.find(isVisible);
+    if (visibleDirect) {
+      return visibleDirect;
+    }
+    if (directOptions.length > 0) {
+      return directOptions[0];
+    }
+
+    // 2. Tìm trong dropdown menu / popper
+    const dropdownItems = Array.from(document.querySelectorAll(".eds-popper li, .eds-dropdown-menu li, .eds-dropdown-item, .eds-popover li, .eds-option, li, div[role='menuitem'], [data-testid]"));
+
+    return dropdownItems.find((element) => {
+      const text = normalizeSearchText(element.textContent);
+      return (text.includes("pdf") || (text.includes("phieu gui hang") && text.includes("phieu dong goi")) || text.includes("phieu gui hang") || text.includes("phieu dong goi") || text.includes("phieu van don"));
+    }) || null;
+  }
+
+  function findDocGenerationModal() {
+    const modals = Array.from(document.querySelectorAll(".eds-modal__box, .eds-modal__content, .eds-modal, .eds-dialog, div[role='dialog']")).filter(isVisible);
+    return modals.find((modal) => {
+      const text = normalizeSearchText(modal.textContent);
+      return text.includes("tao chung tu") || 
+             text.includes("chung tu van chuyen") || 
+             text.includes("tao phieu") || 
+             text.includes("phieu gui hang") || 
+             text.includes("phieu dong goi") || 
+             text.includes("dang tao") || 
+             text.includes("dang xu ly") ||
+             text.includes("tai ve") ||
+             text.includes("tai tai lieu") ||
+             text.includes("tai pdf");
+    }) || (modals.length > 0 ? modals[modals.length - 1] : null);
+  }
+
+  function isModalGenerating(modal) {
+    if (!modal) return false;
+
+    // 1. Kiểm tra spinner loading
+    const spinner = modal.querySelector(".eds-loading, .eds-loading-mask, .is-loading, .eds-icon-loading, [class*='loading'], [class*='spinner']");
+    if (spinner && isVisible(spinner)) {
+      return true;
+    }
+
+    // 2. Kiểm tra text tiến trình
+    const text = normalizeSearchText(modal.textContent);
+    if (text.includes("dang tao") || text.includes("dang xu ly") || text.includes("vui long cho") || text.includes("dang tai")) {
+      if (text.includes("hoan thanh") || text.includes("thanh cong") || text.includes("100%")) {
+        return false;
+      }
+      return true;
+    }
+
+    // 3. Kiểm tra xem các nút tải có đang bị disabled không
+    const buttons = Array.from(modal.querySelectorAll("button, .eds-button"));
+    const downloadCandidates = buttons.filter(btn => {
+      const t = normalizeSearchText(btn.textContent);
+      return t.includes("tai") || t.includes("in") || t.includes("download");
+    });
+    if (downloadCandidates.length > 0) {
+      const allDisabled = downloadCandidates.every(btn => 
+        btn.disabled || btn.classList.contains("eds-button--disabled") || btn.classList.contains("is-disabled") || btn.getAttribute("aria-disabled") === "true"
+      );
+      if (allDisabled) return true;
+    }
+
+    return false;
+  }
+
+  function findDocDownloadButton(container) {
+    if (!container) return null;
+    const candidates = Array.from(container.querySelectorAll("button, a, [role='button'], .eds-button, .download-link"));
+
+    // 1. Ưu tiên nút có text rõ ràng về tải file
+    const downloadBtn = candidates.find((btn) => {
+      const text = normalizeSearchText(btn.textContent);
+      const isDownText = text.includes("tai ve") || 
+                         text.includes("tai tai lieu") || 
+                         text.includes("tai tap tin") || 
+                         text.includes("tai pdf") || 
+                         text.includes("tai xuong") || 
+                         text.includes("in phieu") || 
+                         text.includes("in tai lieu") || 
+                         text === "tai" || 
+                         text.includes("download");
+      const isVisibleBtn = isVisible(btn);
+      const isDisabled = btn.disabled || btn.classList.contains("eds-button--disabled") || btn.classList.contains("is-disabled") || btn.getAttribute("aria-disabled") === "true";
+      return isDownText && isVisibleBtn && !isDisabled;
+    });
+
+    if (downloadBtn) return downloadBtn;
+
+    // 2. Nút primary trong footer modal nếu đã kích hoạt
+    const footerPrimary = container.querySelector(".eds-modal__footer button.eds-button--primary, .eds-modal__footer-buttons button.eds-button--primary");
+    if (footerPrimary && isVisible(footerPrimary)) {
+      const isDisabled = footerPrimary.disabled || footerPrimary.classList.contains("eds-button--disabled") || footerPrimary.classList.contains("is-disabled") || footerPrimary.getAttribute("aria-disabled") === "true";
+      const text = normalizeSearchText(footerPrimary.textContent);
+      if (!isDisabled && !text.includes("huy") && !text.includes("dong") && !text.includes("cancel")) {
+        return footerPrimary;
+      }
+    }
+
+    return null;
+  }
+
+  async function generateNormalPdfDoc() {
+    let generateButton = null;
+
+    // 1. Tìm nút Tạo phiếu (chờ tối đa 8 giây nếu Shopee đang xử lý)
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      generateButton = findGenerateDocButton();
+      if (generateButton) break;
+      await sleep(200);
+    }
+
+    if (!generateButton) {
+      return {
+        ok: false,
+        message: "Không tìm thấy nút Tạo phiếu."
+      };
+    }
+
+    // Cuộn đến nút Tạo phiếu
+    generateButton.scrollIntoView({ block: "center", inline: "nearest" });
+    await sleep(100);
+
+    // Đặt cờ chờ tải PDF trước khi kích hoạt tạo phiếu
+    try {
+      chrome.storage.local.remove(["autoDownloadPrintDocCompleted"]);
+      chrome.storage.local.set({ autoDownloadPrintDocPending: Date.now() });
+    } catch (_) {}
+
+    // 2. Di chuyển chuột vào ô nút Tạo phiếu để Shopee bung menu popper
+    let pdfOption = null;
+    for (let attempt = 0; attempt < 35; attempt += 1) {
+      const currentGenBtn = findGenerateDocButton() || generateButton;
+      emitRealHover(currentGenBtn);
+
+      const spanChild = currentGenBtn.querySelector("span") || currentGenBtn.firstElementChild;
+      if (spanChild) emitRealHover(spanChild);
+      if (currentGenBtn.parentElement) emitRealHover(currentGenBtn.parentElement);
+
+      // Kiểm tra xem menu popup chứa Phiếu PDF đã hiện ra chưa
+      pdfOption = findNormalPdfDocOption();
+      if (pdfOption) {
+        // Nếu popper đang bị style display: none, cưỡng chế hiển thị
+        const popper = pdfOption.closest(".eds-popper");
+        if (popper && (popper.style.display === "none" || window.getComputedStyle(popper).display === "none")) {
+          popper.style.setProperty("display", "block", "important");
+          popper.style.setProperty("visibility", "visible", "important");
+          popper.style.setProperty("opacity", "1", "important");
+        }
+        break;
+      }
+
+      await sleep(150);
+    }
+
+    if (!pdfOption) {
+      return {
+        ok: false,
+        message: "Không tìm thấy mục Phiếu gửi hàng / Phiếu đóng gói PDF trong menu Tạo."
+      };
+    }
+
+    // 3. Di chuyển chuột vào mục Phiếu PDF và click chọn để tạo PDF
+    const itemLi = pdfOption.closest(".eds-dropdown-item, li") || pdfOption;
+    itemLi.scrollIntoView({ block: "nearest", inline: "nearest" });
+    emitRealHover(itemLi);
+    emitRealHover(pdfOption);
+    await sleep(200);
+
+    if (typeof itemLi.click === "function") itemLi.click();
+    emitRealClick(itemLi);
+    if (pdfOption !== itemLi) {
+      if (typeof pdfOption.click === "function") pdfOption.click();
+      emitRealClick(pdfOption);
+    }
+
+    // 4. Đợi khi load xong và ấn tải PDF về cho user
+    const startTime = Date.now();
+    const maxWaitMs = 60000; // Đợi tối đa 60 giây
+
+    while (Date.now() - startTime < maxWaitMs) {
+      await sleep(400);
+
+      // Kiểm tra nếu tab in mới đã tải xong PDF
+      try {
+        const completedRes = await new Promise(r => chrome.storage.local.get(["autoDownloadPrintDocCompleted"], r));
+        if (completedRes?.autoDownloadPrintDocCompleted && completedRes.autoDownloadPrintDocCompleted >= startTime) {
+          return {
+            ok: true,
+            message: "Đã tạo phiếu và tự động tải file PDF thành công."
+          };
+        }
+      } catch (_) {}
+
+      // Kiểm tra modal trên trang hiện tại
+      const modal = findDocGenerationModal();
+      if (modal) {
+        const isGenerating = isModalGenerating(modal);
+        if (!isGenerating) {
+          const downloadBtn = findDocDownloadButton(modal);
+          if (downloadBtn) {
+            downloadBtn.scrollIntoView({ block: "center", inline: "nearest" });
+            await sleep(150);
+            emitRealHover(downloadBtn);
+            await sleep(100);
+            if (typeof downloadBtn.click === "function") downloadBtn.click();
+            emitRealClick(downloadBtn);
+            await sleep(800);
+
+            return {
+              ok: true,
+              message: "Đã tạo phiếu và bấm Tải PDF về máy thành công."
+            };
+          }
+        }
+      } else {
+        // Kiểm tra nút tải trên toàn document (nếu hiển thị trực tiếp ngoài modal)
+        const downloadBtn = findDocDownloadButton(document);
+        if (downloadBtn && downloadBtn !== generateButton) {
+          downloadBtn.scrollIntoView({ block: "center", inline: "nearest" });
+          await sleep(150);
+          emitRealHover(downloadBtn);
+          await sleep(100);
+          if (typeof downloadBtn.click === "function") downloadBtn.click();
+          emitRealClick(downloadBtn);
+          await sleep(800);
+
+          return {
+            ok: true,
+            message: "Đã tạo phiếu và bấm Tải PDF về máy thành công."
+          };
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      message: "Đã chọn Tạo phiếu PDF. Đang xử lý tải file PDF."
+    };
+  }
+
+  function findExportWaitingOrdersButton() {
+    const directButton = document.querySelector("button.export-with-modal");
+
+    if (directButton && isVisible(directButton) && normalizeSearchText(directButton.textContent) === "xuat") {
+      return directButton;
+    }
+
+    return Array.from(document.querySelectorAll("button, [role='button'], .eds-button")).find((button) => {
+      const text = normalizeSearchText(button.textContent);
+      return (text === "xuat" || text.includes("xuat don hang") || text.includes("xuat danh sach")) && isVisible(button) && !button.closest(".eds-modal__content");
+    }) || null;
+  }
+
+  function findExportWaitingOrdersModal() {
+    return Array.from(document.querySelectorAll(".eds-modal__content, .shopee-modal__content, div[role='dialog']")).find((modal) => {
+      const title = normalizeSearchText(modal.querySelector(".eds-modal__title, h3, h2, div")?.textContent || "");
+      return (title.includes("xuat don hang") || title.includes("xuat") || normalizeSearchText(modal.textContent).includes("xuat don hang")) && isVisible(modal);
+    }) || null;
+  }
+
+  function findExportWaitingOrdersModalButton(modal) {
+    return Array.from(modal.querySelectorAll(".eds-modal__footer-buttons button, button, .eds-button--primary")).find((button) => {
+      const text = normalizeSearchText(button.textContent);
+      return (text === "xuat" || text.includes("xac nhan") || text.includes("xuat")) && isVisible(button);
+    }) || null;
+  }
+
+  function findExportDownloadButton() {
+    return Array.from(document.querySelectorAll(".eds-modal__content button, button, a.download-link")).find((button) => {
+      const text = normalizeSearchText(button.textContent);
+      return (text.includes("tai ve") || text.includes("download") || text.includes("tai")) && isVisible(button);
+    }) || null;
+  }
+
+  async function exportWaitingOrders() {
+    let modal = findExportWaitingOrdersModal();
+
+    if (!modal) {
+      const exportButton = findExportWaitingOrdersButton();
+
+      if (!exportButton) {
+        return {
+          ok: false,
+          message: "Không tìm thấy nút Xuất."
+        };
+      }
+
+      exportButton.scrollIntoView({ block: "center", inline: "nearest" });
+      await sleep(100);
+      emitRealClick(exportButton);
+
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await sleep(200);
+        modal = findExportWaitingOrdersModal();
+
+        if (modal) {
+          break;
+        }
+      }
+    }
+
+    if (!modal) {
+      return {
+        ok: false,
+        message: "Không thấy hộp thoại xuất đơn hàng."
+      };
+    }
+
+    const modalExportButton = findExportWaitingOrdersModalButton(modal);
+
+    if (!modalExportButton) {
+      return {
+        ok: false,
+        message: "Không thấy nút Xuất trong hộp thoại xuất đơn hàng."
+      };
+    }
+
+    modalExportButton.scrollIntoView({ block: "center", inline: "nearest" });
+    await sleep(100);
+    emitRealClick(modalExportButton);
+
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await sleep(250);
+
+      const downloadButton = findExportDownloadButton();
+
+      if (downloadButton) {
+        downloadButton.scrollIntoView({ block: "center", inline: "nearest" });
+        await sleep(100);
+        emitRealClick(downloadButton);
+
+        return {
+          ok: true,
+          message: "Đã bấm Xuất và Tải về file Excel thành công."
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      message: "Đã bấm Xuất đơn hàng."
+    };
+  }
+
+  // =========================================================================
+  // TAB 301: TẠO PHIẾU HÀNG LOẠT (portal/sale/mass/ship?mass_shipment_tab=301)
+  // =========================================================================
+
+  async function selectMassShipFilterOption(labelKeywords, optionKeywords) {
+    if (!Array.isArray(labelKeywords)) labelKeywords = [labelKeywords];
+    if (!Array.isArray(optionKeywords)) optionKeywords = [optionKeywords];
+
+    // 1. Tìm container theo label
+    let targetRow = null;
+    for (const kw of labelKeywords) {
+      targetRow = findMassShipFilterRow(kw);
+      if (targetRow) break;
+    }
+
+    if (targetRow) {
+      // 2. Tìm trong các thẻ radio/tags của hàng
+      const tags = getMassShipTags(targetRow.container, targetRow.labelEl);
+      for (const optKw of optionKeywords) {
+        const normOpt = normalizeSearchText(optKw);
+        const matched = tags.find(t => t.normText === normOpt || t.normText.includes(normOpt));
+        if (matched && matched.element) {
+          triggerShopeeRadioClick(matched.element);
+          await sleep(150);
+          return { ok: true, message: `Đã chọn: ${matched.text}` };
+        }
+      }
+
+      // 3. Nếu là dropdown select bên trong container
+      const selectTrigger = targetRow.container.querySelector(".eds-select, .eds-dropdown, [role='combobox']");
+      if (selectTrigger && isVisible(selectTrigger)) {
+        emitRealClick(selectTrigger);
+        await sleep(250);
+        const options = Array.from(document.querySelectorAll(".eds-select-dropdown li, .eds-dropdown-menu li, .eds-option, [role='option']")).filter(isVisible);
+        for (const optKw of optionKeywords) {
+          const normOpt = normalizeSearchText(optKw);
+          const found = options.find(o => normalizeSearchText(o.textContent).includes(normOpt));
+          if (found) {
+            emitRealClick(found);
+            await sleep(150);
+            return { ok: true, message: `Đã chọn dropdown: ${found.textContent.trim()}` };
+          }
+        }
+      }
+    }
+
+    // 4. Fallback: Quét toàn bộ các tag/radio trên trang
+    const allRadios = Array.from(document.querySelectorAll("label.eds-radio-button, .eds-radio-button, label.eds-radio, .eds-tag, [role='radio']")).filter(isElementInteractable);
+    for (const optKw of optionKeywords) {
+      const normOpt = normalizeSearchText(optKw);
+      const found = allRadios.find(r => {
+        const txt = normalizeSearchText(r.textContent);
+        return txt === normOpt || txt.startsWith(normOpt);
+      });
+      if (found) {
+        triggerShopeeRadioClick(found);
+        await sleep(150);
+        return { ok: true, message: `Đã chọn fallback: ${found.textContent.trim()}` };
+      }
+    }
+
+    return { ok: false, message: `Không tìm thấy mục lựa chọn cho ${labelKeywords.join(', ')}` };
+  }
+
+  function getTab301OrdersFromPage() {
+    const orders = [];
+    const seenIds = new Set();
+    const cards = Array.from(document.querySelectorAll(".mass-ship-card, .mass-ship-row-wrapper, .mass-ship-row")).filter(isVisible);
+
+    for (const card of cards) {
+      // 1. Mã đơn hàng & Link đơn
+      const orderLink = card.querySelector(".mass-ship-col.order-id a, .order-id-column a, .order-id-wrapper a");
+      const orderId = (orderLink ? orderLink.textContent : (card.querySelector(".mass-ship-col.order-id")?.textContent || "")).trim();
+      if (!orderId || orderId.length < 5 || seenIds.has(orderId)) continue;
+      seenIds.add(orderId);
+
+      let orderUrl = orderLink ? (orderLink.getAttribute("href") || "") : "";
+      if (orderUrl && orderUrl.startsWith("/")) {
+        orderUrl = "https://banhang.shopee.vn" + orderUrl;
+      }
+
+      // 2. Mã vận đơn
+      const trackingEl = card.querySelector(".mass-ship-col.tracking-number .tracking-number, .mass-ship-col.tracking-number, .tracking-number");
+      let trackingNumber = trackingEl ? trackingEl.textContent.trim() : "";
+      if (trackingNumber.includes("\n")) {
+        trackingNumber = trackingNumber.split("\n")[0].trim();
+      }
+
+      // 3. Ảnh sản phẩm
+      const imgEls = Array.from(card.querySelectorAll(".mass-ship-col.products .image, .image-combine .image, .mass-ship-col.products img"));
+      const imageUrls = [];
+      imgEls.forEach(el => {
+        let url = "";
+        if (el.tagName === "IMG") {
+          url = el.src || el.getAttribute("src") || "";
+        } else {
+          const bg = el.style.backgroundImage || window.getComputedStyle(el).backgroundImage || "";
+          const m = bg.match(/url\(["']?(.*?)["']?\)/);
+          if (m && m[1]) {
+            url = m[1].replace(/&quot;/g, "").replace(/["']/g, "");
+          }
+        }
+        if (url && !imageUrls.includes(url) && !url.includes("data:image/svg")) {
+          imageUrls.push(url);
+        }
+      });
+      const mainImage = imageUrls[0] || "";
+
+      // 4. Đơn vị vận chuyển
+      const carrierEl = card.querySelector(".mass-ship-col.shipping-option .actual-carrier-name, .mass-ship-col.shipping-option");
+      const carrier = carrierEl ? carrierEl.textContent.replace(/\s+/g, " ").trim() : "";
+
+      // 5. Người mua
+      const buyerEl = card.querySelector(".mass-ship-col.buyer");
+      const buyer = buyerEl ? buyerEl.textContent.trim() : "";
+
+      // 6. Thời gian đặt đơn
+      const confirmTimeEl = card.querySelector(".mass-ship-col.confirm-time");
+      const confirmTime = confirmTimeEl ? confirmTimeEl.textContent.trim() : "";
+
+      // 7. Nhãn Hàng đặt trước hoặc tag khác
+      const tagEl = card.querySelector(".tag-infos, .tag-value, .eds-tag");
+      const tag = tagEl ? tagEl.textContent.trim() : "";
+
+      // 8. Trạng thái phiếu đã in (Waybill)
+      const waybillRows = Array.from(card.querySelectorAll(".mass-ship-col.waybill .row"));
+      const printedDocs = [];
+      waybillRows.forEach(row => {
+        if (row.querySelector(".done, .eds-icon")) {
+          printedDocs.push(row.textContent.trim());
+        }
+      });
+
+      // 9. Trạng thái checkbox trên web hiện tại
+      const checkboxInput = card.querySelector(".mass-ship-col.checkbox input[type='checkbox']");
+      const checkboxLabel = card.querySelector(".mass-ship-col.checkbox label.eds-checkbox") || card.querySelector(".mass-ship-col.checkbox");
+      const isChecked = checkboxInput ? checkboxInput.checked : (checkboxLabel ? checkboxLabel.classList.contains("eds-checkbox--checked") : false);
+
+      orders.push({
+        orderId,
+        orderUrl,
+        trackingNumber,
+        mainImage,
+        imageUrls,
+        carrier,
+        buyer,
+        confirmTime,
+        tag,
+        printedDocs: printedDocs.join(", "),
+        isChecked
+      });
+    }
+
+    return orders;
+  }
+
+  async function applyTab301AllFilters() {
+    // 1. Kho Hà Nội
+    await selectPrintWarehouse("Hà Nội");
+    await sleep(1500);
+
+    // 2. Hạn giao hàng là Tất cả trạng thái
+    await selectMassShipFilterOption(
+      ["han giao hang", "han xu ly", "shipping urgency", "urgency"],
+      ["tat ca trang thai", "tat ca"]
+    );
+    await sleep(200);
+
+    // 3. Đơn vị vận chuyển là Tất cả đơn vị vận chuyển
+    await selectMassShipFilterOption(
+      ["don vi van chuyen", "carrier", "shipping carrier"],
+      ["tat ca don vi van chuyen", "tat ca don vi", "tat ca"]
+    );
+    await sleep(200);
+
+    // 4. Trạng thái đơn hàng là Tất cả trạng thái
+    await selectMassShipFilterOption(
+      ["trang thai don hang", "trang thai xu ly", "trang thai", "order status"],
+      ["tat ca trang thai", "tat ca"]
+    );
+    await sleep(200);
+
+    // 5. Hàng đặt trước là Tất cả đơn hàng
+    await selectMassShipFilterOption(
+      ["hang dat truoc", "pre order", "dat truoc"],
+      ["tat ca don hang", "tat ca don", "tat ca"]
+    );
+    await sleep(200);
+
+    // 6. Bấm Áp dụng (nếu có nút Áp dụng/Lọc đơn)
+    const applyBtn = findMassShipFilterApplyButton();
+    if (applyBtn) {
+      applyBtn.scrollIntoView({ block: "center", inline: "nearest" });
+      await sleep(100);
+      emitRealClick(applyBtn);
+      await sleep(1200);
+    }
+
+    // 7. Đợi bảng hoàn tất load (chờ loading skeleton biến mất)
+    for (let w = 0; w < 20; w++) {
+      const loading = document.querySelector(".table-loading-container, .eds-loading");
+      if (!loading || loading.style.display === "none") break;
+      await sleep(200);
+    }
+    await sleep(800);
+
+    // 8. Đọc danh sách đơn hàng
+    const orders = getTab301OrdersFromPage();
+    return {
+      ok: true,
+      orders,
+      message: `Đã lọc Kho Hà Nội (Tất cả) thành công. Tìm thấy ${orders.length} đơn hàng.`
+    };
+  }
+
+  async function selectTab301OrdersAndGenerateDoc(orderIds, autoDownloadPdf = false) {
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return { ok: false, message: "Chưa có đơn hàng nào được chọn." };
+    }
+
+    const targetSet = new Set(orderIds.map(id => String(id || "").trim().toUpperCase()));
+
+    // Tab vừa mở: đợi danh sách đơn của tab 301 hiện ra (tối đa 20s)
+    for (let waited = 0; waited < 20000; waited += 300) {
+      const hasCards = Array.from(document.querySelectorAll(".mass-ship-card, .mass-ship-row-wrapper")).some(isVisible);
+      if (hasCards && !isShopeePageLoading()) break;
+      await sleep(300);
+    }
+    // .mass-ship-card và .mass-ship-row-wrapper có thể lồng nhau cho cùng 1 đơn:
+    // bỏ các phần tử nằm trong phần tử khác đã khớp để mỗi đơn chỉ xử lý 1 lần.
+    const allCards = Array.from(document.querySelectorAll(".mass-ship-card, .mass-ship-row-wrapper")).filter(isVisible);
+    const cards = allCards.filter(card => !allCards.some(other => other !== card && other.contains(card)));
+
+    const getCheckState = (card) => {
+      const input = card.querySelector(".mass-ship-col.checkbox input[type='checkbox']");
+      const label = card.querySelector(".mass-ship-col.checkbox label.eds-checkbox") || card.querySelector(".mass-ship-col.checkbox");
+      return input ? input.checked : (label ? label.classList.contains("eds-checkbox--checked") : false);
+    };
+
+    // Bấm đúng 1 lần (bấm 2 lần sẽ tích rồi bỏ tích lại)
+    const setChecked = async (card, wanted) => {
+      if (getCheckState(card) === wanted) return;
+      const label = card.querySelector(".mass-ship-col.checkbox label.eds-checkbox") || card.querySelector(".mass-ship-col.checkbox");
+      const indicator = card.querySelector(".mass-ship-col.checkbox .eds-checkbox__indicator") || label;
+      if (indicator) emitRealClick(indicator);
+      await sleep(60);
+      const input = card.querySelector(".mass-ship-col.checkbox input[type='checkbox']");
+      if (input && input.checked !== wanted) {
+        input.checked = wanted;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        await sleep(60);
+      }
+    };
+
+    const matchedIds = new Set();
+
+    for (const card of cards) {
+      const orderLink = card.querySelector(".mass-ship-col.order-id a, .order-id-column a, .order-id-wrapper a");
+      const orderId = (orderLink ? orderLink.textContent : (card.querySelector(".mass-ship-col.order-id")?.textContent || "")).trim().toUpperCase();
+      if (!orderId) continue;
+
+      const shouldCheck = targetSet.has(orderId);
+      if (shouldCheck) matchedIds.add(orderId);
+      await setChecked(card, shouldCheck);
+    }
+
+    const matchedCount = matchedIds.size;
+    if (matchedCount === 0) {
+      return { ok: false, message: "Không tìm thấy đơn nào đã chọn trong danh sách Tạo phiếu (tab 301)." };
+    }
+
+    await sleep(400);
+
+    // Tìm nút Tạo phiếu đã chọn
+    let genBtn = document.querySelector("[data-testid='generate-shipping-document-button']");
+    if (!genBtn) {
+      const allButtons = Array.from(document.querySelectorAll("button, .eds-button"));
+      genBtn = allButtons.find(b => {
+        const txt = normalizeSearchText(b.textContent);
+        return (txt.includes("tao phieu da chon") || (txt.includes("tao phieu") && b.classList.contains("generate"))) && isVisible(b);
+      }) || null;
+    }
+
+    if (!genBtn) {
+      return {
+        ok: false,
+        message: `Đã tích chọn ${matchedCount} đơn trên Shopee nhưng không tìm thấy nút 'Tạo phiếu đã chọn'.`
+      };
+    }
+
+    if (genBtn.disabled || genBtn.classList.contains("eds-button--disabled") || genBtn.getAttribute("aria-disabled") === "true") {
+      return {
+        ok: false,
+        message: `Đã tích chọn ${matchedCount} đơn nhưng nút 'Tạo phiếu đã chọn' trên Shopee đang bị khóa.`
+      };
+    }
+
+    genBtn.scrollIntoView({ block: "center", inline: "nearest" });
+    await sleep(100);
+    // Cờ cho trang in (checkAndAutoDownloadInPrintPage) tự bấm Tải PDF khi tải xong
+    const startTime = Date.now();
+    if (autoDownloadPdf) {
+      try {
+        await chrome.storage.local.remove(["autoDownloadPrintDocCompleted"]);
+        await chrome.storage.local.set({ autoDownloadPrintDocPending: startTime });
+      } catch (_) {}
+    }
+
+    // Chỉ bấm 1 lần: click() + emitRealClick() = 2 lần bấm => Shopee mở 2 tab in
+    emitRealClick(genBtn);
+    await sleep(400);
+
+    if (autoDownloadPdf) {
+      // Đợi trang in mở, tải xong và bấm Tải PDF (tối đa 60s)
+      while (Date.now() - startTime < 60000) {
+        await sleep(500);
+        try {
+          const res = await chrome.storage.local.get(["autoDownloadPrintDocCompleted"]);
+          if (res?.autoDownloadPrintDocCompleted >= startTime) {
+            return {
+              ok: true,
+              message: `Đã tạo phiếu cho ${matchedCount} đơn và tải PDF về máy thành công!`
+            };
+          }
+        } catch (_) {}
+      }
+      return {
+        ok: false,
+        message: `Đã bấm 'Tạo phiếu đã chọn' cho ${matchedCount} đơn nhưng sau 60 giây chưa thấy trang in tải xong PDF. Hãy kiểm tra tab in và bấm 'Tải PDF'.`
+      };
+    }
+
+    return {
+      ok: true,
+      message: `Đã chọn ${matchedCount} đơn trên web Shopee và bấm nút 'Tạo phiếu đã chọn' thành công!`
+    };
+  }
+
+  // =========================================================================
+  // TAB IN TỰ ĐỘNG: ĐỌC ĐƠN CHỜ LẤY HÀNG (/portal/sale/order?type=toship&source=processed)
+  // =========================================================================
+
+  // Dùng chung: hàm đọc đơn In Tự Động và listener đọc danh sách đơn.
+  function isShopeePageLoading() {
+    const selectors = [
+      '.eds-loading',
+      '.eds-loading__mask',
+      '.eds-loading-mask',
+      '.eds-loading__spinner',
+      '.shopee-react-loading',
+      '.eds-table--loading',
+      '.eds-spinner',
+      '[class*="loading-mask"]',
+      '[class*="shopee-loading"]',
+      '[class*="table--loading"]',
+      '.eds-skeleton',
+      '[aria-busy="true"]'
+    ];
+    for (const s of selectors) {
+      const els = document.querySelectorAll(s);
+      for (const el of els) {
+        if (el.offsetParent !== null || window.getComputedStyle(el).display !== 'none') {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  async function readAutoInProcessedOrders() {
+    let loadWait = 0;
+    while (isShopeePageLoading() && loadWait < 8000) {
+      await sleep(200);
+      loadWait += 200;
+    }
+
+    try {
+      if (typeof renderProductSkus === "function") await renderProductSkus();
+    } catch (_) {}
+
+    const orders = [];
+    const seenIds = new Set();
+
+    const uniqueCards = [];
+    const processedEls = new Set();
+
+    // Neo theo span.order-sn (giống phần chèn nút Copy All): đi ngược lên tới
+    // phần tử lớn nhất chỉ chứa đúng 1 mã đơn => đó là thẻ đơn hàng.
+    for (const snEl of document.querySelectorAll("span.order-sn")) {
+      let card = snEl;
+      let cur = snEl.parentElement;
+      while (cur && cur !== document.body) {
+        if (cur.querySelectorAll("span.order-sn").length > 1) break;
+        card = cur;
+        cur = cur.parentElement;
+      }
+      if (!processedEls.has(card)) {
+        processedEls.add(card);
+        uniqueCards.push(card);
+      }
+    }
+
+    // Dự phòng: giao diện cũ không có span.order-sn
+    if (uniqueCards.length === 0) {
+      const allContainers = Array.from(document.querySelectorAll(
+        '.order-card, [class*="order-card"], [class*="orderCard"], [class*="order-box"], tr.shopee-table__row, .shopee-table__row, [data-testid="order-item"], .order-item'
+      ));
+      for (const el of allContainers) {
+        const outer = el.closest('.order-card, [class*="order-card"], tr.shopee-table__row, [data-testid="order-item"]') || el;
+        if (!processedEls.has(outer)) {
+          processedEls.add(outer);
+          uniqueCards.push(outer);
+        }
+      }
+    }
+
+    for (const card of uniqueCards) {
+      try {
+        const text = card.innerText || card.textContent || "";
+        if (!text) continue;
+
+        // Mã đơn hàng (MDH)
+        let orderId = "";
+        const snEl = card.querySelector('.order-sn, [class*="order-sn"], [class*="ordersn"], [data-testid="order-sn"], .order-id, [class*="orderId"]');
+        if (snEl) {
+          const clone = snEl.cloneNode(true);
+          clone.querySelectorAll('button, svg, i, [class*="copy"], .ud-ct-badge').forEach(b => b.remove());
+          const m = clone.textContent.trim().match(/([A-Z0-9]{10,30})/i);
+          if (m) orderId = m[1].trim();
+        }
+        if (!orderId) {
+          const href = (card.querySelector('a[href*="/portal/sale/order/"]')?.getAttribute('href') || card.getAttribute('href') || '');
+          const mHref = href.match(/\/portal\/sale\/order\/(?:detail\/)?([a-zA-Z0-9_-]+)/);
+          if (mHref && !/^(order|list|mass|shipping|toship|processed)$/i.test(mHref[1])) {
+            orderId = mHref[1].trim();
+          }
+        }
+        if (!orderId) {
+          const m = text.match(/\b(2[0-9]{5}[A-Z0-9]{6,20})\b/) || text.match(/\b([0-9]{14,20})\b/);
+          if (m) orderId = m[1].trim();
+        }
+
+        if (!orderId || seenIds.has(orderId.toUpperCase())) continue;
+        seenIds.add(orderId.toUpperCase());
+
+        // Mã vận đơn (MVD)
+        let trackingNumber = "";
+        const trackingEl = card.querySelector('.tracking-number, [class*="tracking-number"], [class*="trackingNo"], [class*="shipping-carrier"], [data-testid="tracking-number"]');
+        if (trackingEl) {
+          const clone = trackingEl.cloneNode(true);
+          clone.querySelectorAll('button, svg, i, [class*="copy"]').forEach(b => b.remove());
+          const tm = clone.textContent.trim().match(/([A-Z0-9_-]{6,30})/i);
+          if (tm) trackingNumber = tm[1].trim();
+        }
+        if (!trackingNumber) {
+          const tm2 = text.match(/(?:Mã vận đơn|MVD|Tracking No|Tracking)[:\s]+([A-Z0-9_-]{6,30})/i)
+            || text.match(/\b(VN[0-9A-Z]{8,22}|SPX[0-9A-Z]{8,22}|GHN[0-9A-Z]{6,22}|JNT[0-9A-Z]{6,22}|LEX[0-9A-Z]{6,22}|VNP[0-9A-Z]{6,22}|BEST[0-9A-Z]{6,22}|NJV[0-9A-Z]{6,22})\b/i);
+          if (tm2) trackingNumber = tm2[1].trim();
+        }
+
+        // Tên sản phẩm, SKU & Phân loại
+        const productNames = [];
+        const skus = [];
+        const variations = [];
+        let mainImage = "";
+
+        const cleanNodeText = (el) => {
+          if (!el) return "";
+          const clone = el.cloneNode(true);
+          clone.querySelectorAll('button, svg, i, [class*="copy"], .shopee-qlsp-copy-button').forEach(b => b.remove());
+          return clone.textContent.replace(/\s+/g, ' ').trim();
+        };
+        const addUnique = (list, value) => { if (value && !list.includes(value)) list.push(value); };
+
+        // Mỗi sản phẩm nằm trong div.item (cùng cấu trúc nút XLS đang đọc):
+        // ảnh SP, div.item-name, div.item-description và dòng SKU đỏ
+        // (.shopee-qlsp-sku-display) nằm ngay sau tên/phân loại.
+        const itemEls = Array.from(card.querySelectorAll("div.item")).filter(el => el.querySelector("div.item-name"));
+        for (const itemEl of itemEls) {
+          const nameEl = itemEl.querySelector("div.item-name");
+          const varEl = itemEl.querySelector("div.item-description");
+
+          const nameClone = nameEl.cloneNode(true);
+          nameClone.querySelectorAll('button, [class*="copy"], .shopee-qlsp-sku-display').forEach(b => b.remove());
+          addUnique(productNames, nameClone.textContent.replace(/\s+/g, ' ').trim());
+
+          if (varEl) {
+            addUnique(variations, cleanNodeText(varEl).replace(/^(?:Phân loại|Phân loại hàng|Variation)\s*[:\s]*/i, ''));
+          }
+
+          let skuEl = null;
+          for (let sib = (varEl || nameEl).nextElementSibling; sib; sib = sib.nextElementSibling) {
+            if (sib.classList.contains("shopee-qlsp-sku-display")) { skuEl = sib; break; }
+            if (sib.classList.contains("item-name")) break;
+          }
+          skuEl = skuEl || itemEl.querySelector(".shopee-qlsp-sku-display");
+          if (skuEl) addUnique(skus, cleanNodeText(skuEl).replace(/^(?:SKU|Mã SKU)\s*[:\s]*/i, ''));
+
+          if (!mainImage) {
+            const img = itemEl.querySelector("img");
+            if (img?.src && !img.src.includes("svg")) mainImage = img.src;
+          }
+        }
+
+        // Dự phòng khi trang không có div.item
+        if (itemEls.length === 0) {
+          for (const ne of card.querySelectorAll('div.item-name, .order-item-name, [class*="product-name"]')) {
+            if (ne.classList.contains('shopee-qlsp-sku-display')) continue;
+            const nameClone = ne.cloneNode(true);
+            nameClone.querySelectorAll('button, [class*="copy"], .shopee-qlsp-sku-display').forEach(b => b.remove());
+            addUnique(productNames, nameClone.textContent.replace(/\s+/g, ' ').trim());
+            const skuEl = ne.parentElement?.querySelector('.shopee-qlsp-sku-display');
+            if (skuEl) addUnique(skus, cleanNodeText(skuEl).replace(/^(?:SKU|Mã SKU)\s*[:\s]*/i, ''));
+          }
+        }
+
+        // Ảnh: bỏ qua avatar người mua ở đầu thẻ đơn
+        if (!mainImage) {
+          const img = Array.from(card.querySelectorAll('img')).find(el =>
+            el.src && !el.src.includes('svg') && !el.src.includes('avatar') &&
+            !el.closest('[class*="avatar"], [class*="buyer"], [class*="user"]'));
+          if (img) mainImage = img.src;
+        }
+
+        // Hạn giao hàng
+        let shipByDate = "";
+        const shipMatch = text.match(/(?:Giao trước|Hạn giao|Hạn chót|Ship before|Ship by)[:\s]*(\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})/i)
+          || text.match(/(\d{1,2}[-/]\d{1,2}[-/]\d{4}\s+\d{1,2}:\d{2})/);
+        if (shipMatch) shipByDate = shipMatch[1].trim();
+
+        // Người mua
+        let buyerUsername = "";
+        const buyerEl = card.querySelector('.buyer-username, [data-testid="buyer-username"], [class*="buyer-username"], [class*="buyerName"]');
+        if (buyerEl) buyerUsername = buyerEl.textContent.trim();
+
+        // Đã in chưa
+        let isPrinted = false;
+        const normText = normalizeSearchText(text);
+        const waybillEl = card.querySelector('.waybill, [class*="waybill"], [class*="print-status"], .print-status, .eds-tag, .tag');
+        if (waybillEl) {
+          const wTxt = normalizeSearchText(waybillEl.textContent);
+          if (wTxt.includes("da in") || wTxt.includes("printed")) isPrinted = true;
+        }
+        if (!isPrinted) {
+          if (normText.includes("da in phieu") || normText.includes("da in") || normText.includes("phieu gui hang: da in")) {
+            if (!normText.includes("chua in")) isPrinted = true;
+          }
+        }
+
+        orders.push({
+          orderId,
+          trackingNumber,
+          productName: productNames.join(" | ") || "Sản phẩm",
+          sku: skus.join(" | ") || "--",
+          variation: variations.join(" | ") || "--",
+          buyerUsername: buyerUsername || "--",
+          shipByDate: shipByDate || "--",
+          isPrinted,
+          printStatusText: isPrinted ? "Đã in" : "Chưa in",
+          mainImage: mainImage || "",
+          orderUrl: `https://banhang.shopee.vn/portal/sale/order/${orderId}`
+        });
+      } catch (err) {
+        console.warn("Lỗi đọc card đơn hàng:", err);
+      }
+    }
+
+    return orders;
+  }
+
+  // In Tự Động - Bước 3: tích ô XLS (shopee-qlsp-bulk-checkbox) của đúng các đơn
+  // được chọn rồi bấm nút XLS trên trang, để xuất cùng mẫu Excel với nút XLS.
+  async function exportOrdersViaXlsButton(orderIds) {
+    const targetSet = new Set((orderIds || []).map(id => String(id || "").trim().toUpperCase()));
+    if (targetSet.size === 0) {
+      return { ok: false, message: "Chưa chọn đơn hàng nào." };
+    }
+
+    // Ô tích XLS được chèn định kỳ cạnh span.order-sn, chờ tối đa 5s cho đủ
+    const getRows = () => Array.from(document.querySelectorAll("span.order-sn"))
+      .map(snEl => ({
+        orderId: getOrderSnFromText(snEl.textContent).toUpperCase(),
+        checkbox: snEl.parentNode?.querySelector("input.shopee-qlsp-bulk-checkbox")
+      }))
+      .filter(r => r.orderId);
+
+    let rows = getRows();
+    for (let waited = 0; waited < 5000 && rows.some(r => !r.checkbox); waited += 250) {
+      await sleep(250);
+      rows = getRows();
+    }
+
+    let matched = 0;
+    for (const { orderId, checkbox } of rows) {
+      if (!checkbox) continue;
+      const isTarget = targetSet.has(orderId);
+      if (isTarget) matched++;
+      if (checkbox.checked !== isTarget) {
+        checkbox.checked = isTarget;
+        checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+
+    if (matched === 0) {
+      return { ok: false, matched, message: "Không tìm thấy đơn nào trên trang để tích chọn. Hãy tải lại (F5) trang Shopee rồi thử lại." };
+    }
+
+    const xlsBtn = document.getElementById("shopee-qlsp-bulk-excel-btn");
+    if (!xlsBtn) {
+      return { ok: false, matched, message: "Không tìm thấy nút XLS trên trang Shopee." };
+    }
+    xlsBtn.click();
+
+    return {
+      ok: true,
+      matched,
+      missing: targetSet.size - matched,
+      message: `Đã tích ${matched} đơn và bấm XLS để tải Excel.`
+    };
+  }
+
+  async function selectOrdersOnOrderListPage(orderIds, triggerExport = false) {
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return { ok: false, message: "Chưa chọn đơn hàng nào." };
+    }
+
+    const targetSet = new Set(orderIds.map(id => String(id || "").trim().toUpperCase()));
+    const allContainers = Array.from(document.querySelectorAll(
+      '.order-card, [class*="order-card"], tr.shopee-table__row, [data-testid="order-item"], .order-item'
+    ));
+
+    let matched = 0;
+    for (const card of allContainers) {
+      const text = card.innerText || card.textContent || "";
+      const snEl = card.querySelector('.order-sn, [class*="order-sn"], [data-testid="order-sn"], .order-id');
+      let orderId = "";
+      if (snEl) {
+        const m = snEl.textContent.trim().match(/([A-Z0-9]{10,30})/i);
+        if (m) orderId = m[1].trim();
+      }
+      if (!orderId) {
+        const m = text.match(/\b(2[0-9]{5}[A-Z0-9]{6,20})\b/) || text.match(/\b([0-9]{14,20})\b/);
+        if (m) orderId = m[1].trim();
+      }
+
+      if (!orderId) continue;
+      const isTarget = targetSet.has(orderId.toUpperCase());
+      const chk = card.querySelector('input[type="checkbox"]');
+      const labelChk = card.querySelector('label.eds-checkbox, label.shopee-checkbox, .eds-checkbox__indicator');
+
+      if (chk || labelChk) {
+        const isCurrentChecked = chk ? chk.checked : (labelChk?.classList.contains('eds-checkbox--checked') || labelChk?.classList.contains('is-checked'));
+        if (isTarget) {
+          matched++;
+          if (!isCurrentChecked) {
+            if (labelChk) {
+              if (typeof labelChk.click === "function") labelChk.click();
+              emitRealClick(labelChk);
+            } else if (chk) {
+              chk.checked = true;
+              chk.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            await sleep(50);
+          }
+        } else {
+          if (isCurrentChecked) {
+            if (labelChk) {
+              if (typeof labelChk.click === "function") labelChk.click();
+              emitRealClick(labelChk);
+            } else if (chk) {
+              chk.checked = false;
+              chk.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            await sleep(50);
+          }
+        }
+      }
+    }
+
+    if (triggerExport) {
+      await sleep(300);
+      const exportBtn = Array.from(document.querySelectorAll('button, .eds-button')).find(b => {
+        const t = normalizeSearchText(b.textContent);
+        return (t === "xuat" || t.includes("xuat don hang") || t.includes("xuat")) && isVisible(b);
+      });
+      if (exportBtn) {
+        emitRealClick(exportBtn);
+        await sleep(300);
+      }
+    }
+
+    return {
+      ok: true,
+      message: `Đã tích chọn ${matched} đơn hàng trên trang Shopee.`
+    };
+  }
+
+  async function extractProductPerformanceData() {
+    // 1. Tìm các phần tử thông tin sản phẩm trên trang
+    let infoElements = Array.from(document.querySelectorAll('.product-item__info, [class*="product-item__info"]'));
+    
+    if (!infoElements.length) {
+      const titles = Array.from(document.querySelectorAll('.item-title, [class*="item-title"]'));
+      infoElements = titles.map(t => t.closest('.product-item__info, [class*="product-item"], tr, .eds-table__row') || t.parentElement).filter(Boolean);
+    }
+
+    if (!infoElements.length) {
+      return {
+        ok: false,
+        error: "Không tìm thấy danh sách sản phẩm trên trang hiện tại. Vui lòng mở trang Hiệu quả sản phẩm (banhang.shopee.vn/datacenter/product/performance)."
+      };
+    }
+
+    // 2. Trích xuất tiêu đề bảng nếu có
+    const headerCells = Array.from(document.querySelectorAll('thead th, .eds-table__header-cell, [class*="header-cell"], [class*="table__header"] th, th'));
+    const headers = [];
+    headerCells.forEach(cell => {
+      const clone = cell.cloneNode(true);
+      clone.querySelectorAll('.resize-triggers, .eds-popper, style, script').forEach(el => el.remove());
+      let txt = clone.textContent.replace(/\s+/g, ' ').trim();
+      if (txt && !headers.includes(txt)) {
+        headers.push(txt);
+      }
+    });
+
+    // 3. Trích xuất từng dòng sản phẩm
+    const rows = [];
+    const processedKeys = new Set();
+
+    for (let idx = 0; idx < infoElements.length; idx++) {
+      const infoEl = infoElements[idx];
+
+      // Tiêu đề sản phẩm
+      let titleEl = infoEl.querySelector('.item-title') || infoEl.querySelector('[class*="item-title"]');
+      let title = "";
+      if (titleEl) {
+        title = titleEl.textContent.trim();
+      } else {
+        const refEl = infoEl.querySelector('.eds-popover__ref, .eds-popover__content');
+        title = (refEl ? refEl.textContent : infoEl.textContent.split('\n')[0]).trim();
+      }
+      title = title.replace(/\s+/g, ' ').trim();
+
+      // Mã sản phẩm / Phụ đề
+      let subtitleEl = infoEl.querySelector('.item-subtitle') || infoEl.querySelector('[class*="item-subtitle"]');
+      let subtitle = subtitleEl ? subtitleEl.textContent.replace(/\s+/g, ' ').trim() : "";
+      if (!subtitle) {
+        const flexCol = infoEl.querySelector('.flex-col') || infoEl.parentElement?.querySelector('.item-subtitle');
+        if (flexCol) subtitle = flexCol.textContent.replace(/\s+/g, ' ').trim();
+      }
+
+      let productId = "";
+      const idMatch = (subtitle || infoEl.textContent).match(/(\d{8,})/);
+      if (idMatch) productId = idMatch[1];
+
+      let sku = "";
+      const skuMatch = (subtitle || infoEl.textContent).match(/sku[:\s]*([^\s,;]+)/i);
+      if (skuMatch) sku = skuMatch[1];
+
+      // Hàng chứa sản phẩm (tr / row container)
+      const rowContainer = infoEl.closest('tr, .eds-table__row, [class*="table__row"], [class*="table-row"], .product-item') || infoEl.parentElement;
+
+      // Ảnh sản phẩm
+      let imgUrl = "";
+      if (rowContainer) {
+        const imgEl = rowContainer.querySelector('img.product-image, .product-item__image img, .product-item img, [class*="product-item__image"] img, img');
+        if (imgEl) {
+          imgUrl = imgEl.src || imgEl.getAttribute('data-src') || imgEl.getAttribute('srcset') || "";
+          if (imgUrl.includes(' ')) imgUrl = imgUrl.split(' ')[0];
+        }
+      }
+
+      // Các ô chỉ số hiệu quả trong cùng hàng
+      const metricCells = [];
+      if (rowContainer && rowContainer.tagName === 'TR') {
+        const cells = Array.from(rowContainer.querySelectorAll('td, .eds-table__cell'));
+        cells.forEach(c => {
+          if (!c.contains(infoEl)) {
+            const clone = c.cloneNode(true);
+            clone.querySelectorAll('.resize-triggers, .eds-popper, style, script').forEach(el => el.remove());
+            const cellText = clone.textContent.replace(/\s+/g, ' ').trim();
+            metricCells.push(cellText);
+          }
+        });
+      } else if (rowContainer) {
+        const cells = Array.from(rowContainer.querySelectorAll('.eds-table__cell, [class*="table__cell"], [class*="cell"]'));
+        cells.forEach(c => {
+          if (!c.contains(infoEl)) {
+            const clone = c.cloneNode(true);
+            clone.querySelectorAll('.resize-triggers, .eds-popper, style, script').forEach(el => el.remove());
+            const cellText = clone.textContent.replace(/\s+/g, ' ').trim();
+            if (cellText && !cellText.includes(title)) {
+              metricCells.push(cellText);
+            }
+          }
+        });
+      }
+
+      const rowKey = `${productId}_${title}`;
+      if (!processedKeys.has(rowKey) && (title || productId)) {
+        processedKeys.add(rowKey);
+        rows.push({
+          index: rows.length + 1,
+          productId,
+          sku,
+          title,
+          subtitle,
+          imgUrl,
+          metricCells,
+          rawText: `${title} ${subtitle} ${productId} ${sku} ${metricCells.join(' ')}`
+        });
+      }
+    }
+
+    return {
+      ok: rows.length > 0,
+      headers,
+      rows,
+      count: rows.length,
+      url: window.location.href
+    };
+  }
+
+  function findVisibleBoostDropdownItem() {
+    const items = Array.from(document.querySelectorAll("ul.eds-dropdown-menu .eds-dropdown-item, .eds-dropdown-item"));
+    const matches = items.filter((item) => {
+      if (!isVisible(item)) return false;
+      const menu = item.closest("ul.eds-dropdown-menu, .eds-popper, .eds-popover__popper");
+      if (menu && !isVisible(menu)) return false;
+      const text = normalizeText(item.textContent);
+      return text.includes("Đẩy sản phẩm") || text.includes("Đang đẩy") || /\b\d{2}:\d{2}:\d{2}\b/.test(text);
+    });
+    return matches.length ? matches[matches.length - 1] : null;
+  }
+
+  async function waitForVisibleBoostDropdownItem(maxWaitMs = 400) {
+    const steps = Math.max(1, Math.ceil(maxWaitMs / 60));
+    for (let i = 0; i < steps; i++) {
+      const item = findVisibleBoostDropdownItem();
+      if (item) return item;
+      await sleep(60);
+    }
+    return null;
+  }
+
+  function closeOpenProductDropdowns(lastTarget = null) {
+    try {
+      if (lastTarget) {
+        const rect = lastTarget.getBoundingClientRect();
+        const opts = { bubbles: true, cancelable: true, view: window, clientX: 0, clientY: 0 };
+        lastTarget.dispatchEvent(new PointerEvent("pointerleave", opts));
+        lastTarget.dispatchEvent(new MouseEvent("mouseleave", opts));
+        lastTarget.dispatchEvent(new PointerEvent("pointerout", opts));
+        lastTarget.dispatchEvent(new MouseEvent("mouseout", opts));
+      }
+      document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 1, clientY: 1 }));
+      document.body.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 1, clientY: 1 }));
+      document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 1, clientY: 1 }));
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    } catch (_) {}
+  }
+
+  function getDisabledBoostReason(dropdownItem, cardText = "") {
+    const poppers = Array.from(document.querySelectorAll(".eds-popover__popper, .eds-tooltip__popper, [role='tooltip']"))
+      .filter((el) => isVisible(el) && !el.querySelector(".eds-dropdown-item"));
+    for (const popper of poppers) {
+      const txt = normalizeText(popper.textContent);
+      if (txt && txt !== "Đẩy sản phẩm" && txt.length > 3 && txt.length < 160) {
+        return txt;
+      }
+    }
+    const itemTitle = normalizeText(dropdownItem.getAttribute("title") || "");
+    if (itemTitle && itemTitle !== "Đẩy sản phẩm") {
+      return itemTitle;
+    }
+    if (/Hết hàng/i.test(cardText)) {
+      return "SP hết hàng";
+    }
+    return "Đã hết 5/5 lượt đẩy hoặc SP đang đẩy";
+  }
+
+  function collectCurrentPageProductCards() {
+    return findProductActionRows().map((entry) => {
+      const card = findProductCardFromActionRow(entry.row);
+      const itemId = getProductListItemId(card);
+      const name = getProductListName(card);
+      return {
+        entry,
+        card,
+        itemId,
+        name,
+        cardText: card.textContent || ""
+      };
+    });
+  }
+
+  function findProductListSearchInput() {
+    const inputs = Array.from(
+      document.querySelectorAll("input.eds-input__input, input[type='text'], input[type='search'], input:not([type])")
+    ).filter((el) => isVisible(el) && !el.closest(".eds-pagination") && !el.readOnly && !el.disabled);
+
+    const byPlaceholder = inputs.find((el) => {
+      const ph = normalizeText(el.getAttribute("placeholder") || "").toLowerCase();
+      return (
+        ph.includes("tìm") ||
+        ph.includes("tên sản phẩm") ||
+        ph.includes("mã sản phẩm") ||
+        ph.includes("id sản phẩm") ||
+        ph.includes("sku") ||
+        ph.includes("search")
+      );
+    });
+    if (byPlaceholder) return byPlaceholder;
+
+    const byContainer = inputs.find((el) => Boolean(el.closest("[class*='search'], [class*='filter']")));
+    return byContainer || inputs[0] || null;
+  }
+
+  function findProductListFilterButton(labels = []) {
+    const normalizedLabels = labels.map((l) => l.toLowerCase());
+    const buttons = Array.from(document.querySelectorAll("button")).filter(isVisible);
+    return (
+      buttons.find((btn) => {
+        const txt = normalizeText(btn.textContent).toLowerCase();
+        return normalizedLabels.includes(txt);
+      }) || null
+    );
+  }
+
+  async function ensureSearchModeIsProductId(searchInput) {
+    const ph = normalizeText(searchInput.getAttribute("placeholder") || "").toLowerCase();
+    // Nếu ô input hợp nhất đã hỗ trợ tìm Mã sản phẩm / ID trực tiếp thì không cần đổi dropdown
+    if (ph.includes("mã sản phẩm") || ph.includes("id sản phẩm")) {
+      return;
+    }
+
+    const filterRow =
+      searchInput.closest(".eds-input-group, .search-input, .product-list-filter, .filter-bar, form") ||
+      searchInput.parentElement?.parentElement?.parentElement;
+    if (!filterRow) return;
+
+    const selectEl = filterRow.querySelector(".eds-select");
+    if (!selectEl || !isVisible(selectEl)) return;
+
+    const selectText = normalizeText(selectEl.textContent).toLowerCase();
+    if (selectText.includes("mã sản phẩm") || selectText.includes("id sản phẩm") || selectText.includes("id")) {
+      return;
+    }
+
+    clickElementAtCenter(selectEl);
+    await sleep(220);
+
+    const options = Array.from(
+      document.querySelectorAll(".eds-option, .eds-select-dropdown__item, .eds-dropdown-item, li")
+    ).filter(isVisible);
+    const idOption = options.find((opt) => {
+      const t = normalizeText(opt.textContent).toLowerCase();
+      return t === "mã sản phẩm" || t === "id sản phẩm" || t.includes("mã sản phẩm") || t.includes("id sản phẩm");
+    });
+
+    if (idOption) {
+      clickElementAtCenter(idOption);
+      await sleep(180);
+    } else {
+      closeOpenProductDropdowns();
+    }
+  }
+
+  async function searchProductByIdOnListPage(cleanTargetId) {
+    const searchInput = findProductListSearchInput();
+    if (!searchInput) return null;
+
+    await ensureSearchModeIsProductId(searchInput);
+
+    // Xóa nội dung cũ nếu có nút clear
+    const inputWrap = searchInput.closest(".eds-input, .eds-input__inner") || searchInput.parentElement;
+    const clearBtn = inputWrap?.querySelector(".eds-input__clear-btn");
+    if (clearBtn && isVisible(clearBtn)) {
+      clickElementAtCenter(clearBtn);
+      await sleep(120);
+    }
+
+    fillShopeeEdsInput(searchInput, cleanTargetId);
+    await sleep(260);
+
+    // Nếu Shopee hiện gợi ý chọn tìm theo "Mã sản phẩm: <id>" hoặc "ID Sản phẩm: <id>" thì bấm vào gợi ý đó
+    const suggestions = Array.from(
+      document.querySelectorAll(
+        ".eds-popper li, .eds-popover__popper li, .eds-autocomplete-suggestion li, .eds-option, .eds-dropdown-item, [class*='suggest'] li, [class*='suggest'] div"
+      )
+    ).filter(isVisible);
+    const idSuggestion = suggestions.find((el) => {
+      const t = normalizeText(el.textContent).toLowerCase();
+      return (t.includes("mã sản phẩm") || t.includes("id sản phẩm")) && t.includes(cleanTargetId);
+    });
+    if (idSuggestion) {
+      clickElementAtCenter(idSuggestion);
+      await sleep(200);
+    }
+
+    // Nhấn Enter trên ô tìm kiếm
+    ["keydown", "keypress", "keyup"].forEach((evtType) => {
+      searchInput.dispatchEvent(
+        new KeyboardEvent(evtType, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13
+        })
+      );
+    });
+
+    // Bấm icon kính lúp (.search-btn) nếu có
+    const searchBtn = inputWrap?.querySelector(".search-btn:not(.eds-input__clear-btn)");
+    if (searchBtn && isVisible(searchBtn)) {
+      triggerSearchIconClick(searchBtn);
+      await sleep(120);
+    }
+
+    // Bấm nút "Áp dụng" hoặc "Tìm" nếu có trên bộ lọc
+    const applyBtn = findProductListFilterButton(["Áp dụng", "Tìm", "Search"]);
+    if (applyBtn) {
+      clickElementAtCenter(applyBtn);
+    }
+
+    // Chờ bảng cập nhật và tìm thẻ sản phẩm khớp cleanTargetId
+    await sleep(350);
+    for (let attempt = 0; attempt < 14; attempt++) {
+      const cards = collectCurrentPageProductCards();
+      const matched = cards.find((pc) => pc.itemId === cleanTargetId || pc.cardText.includes(cleanTargetId));
+      if (matched) {
+        await sleep(150);
+        const refreshedCards = collectCurrentPageProductCards();
+        return refreshedCards.find((pc) => pc.itemId === cleanTargetId || pc.cardText.includes(cleanTargetId)) || matched;
+      }
+
+      if (attempt >= 3) {
+        const bodyText = document.body.textContent || "";
+        if (
+          cards.length === 0 &&
+          (bodyText.includes("Không tìm thấy sản phẩm") || bodyText.includes("Không có dữ liệu"))
+        ) {
+          break;
+        }
+      }
+      await sleep(250);
+    }
+
+    return null;
+  }
+
+  async function resetProductListSearch() {
+    const resetBtn = findProductListFilterButton(["Nhập lại", "Đặt lại", "Reset"]);
+    if (resetBtn) {
+      clickElementAtCenter(resetBtn);
+      await sleep(200);
+      const applyBtn = findProductListFilterButton(["Áp dụng", "Tìm"]);
+      if (applyBtn) {
+        clickElementAtCenter(applyBtn);
+      }
+      return;
+    }
+
+    const searchInput = findProductListSearchInput();
+    if (!searchInput) return;
+    const inputWrap = searchInput.closest(".eds-input, .eds-input__inner") || searchInput.parentElement;
+    const clearBtn = inputWrap?.querySelector(".eds-input__clear-btn");
+    if (clearBtn && isVisible(clearBtn)) {
+      clickElementAtCenter(clearBtn);
+      await sleep(150);
+    } else {
+      fillShopeeEdsInput(searchInput, "");
+      await sleep(150);
+    }
+    const applyBtn = findProductListFilterButton(["Áp dụng", "Tìm"]);
+    if (applyBtn) {
+      clickElementAtCenter(applyBtn);
+    }
+  }
+
+  async function tryBoostMatchedCard(matched, cleanTargetId) {
+    const cardText = matched.card.textContent || "";
+    const timeMatch = cardText.match(/Còn\s*([0-9:]+)/i) || cardText.match(/\b(\d{2}:\d{2}:\d{2})\b/);
+    const isCurrentlyBoosting = cardText.includes("Đang đẩy") || Boolean(timeMatch);
+
+    if (isCurrentlyBoosting) {
+      const remaining = timeMatch ? timeMatch[1] : "đang đẩy";
+      return {
+        id: cleanTargetId,
+        name: matched.name,
+        status: "already_boosting",
+        msg: `Đang đẩy (${remaining})`
+      };
+    }
+
+    try {
+      closeOpenProductDropdowns();
+      await sleep(120);
+
+      matched.card.scrollIntoView({ behavior: "instant", block: "center" });
+      await sleep(220);
+
+      const morePath = Array.from(matched.entry.row.querySelectorAll("path")).find(isMoreIconPath);
+      const moreTarget = morePath
+        ? findProductMoreClickTarget(morePath, matched.entry.row)
+        : matched.entry.moreTarget;
+
+      hoverElementAtCenter(moreTarget);
+      let dropdownItem = await waitForVisibleBoostDropdownItem(360);
+
+      if (!dropdownItem) {
+        clickElementAtCenter(moreTarget);
+        dropdownItem = await waitForVisibleBoostDropdownItem(450);
+      }
+
+      let outcome;
+      if (!dropdownItem) {
+        outcome = {
+          id: cleanTargetId,
+          name: matched.name,
+          status: "error",
+          msg: "Không thấy tùy chọn Đẩy SP"
+        };
+      } else {
+        const itemText = normalizeText(dropdownItem.textContent);
+        const itemTimeMatch = itemText.match(/(\d{2}:\d{2}(?::\d{2})?)/);
+        if (itemText.includes("Đang đẩy") || itemTimeMatch) {
+          outcome = {
+            id: cleanTargetId,
+            name: matched.name,
+            status: "already_boosting",
+            msg: `Đang đẩy (${itemTimeMatch ? itemTimeMatch[1] : "4h"})`
+          };
+        } else if (dropdownItem.classList.contains("disabled") || dropdownItem.getAttribute("aria-disabled") === "true") {
+          hoverElementAtCenter(dropdownItem);
+          await sleep(200);
+          const reason = getDisabledBoostReason(dropdownItem, cardText);
+          outcome = {
+            id: cleanTargetId,
+            name: matched.name,
+            status: "limit_reached",
+            msg: `Không thể đẩy (${reason})`
+          };
+        } else {
+          clickElementAtCenter(dropdownItem);
+          await sleep(500);
+          outcome = {
+            id: cleanTargetId,
+            name: matched.name,
+            status: "boosted",
+            msg: "Đã kích hoạt đẩy thành công!"
+          };
+        }
+      }
+
+      closeOpenProductDropdowns(moreTarget);
+      await sleep(250);
+      return outcome;
+    } catch (clickErr) {
+      return {
+        id: cleanTargetId,
+        name: matched.name,
+        status: "error",
+        msg: clickErr.message
+      };
+    }
+  }
+
+  async function executeAutoBoostProductList(productIds = [], maxSlots = 5) {
+    const cleanIds = (Array.isArray(productIds) ? productIds : [])
+      .map((id) => String(id).trim())
+      .filter(Boolean);
+
+    if (!cleanIds.length) {
+      return { ok: false, error: "Danh sách Mã sản phẩm trống" };
+    }
+
+    // Chờ danh sách sản phẩm Shopee tải xong (hỗ trợ trường hợp vừa tự động mở tab mới)
+    for (let waitStep = 0; waitStep < 30; waitStep++) {
+      if (collectCurrentPageProductCards().length > 0) {
+        if (waitStep > 0) await sleep(500);
+        break;
+      }
+      await sleep(400);
+    }
+
+    // BƯỚC 1: Quét tất cả các sản phẩm trên trang hiện tại trước
+    const pageCards = collectCurrentPageProductCards();
+    const results = new Array(cleanIds.length);
+    const missingItems = [];
+    let boostedCount = 0;
+    let alreadyBoostingCount = 0;
+
+    for (let i = 0; i < cleanIds.length; i++) {
+      const cleanTargetId = cleanIds[i];
+      const matched = pageCards.find((pc) => pc.itemId === cleanTargetId || pc.cardText.includes(cleanTargetId));
+
+      if (!matched) {
+        missingItems.push({ index: i, id: cleanTargetId });
+        continue;
+      }
+
+      // Kiểm tra nhanh nếu SP trên trang hiện tại đang đẩy sẵn
+      const cardText = matched.card.textContent || "";
+      const timeMatch = cardText.match(/Còn\s*([0-9:]+)/i) || cardText.match(/\b(\d{2}:\d{2}:\d{2})\b/);
+      if (cardText.includes("Đang đẩy") || Boolean(timeMatch)) {
+        const remaining = timeMatch ? timeMatch[1] : "đang đẩy";
+        alreadyBoostingCount++;
+        results[i] = {
+          id: cleanTargetId,
+          name: matched.name,
+          status: "already_boosting",
+          msg: `Đang đẩy (${remaining})`
+        };
+        continue;
+      }
+
+      if (boostedCount + alreadyBoostingCount >= maxSlots) {
+        results[i] = {
+          id: cleanTargetId,
+          name: matched.name,
+          status: "limit_reached",
+          msg: "Đã đạt giới hạn 5/5 SP đang đẩy"
+        };
+        continue;
+      }
+
+      const outcome = await tryBoostMatchedCard(matched, cleanTargetId);
+      if (outcome.status === "boosted") boostedCount++;
+      else if (outcome.status === "already_boosting") alreadyBoostingCount++;
+      results[i] = outcome;
+    }
+
+    // BƯỚC 2: Nếu chưa đủ 5/5 SP đang đẩy và còn Mã SP chưa thấy trên trang -> Điền ô tìm kiếm từng mã để tìm & đẩy
+    let usedSearchBox = false;
+    for (const missing of missingItems) {
+      if (boostedCount + alreadyBoostingCount >= maxSlots) {
+        results[missing.index] = {
+          id: missing.id,
+          name: "",
+          status: "limit_reached",
+          msg: "Đã đạt giới hạn 5/5 SP (Bỏ qua tìm)"
+        };
+        continue;
+      }
+
+      usedSearchBox = true;
+      const searchedCard = await searchProductByIdOnListPage(missing.id);
+      if (!searchedCard) {
+        results[missing.index] = {
+          id: missing.id,
+          name: "",
+          status: "not_found",
+          msg: "Đã tìm Mã SP nhưng không có"
+        };
+        continue;
+      }
+
+      const outcome = await tryBoostMatchedCard(searchedCard, missing.id);
+      if (outcome.status === "boosted") boostedCount++;
+      else if (outcome.status === "already_boosting") alreadyBoostingCount++;
+      results[missing.index] = outcome;
+    }
+
+    // Nếu có dùng ô tìm kiếm thì xóa bộ lọc để trả lại danh sách ban đầu
+    if (usedSearchBox) {
+      await resetProductListSearch();
+    }
+
+    return {
+      ok: true,
+      results: results.filter(Boolean),
+      boostedCount,
+      alreadyBoostingCount,
+      totalRequested: cleanIds.length
+    };
+  }
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === "PING") {
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message?.type === "OPEN_ADD_PRODUCT") {
+      sendResponse(clickAddProduct());
+      return false;
+    }
+    
+    if (message?.type === "TRIGGER_SAVE_PRODUCT_SHEET") {
+      extractProductDataAndSave()
+        .then(() => sendResponse({ ok: true }))
+        .catch(err => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+    
+    if (message?.type === "READ_HANG_HOAN_LIST") {
+      try {
+        const items = [];
+        const rows = document.querySelectorAll('.return-row-item, a.return-row-item');
+        rows.forEach(row => {
+          // Mã đơn hàng
+          const orderIdNode = row.querySelector('.order-id .id-content');
+          const orderId = orderIdNode ? orderIdNode.textContent.trim() : '';
+
+          // Mã yêu cầu trả hàng
+          const returnIdNode = row.querySelector('.return-id .id-content');
+          const returnId = returnIdNode ? returnIdNode.textContent.trim() : '';
+
+          // Mã vận đơn trả hàng
+          let trackingNum = "";
+          const trackingNode = row.querySelector('.item-return-logistic .tracking-number, .tracking-number');
+          if (trackingNode) {
+            const clone = trackingNode.cloneNode(true);
+            const span = clone.querySelector('span, .hh-bh-info');
+            if (span) span.remove();
+            trackingNum = clone.textContent.trim();
+          }
+
+          // Phương án cho Người mua
+          const solutionNode = row.querySelector('.item-request-solution');
+          const solutionText = solutionNode ? solutionNode.innerText.replace(/\s+/g, ' ').trim() : "";
+
+          // Trạng thái
+          const statusNode = row.querySelector('.item-request-status');
+          const statusText = statusNode ? statusNode.innerText.replace(/\n+/g, ' - ').trim() : "";
+
+          // Lý do
+          const reasonNode = row.querySelector('.item-request-reason');
+          const reasonText = reasonNode ? reasonNode.innerText.replace(/\s+/g, ' ').trim() : "";
+
+          // Vận chuyển hàng hoàn info
+          let returnLogistics = "";
+          const returnLogisticsNode = row.querySelector('.item-return-logistic');
+          if (returnLogisticsNode) {
+            const tagNode = returnLogisticsNode.querySelector('.tag, .eds-tag');
+            const statusTag = tagNode ? tagNode.textContent.trim() : "";
+
+            const hintNode = returnLogisticsNode.querySelector('.logistics-hint-text');
+            const hintText = hintNode ? hintNode.textContent.trim() : "";
+
+            const channelNode = returnLogisticsNode.querySelector('.logistic-channel');
+            const channelText = channelNode ? channelNode.textContent.trim() : "";
+
+            returnLogistics = [statusTag, channelText, hintText].filter(Boolean).join(" - ");
+          }
+
+          // hh-bh-info
+          let hhBhInfo = "Chưa có";
+          const hhBhNode = row.querySelector('.hh-bh-info');
+          if (hhBhNode) {
+            hhBhInfo = hhBhNode.textContent.trim();
+          }
+
+          // ud-ct-info
+          let udCtInfo = "";
+          const orderIdUpper = orderId ? orderId.toUpperCase() : "";
+          if (orderId && typeof cachedUdCtMdhIds !== 'undefined') {
+            const val = cachedUdCtMdhIds.get(orderId) || (orderIdUpper && cachedUdCtMdhIds.get(orderIdUpper));
+            if (val) udCtInfo = val.replace(/<br\s*\/?>/gi, " | ");
+          }
+
+          // Extract products inside the return row
+          const products = [];
+          const productWrappers = row.querySelectorAll('.order-product-wrapper');
+          productWrappers.forEach(wrapper => {
+            const imgNode = wrapper.querySelector('.item-images, img');
+            const imgUrl = imgNode ? imgNode.src : '';
+            
+            const nameNode = wrapper.querySelector('.ct-item-product-name');
+            const pName = nameNode ? nameNode.textContent.trim() : '';
+
+            if (pName || imgUrl) {
+              products.push({ pName, imgUrl });
+            }
+          });
+
+          if (orderId || returnId || trackingNum) {
+            items.push({
+              orderId,
+              returnId,
+              trackingNum,
+              solutionText,
+              statusText,
+              returnLogistics,
+              reasonText,
+              hhBhInfo,
+              udCtInfo,
+              products
+            });
+          }
+        });
+        sendResponse({ ok: true, data: items });
+  // --- INJECT MAIN-WORLD INTERCEPTOR FOR SHOPEE API (EXACT TẢI ẢNH SHOPEE METHOD) ---
+  let cachedShopeeProductDataExt = null;
+  window.addEventListener("message", (event) => {
+    if (event.data && event.data.action === "sendShopeeProductDataExt") {
+      cachedShopeeProductDataExt = event.data.data;
+    }
+  });
+
+  try {
+    const interceptorScript = document.createElement("script");
+    interceptorScript.textContent = `
+      (function() {
+        let productData = { isProduct: false, title: '', mainImages: [], categoryImages: [], descriptionImages: [], videos: [] };
+        
+        function parsePdpData(f) {
+          try {
+            const data = f?.data || {};
+            const title = data?.item?.title || '';
+            
+            let categoryImages = [];
+            const variations = data?.product_images?.first_tier_variations;
+            if (Array.isArray(variations)) {
+              categoryImages = variations.map(k => ({
+                sku: k?.name || '',
+                name: k?.name || '',
+                image: k?.image ? 'https://down-id.img.susercontent.com/file/' + k.image : ''
+              })).filter(x => x.image);
+            }
+
+            let mainImages = [];
+            const images = data?.product_images?.images;
+            if (Array.isArray(images)) {
+              mainImages = images.map(k => 'https://down-id.img.susercontent.com/file/' + k);
+            }
+
+            let descriptionImages = [];
+            let pList = data?.rich_text_description?.paragraph_list || data?.item?.rich_text_description?.paragraph_list;
+            if (Array.isArray(pList)) {
+              descriptionImages = pList.filter(k => k?.img_id).map(k => 'https://down-id.img.susercontent.com/file/' + k.img_id);
+            }
+
+            let videos = [];
+            const vid = data?.product_images?.video;
+            if (vid && vid.video_id) {
+              videos = [{
+                src: 'https://cvf.shopee.com/file/' + vid.video_id,
+                cover: vid.thumb_url ? 'https://down-id.img.susercontent.com/file/' + vid.thumb_url : ''
+              }];
+            }
+
+            productData = {
+              isProduct: true,
+              title: title || document.title || '',
+              mainImages,
+              categoryImages,
+              descriptionImages,
+              videos
+            };
+            window.postMessage({ action: 'sendShopeeProductDataExt', data: productData }, '*');
+          } catch (e) { console.error('Pdp parse error:', e); }
+        }
+
+        const origFetch = window.fetch;
+        window.fetch = function(url, opts) {
+          const u = typeof url === 'string' ? url : url?.url;
+          return origFetch.apply(this, arguments).then(res => {
+            if (u && typeof u === 'string' && u.includes('/api/v4/pdp/get_pc')) {
+              res.clone().json().then(json => parsePdpData(json)).catch(() => {});
+            }
+            return res;
+          });
+        };
+
+        const OrigXHR = window.XMLHttpRequest;
+        window.XMLHttpRequest = function() {
+          const xhr = new OrigXHR();
+          xhr.addEventListener('load', function() {
+            if (xhr._url && typeof xhr._url === 'string' && xhr._url.includes('/api/v4/pdp/get_pc')) {
+              try { parsePdpData(JSON.parse(xhr.responseText)); } catch (e) {}
+            }
+          });
+          const origOpen = xhr.open;
+          xhr.open = function(method, url) {
+            xhr._url = url;
+            return origOpen.apply(this, arguments);
+          };
+          return xhr;
+        };
+      })();
+    `;
+    (document.head || document.documentElement).appendChild(interceptorScript);
+    interceptorScript.remove();
+  } catch (e) {}
+
+  function collectShopeeProductDataForTaiAnh() {
+    // 1. If intercepted API data exists and has images, use it (Exact Tải Ảnh Shopee output)
+    if (cachedShopeeProductDataExt && (cachedShopeeProductDataExt.mainImages.length || cachedShopeeProductDataExt.categoryImages.length)) {
+      return cachedShopeeProductDataExt;
+    }
+
+    let title = "";
+    let mainImages = [];
+    let categoryImages = [];
+    let descriptionImages = [];
+    let videos = [];
+
+    if (location.host.includes("banhang.shopee.vn")) {
+      const titleInput = document.querySelector("input[placeholder*='tên sản phẩm'], textarea[placeholder*='tên sản phẩm'], .product-edit-form-item input");
+      if (titleInput) title = titleInput.value || titleInput.textContent || "";
+
+      descriptionImages = typeof findSellerDescriptionImageUrls === "function" ? findSellerDescriptionImageUrls() : [];
+      const varRows = typeof extractSellerProductTableRows === "function" ? extractSellerProductTableRows() : [];
+      
+      const imagesRoot = typeof findSellerFieldRoot === "function" ? findSellerFieldRoot("images") : null;
+      if (imagesRoot && typeof collectSellerShopeeImageUrls === "function") {
+        mainImages = collectSellerShopeeImageUrls(imagesRoot).slice(0, 9);
+      }
+
+      varRows.forEach(row => {
+        if (row.variationImages && row.variationImages.length) {
+          row.variationImages.forEach(img => {
+            if (!categoryImages.some(c => c.image === img)) {
+              categoryImages.push({ name: row.sku || row.variationName || "Biến thể", image: img, sku: row.sku || "" });
+            }
+          });
+        }
+      });
+
+      const catUrls = new Set(categoryImages.map(c => c.image));
+      const descUrls = new Set(descriptionImages);
+      mainImages = mainImages.filter(img => !catUrls.has(img) && !descUrls.has(img));
+    }
+
+    if (location.host.includes("shopee.vn") && !location.host.includes("banhang")) {
+      const titleEl = document.querySelector(".page-product__name, [class*='product-title'], h1");
+      if (titleEl) title = titleEl.textContent.trim();
+
+      // Try parsing inline script JSON data containing product_images
+      const scripts = Array.from(document.querySelectorAll("script"));
+      for (const s of scripts) {
+        const text = s.textContent || "";
+        if (text.includes("product_images") || text.includes("first_tier_variations")) {
+          try {
+            const mImages = text.match(/"images":\s*\[(.*?)\]/);
+            if (mImages && mImages[1]) {
+              const hashes = mImages[1].match(/"([a-f0-9]{32})"/g);
+              if (hashes) {
+                hashes.forEach(h => {
+                  const hash = h.replace(/"/g, "");
+                  const url = `https://down-id.img.susercontent.com/file/${hash}`;
+                  if (!mainImages.includes(url)) mainImages.push(url);
+                });
+              }
+            }
+
+            const mVars = text.match(/"first_tier_variations":\s*\[(.*?)\]/);
+            if (mVars && mVars[1]) {
+              const varMatches = mVars[1].match(/\{"name":".*?"/g);
+              const imgHashes = mVars[1].match(/"image":"([a-f0-9]{32})"/g);
+              if (imgHashes) {
+                imgHashes.forEach((h, idx) => {
+                  const hash = h.replace(/"image":"|"$/g, "");
+                  const url = `https://down-id.img.susercontent.com/file/${hash}`;
+                  if (!categoryImages.some(c => c.image === url)) {
+                    categoryImages.push({ name: `Biến thể ${idx + 1}`, image: url });
+                  }
+                });
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      // Fallback DOM extraction
+      if (mainImages.length === 0) {
+        const galleryEls = document.querySelectorAll(".page-product__shop-images img, .product-briefing img, div[style*='background-image']");
+        galleryEls.forEach(el => {
+          let src = el.src || "";
+          if (!src && el.style && el.style.backgroundImage) {
+            const m = el.style.backgroundImage.match(/url\(['"]?(.*?)['"]?\)/);
+            if (m) src = m[1];
+          }
+          if (src && src.includes("susercontent.com") && !src.includes("avatar") && !src.includes("icon")) {
+            src = src.replace(/_(tn|ss)\.(jpg|png|jpeg)/i, ".$2");
+            if (!mainImages.includes(src)) mainImages.push(src);
+          }
+        });
+      }
+
+      if (descriptionImages.length === 0) {
+        const descContainer = document.querySelector(".product-detail-page, .page-product__detail, [class*='description'], .product-detail");
+        if (descContainer) {
+          const descImgs = descContainer.querySelectorAll("img[src*='susercontent.com'], img[data-src*='susercontent.com']");
+          descImgs.forEach(img => {
+            let src = img.src || img.getAttribute("data-src") || "";
+            if (src && !src.includes("avatar") && !src.includes("icon")) {
+              src = src.replace(/_(tn|ss)\.(jpg|png|jpeg)/i, ".$2");
+              if (!descriptionImages.includes(src)) descriptionImages.push(src);
+            }
+          });
+        }
+      }
+    }
+
+    const isProduct = (mainImages.length > 0 || descriptionImages.length > 0 || categoryImages.length > 0 || title !== "");
+
+    return {
+      isProduct,
+      title: title || "Sản phẩm Shopee",
+      mainImages,
+      categoryImages,
+      descriptionImages,
+      videos
+    };
+  }
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+      return true;
+    }
+
+    if (message?.type === "READ_SP_SHOPEE_LIST") {
+      try {
+        const products = [];
+        for (const { row } of findProductActionRows()) {
+            const card = findProductCardFromActionRow(row);
+            const name = getProductListName(card).trim();
+            if (!name) continue;
+            
+            // Tìm container chứa các SKU (do mình render ra hoặc SKU gốc của web nếu có)
+            const skuContainer = row.nextElementSibling?.querySelector(".shopee-qlsp-custom-scrollbar") || card.querySelector(".shopee-qlsp-custom-scrollbar");
+            let skus = [];
+            if (skuContainer) {
+                skus = Array.from(skuContainer.querySelectorAll("span")).map(span => span.textContent.trim());
+            } else {
+                // Nếu không có SKU tiêm vào, thử lấy native SKU nếu có
+                const nativeSku = card.querySelector(".product-sku")?.textContent.trim();
+                if (nativeSku) skus.push(nativeSku);
+            }
+            
+            const itemId = getProductListItemId(card);
+            if (skus.length > 0) {
+                skus.forEach(s => {
+                    products.push({ name, sku: s, itemId });
+                });
+            } else {
+                products.push({ name, sku: "", itemId });
+            }
+        }
+        sendResponse({ ok: true, data: products });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+      return false;
+    }
+
+    if (message?.type === "FILL_SKU_TO_SHOPEE") {
+      (async () => {
+        const skuVal = message.sku || "";
+        const inputs = Array.from(document.querySelectorAll("input.eds-input__input, input")).filter(isVisible);
+        // Find batch SKU input first, or any SKU input
+        const skuInput = inputs.find(i => {
+          const p = normalizeText(i.placeholder || "");
+          return p.includes("sku") || p.includes("mã phân loại");
+        });
+        if (skuInput) {
+          fillInputLikeUser(skuInput, skuVal);
+          showTopNotification(`Đã điền SKU phân loại: ${skuVal}`);
+          sendResponse({ ok: true, message: "Đã điền SKU phân loại." });
+        } else {
+          showTopNotification("Không tìm thấy ô nhập SKU phân loại", true);
+          sendResponse({ ok: false, message: "Không tìm thấy ô nhập SKU phân loại" });
+        }
+      })();
+      return true;
+    }
+
+    if (message?.type === "FILL_PRICE_TO_SHOPEE") {
+      (async () => {
+        const priceVal = message.price || "";
+        const inputs = Array.from(document.querySelectorAll("input.eds-input__input, input")).filter(isVisible);
+        // Find batch Price input first, or any Price input
+        const priceInput = inputs.find(i => {
+          const p = normalizeText(i.placeholder || "");
+          return (p.includes("giá") || p.includes("price") || p.includes("₫")) && !p.includes("thấp") && !p.includes("bán");
+        }) || inputs.find(i => normalizeText(i.placeholder || "").includes("giá"));
+
+        if (priceInput) {
+          fillInputLikeUser(priceInput, priceVal);
+          showTopNotification(`Đã điền giá: ${priceVal}`);
+          sendResponse({ ok: true, message: "Đã điền giá." });
+        } else {
+          showTopNotification("Không tìm thấy ô nhập Giá", true);
+          sendResponse({ ok: false, message: "Không tìm thấy ô nhập Giá" });
+        }
+      })();
+      return true;
+    }
+
+    if (message?.type === "UPLOAD_PRODUCT_IMAGES") {
+      sendResponse(uploadProductImages(message.files || []));
+      return false;
+    }
+
+    if (message?.type === "UPLOAD_DESCRIPTION_IMAGES") {
+      uploadDescriptionImages(message.files || []).then(sendResponse);
+      return true;
+    }
+
+        if (message?.type === "AUTO_FILL_IF_EMPTY") {
+      autoFillIfEmpty(message.product || {}, message.brand || "").then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "GET_PRODUCT_NAME") {
+      let name = "";
+      const nameInput = findProductNameInput();
+      if (nameInput && nameInput.value) {
+        name = nameInput.value.trim();
+      } else {
+        const titleEl = document.querySelector(".page-product__name, [class*='product-title'], h1");
+        if (titleEl) name = titleEl.textContent.trim();
+      }
+      sendResponse({ name: name || document.title.split('|')[0].trim() });
+      return false;
+    }
+
+    if (message?.type === "FILL_PRODUCT_TEXT") {
+      sendResponse(fillProductText(message.product || {}));
+      return false;
+    }
+
+    if (message?.type === "FILL_PRODUCT_BRAND") {
+      fillProductBrand(message.brand).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "FILL_PRODUCT_ATTRIBUTE") {
+      fillProductAttribute(message.labelName, message.value).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "ADD_NEW_PRODUCT_ATTRIBUTE") {
+      addNewProductAttribute(message.labelName, message.value).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "APPLY_PRE_ORDER") {
+      handleApplyPreOrder(message.targetDays || 15)
+        .then(ok => sendResponse({ ok, message: ok ? "Đã bật hàng đặt trước thành công." : "Không thể bật hàng đặt trước." }))
+        .catch(err => sendResponse({ ok: false, message: err.message }));
+      return true;
+    }
+
+    if (message?.type === "DISABLE_PRE_ORDER") {
+      handleApplyDisablePreOrder()
+        .then(ok => sendResponse({ ok, message: ok ? "Đã tắt hàng đặt trước thành công." : "Không thể tắt hàng đặt trước." }))
+        .catch(err => sendResponse({ ok: false, message: err.message }));
+      return true;
+    }
+
+    if (message?.action === "requestProductData" || message?.type === "requestProductData") {
+      try {
+        const productData = collectShopeeProductDataForTaiAnh();
+        sendResponse({ data: productData });
+      } catch (err) {
+        sendResponse({ data: null });
+      }
+      return true;
+    }
+
+    if (message?.type === "EXTRACT_SELLER_SP_FULL") {
+      extractSellerSpFullData()
+        .then(sendResponse)
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+    if (message?.type === "EXTRACT_PRODUCT_PERFORMANCE") {
+      extractProductPerformanceData()
+        .then(sendResponse)
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+    if (message?.type === "EXECUTE_AUTO_BOOST_LIST") {
+      executeAutoBoostProductList(message.productIds, message.maxSlots)
+        .then(sendResponse)
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+    if (message?.type === "EXTRACT_SELLER_ORDER_DETAIL_FULL") {
+      extractSellerOrderDetailFullData()
+        .then(sendResponse)
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+    if (message?.type === "EXTRACT_SHOPEE_PRODUCT") {
+      extractShopeeProduct().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "ADD_VARIATION_GROUP") {
+      addVariationGroup(message.name).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "FILL_WEIGHT_SHIPPING") {
+      (async () => {
+        const weightVal = message.weight || 2000;
+        
+        // 1. Fill weight
+        const weightContainer = Array.from(document.querySelectorAll(".edit-row, .eds-form-item, div")).find((element) => {
+          const label = element.querySelector(".edit-label, label, .eds-form-item__label");
+          return label && normalizeText(label.textContent).includes("C\u00e2n n\u1eb7ng");
+        });
+        const input = weightContainer ? (weightContainer.querySelector("input.eds-input__input") || findRealTextInput(weightContainer)) : null;
+        
+        if (input) {
+          fillInputLikeUser(input, String(weightVal));
+        }
+
+        // 2. Enable all shipping channels
+        await sleep(500);
+        const switches = Array.from(document.querySelectorAll('.eds-switch, .shopee-switch, [role="switch"]')).filter(isVisible);
+        for (const sw of switches) {
+          let isExcluded = false;
+          let current = sw;
+          for (let d = 0; d < 5 && current; d++) {
+            const txt = current.textContent || "";
+            if (txt.includes("từng phân loại") || txt.includes("Thiết lập cân nặng") || txt.includes("kích thước cho từng")) {
+              isExcluded = true;
+              break;
+            }
+            current = current.parentElement;
+          }
+          if (isExcluded) {
+            continue;
+          }
+
+          const isChecked = sw.classList.contains('eds-switch--checked') || 
+                            sw.classList.contains('shopee-switch--checked') || 
+                            sw.getAttribute('aria-checked') === 'true' ||
+                            sw.querySelector('input[type="checkbox"]')?.checked;
+          if (!isChecked) {
+            emitRealClick(sw);
+            await sleep(200);
+          }
+        }
+
+        sendResponse({ ok: true, message: "Đã điền cân nặng 2000g và bật hết các kênh vận chuyển." });
+      })();
+      return true;
+    }
+
+    if (message?.type === "FILL_STOCK") {
+      fillStockAndApply(message.value).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "EXTRACT_BUYER_PRODUCT") {
+      extractBuyerProduct().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "DOWNLOAD_IMAGE_AS_BASE64") {
+      fetch(message.url)
+        .then(res => res.blob())
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onloadend = () => sendResponse({ ok: true, dataUrl: reader.result, type: blob.type });
+          reader.readAsDataURL(blob);
+        })
+        .catch(err => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+
+    if (message?.type === "FETCH_PRODUCT_BY_API") {
+      // Dùng cơ chế API thật (credentials + intercepted headers) để lấy dữ liệu sản phẩm
+      (async () => {
+        const { itemId, shopId } = message;
+        if (!itemId || !shopId) {
+          sendResponse({ ok: false, message: "Thiếu itemId hoặc shopId" });
+          return;
+        }
+        try {
+          const result = await fetchShopeeProductByApi(itemId, shopId);
+          if (!result.ok || !result.data) {
+            sendResponse({ ok: false, message: "Không lấy được dữ liệu từ API Shopee", source: result.source });
+            return;
+          }
+          const data = result.data;
+          const images = extractImagesFromApiData(data);
+          const attrs = extractAttributesFromApiData(data);
+          const brand = data.brand || attrs["Thương hiệu"] || "No Brand";
+          sendResponse({
+            ok: true,
+            source: result.source,
+            name: data.name || "",
+            description: data.description || "",
+            brand: brand,
+            images: images,
+            details: attrs,
+            price: data.price ? (data.price / 100000) : 0,
+            stock: data.stock || 0,
+            weight: data.weight || 2000
+          });
+        } catch (err) {
+          sendResponse({ ok: false, message: err.message });
+        }
+      })();
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_APPLY_FILTERS") {
+      applyMassShipFilters(message.carrier, message.preOrder).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_GET_FILTER_OPTIONS") {
+      getMassShipFilterOptions().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_SELECT_CHECKBOX") {
+      selectPrintFlowCheckbox().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_GET_WAREHOUSES") {
+      getPrintWarehouses().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_SELECT_WAREHOUSE") {
+      selectPrintWarehouse(message.name).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_GET_ADDRESSES") {
+      getPickupAddresses().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_SELECT_ADDRESS") {
+      selectPickupAddress(message.id).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_SELECT_ADDRESS_LOCATION") {
+      selectPickupAddressLocation(message.location).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_ARRANGE_PICKUP") {
+      arrangePickupConfirm(message.onlyHanoi).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_GENERATE_DOC") {
+      generateNormalPdfDoc().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "PRINT_FLOW_EXPORT_WAITING_ORDERS") {
+      exportWaitingOrders().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "TAB301_APPLY_ALL_FILTERS") {
+      applyTab301AllFilters().then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "TAB301_GET_ORDERS") {
+      try {
+        const orders = getTab301OrdersFromPage();
+        sendResponse({ ok: true, orders, message: `Đã đọc được ${orders.length} đơn hàng.` });
+      } catch (err) {
+        sendResponse({ ok: false, orders: [], message: err.message });
+      }
+      return true;
+    }
+
+    if (message?.type === "TAB301_SELECT_ORDERS_AND_GENERATE_DOC") {
+      selectTab301OrdersAndGenerateDoc(message.orderIds, message.autoDownloadPdf).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "AUTOIN_READ_PROCESSED_ORDERS") {
+      readAutoInProcessedOrders().then(orders => {
+        sendResponse({ ok: true, orders, message: `Đã đọc được ${orders.length} đơn hàng chờ lấy hàng.` });
+      }).catch(err => {
+        sendResponse({ ok: false, orders: [], message: err.message });
+      });
+      return true;
+    }
+
+    if (message?.type === "AUTOIN_EXPORT_XLS") {
+      exportOrdersViaXlsButton(message.orderIds)
+        .then(sendResponse)
+        .catch(err => sendResponse({ ok: false, message: err.message }));
+      return true;
+    }
+
+    if (message?.type === "AUTOIN_SELECT_ORDERS_ON_PAGE") {
+      selectOrdersOnOrderListPage(message.orderIds, message.triggerExport).then(sendResponse);
+      return true;
+    }
+
+    if (message?.type === "GET_VISIBLE_INCOME_ROWS") {
+      sendResponse({
+        ok: true,
+        rows: isIncomePaidPage() ? getVisibleIncomeRows() : []
+      });
+      return false;
+    }
+
+    // =========================================================================
+    // XỬ LÝ ĐỌC DANH SÁCH ĐƠN TỪ TRANG TRẢ HÀNG / HOÀN TIỀN (/portal/sale/returnrefundcancel)
+    // =========================================================================
+    if (message?.action === "SHOPEE_READ_RETURN_CANCEL_ORDERS" || message?.type === "SHOPEE_READ_RETURN_CANCEL_ORDERS") {
+      if (window.self !== window.top) return false;
+      try {
+        const orderList = [];
+        const seenOrderIds = new Set();
+
+        const cleanCode = (s) => {
+          if (!s) return "";
+          return String(s).replace(/copy|sao\s*ch[eéê]p/gi, " ").trim();
+        };
+
+        const orderIdElements = Array.from(document.querySelectorAll('.order-id, .id.order-id, [class*="order-id"], [class*="orderId"], [class*="order-sn"]'));
+        
+        for (const el of orderIdElements) {
+          const data = typeof extractReturnRowData === "function" ? extractReturnRowData(el) : {};
+          let orderId = cleanCode(data.orderId || (typeof extractShopeeCode === "function" ? extractShopeeCode(el.textContent) : ""));
+          
+          if (!orderId || orderId.length < 8 || /^(order|return|cancel|refund|mass|shipping)$/i.test(orderId)) {
+            continue;
+          }
+
+          const k = orderId.toLowerCase();
+          if (seenOrderIds.has(k)) continue;
+          seenOrderIds.add(k);
+
+          orderList.push({
+            orderId: orderId,
+            returnId: cleanCode(data.returnId || ""),
+            tracking: cleanCode(data.tracking || ""),
+            reason: cleanCode(data.reason || "")
+          });
+        }
+
+        if (orderList.length === 0) {
+          const cards = Array.from(document.querySelectorAll('.order-card, .order-item, [class*="return-item"], [class*="returnRow"], tr'));
+          for (const card of cards) {
+            const txt = card.innerText || card.textContent || "";
+            const snMatch = txt.match(/(?:Mã đơn hàng|Order SN|Mã đơn|Mã ĐH)?[:\s]*([0-9]{6}[A-Z0-9]{6,20})/i)
+              || txt.match(/\b(2[0-9]{5}[A-Z0-9]{6,20})\b/i);
+            if (snMatch) {
+              const orderId = cleanCode(snMatch[1]);
+              const k = orderId.toLowerCase();
+              if (orderId && orderId.length >= 8 && !seenOrderIds.has(k)) {
+                seenOrderIds.add(k);
+                const trkMatch = txt.match(/(?:Mã vận đơn|Tracking No|MVD|Tracking|Vận đơn)[:\s]+([A-Z0-9_-]{6,30})/i);
+                const retMatch = txt.match(/(?:Mã yêu cầu|Mã YC|Return ID)[:\s]+([A-Z0-9_-]{6,30})/i);
+                orderList.push({
+                  orderId: orderId,
+                  returnId: retMatch ? cleanCode(retMatch[1]) : "",
+                  tracking: trkMatch ? cleanCode(trkMatch[1]) : "",
+                  reason: ""
+                });
+              }
+            }
+          }
+        }
+
+        sendResponse({ ok: true, orders: orderList });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+      return true;
+    }
+
+    // =========================================================================
+    // XỬ LÝ ĐỌC DANH SÁCH ĐƠN TỪ TRANG SHOPEE SELLER LIST (/portal/sale/order)
+    // =========================================================================
+    // =========================================================================
+    // HỖ TRỢ XÁC ĐỊNH TRẠNG THÁI LOAD TRANG & TRÍCH XUẤT SKU SHOPEE
+    // =========================================================================
+
+    function getCurrentPageOrderSns() {
+      const sns = [];
+      const seen = new Set();
+      const cards = document.querySelectorAll(
+        'a.order-card, .order-card, [data-testid="order-item"], .order-item, [class*="order-item"], [class*="orderItem"], [class*="orderCard"], [class*="order-box"], tr.shopee-table__row, .shopee-table__row'
+      );
+      cards.forEach(card => {
+        let sn = "";
+        const snEl = card.querySelector('.order-sn, [class*="order-sn"], [class*="ordersn"], [data-testid="order-sn"], .order-id, [class*="order-id"], [class*="orderId"]');
+        if (snEl) {
+          const m = snEl.textContent.match(/([A-Z0-9]{10,30})/i);
+          if (m) sn = cleanOrderCode(m[1]);
+        }
+        if (!sn) {
+          const copyBtn = card.querySelector('[data-shopee-qlsp-copy-all-order-id]');
+          if (copyBtn) sn = cleanOrderCode(copyBtn.getAttribute('data-shopee-qlsp-copy-all-order-id') || "");
+        }
+        if (!sn) {
+          const href = card.getAttribute('href') || card.querySelector('a[href*="/portal/sale/order/"]')?.getAttribute('href') || '';
+          const mHref = href.match(/\/portal\/sale\/order\/(?:detail\/)?([a-zA-Z0-9_-]+)/);
+          if (mHref && !/^(order|list|mass|shipping|shipment|return|setting|settings|batch|all|unprocessed|toship|completed|cancelled|inprocess)$/i.test(mHref[1])) {
+            sn = cleanOrderCode(mHref[1]);
+          }
+        }
+        if (sn && !seen.has(sn)) {
+          seen.add(sn);
+          sns.push(sn);
+        }
+      });
+
+      if (sns.length === 0) {
+        const returnIdEls = document.querySelectorAll('.order-id, .id.order-id, [class*="order-id"], [class*="orderId"], [class*="order-sn"]');
+        returnIdEls.forEach(el => {
+          const m = (el.textContent || '').match(/([0-9]{6}[a-zA-Z0-9]{6,20})/i) || (el.textContent || '').match(/([a-zA-Z0-9]{10,25})/i);
+          if (m) {
+            const sn = cleanOrderCode(m[1]);
+            if (sn && sn.length >= 8 && !seen.has(sn)) {
+              seen.add(sn);
+              sns.push(sn);
+            }
+          }
+        });
+      }
+
+      return sns;
+    }
+
+    function getCurrentActivePageNum() {
+      const activeEl = document.querySelector(
+        '.eds-pager__item--active, .eds-pagination__item--active, .eds-pager__item.active, .eds-pagination__item.active, [class*="pager__item--active"], [class*="pagination__item--active"], li.active, [aria-current="page"]'
+      );
+      if (activeEl) {
+        const num = parseInt(activeEl.textContent.trim(), 10);
+        if (!isNaN(num)) return num;
+      }
+      return null;
+    }
+
+    async function waitForPageToFinishLoading(oldOrderSns = [], oldPageNum = null, maxWaitMs = 15000) {
+      const startTime = Date.now();
+      const oldSnsSet = new Set(oldOrderSns);
+
+      // Cho phép click đăng ký lên giao diện và xuất hiện spinner
+      await new Promise(r => setTimeout(r, 300));
+
+      while (Date.now() - startTime < maxWaitMs) {
+        // 1. Nếu còn spinner/overlay loading của Shopee thì tiếp tục đợi
+        if (isShopeePageLoading()) {
+          await new Promise(r => setTimeout(r, 150));
+          continue;
+        }
+
+        const currentActivePage = getCurrentActivePageNum();
+        const currentOrderSns = getCurrentPageOrderSns();
+
+        // 2. Kiểm tra số trang hoặc danh sách mã đơn có thay đổi không
+        const pageNumChanged = oldPageNum !== null && currentActivePage !== null && currentActivePage !== oldPageNum;
+        const ordersChanged = currentOrderSns.length > 0 && (
+          oldSnsSet.size === 0 ||
+          currentOrderSns.some(sn => !oldSnsSet.has(sn))
+        );
+
+        if ((pageNumChanged || ordersChanged) && !isShopeePageLoading()) {
+          // Chờ thêm 600ms để React/Vue render xong danh sách con (tên SP, biến thể, giá)
+          await new Promise(r => setTimeout(r, 600));
+          if (isShopeePageLoading()) {
+            await new Promise(r => setTimeout(r, 300));
+            continue;
+          }
+
+          // Tiêm ngay badge SKU lên các đơn của trang mới
+          try {
+            await renderProductSkus();
+          } catch (e) {
+            console.warn("Lỗi renderProductSkus khi next trang:", e);
+          }
+          await new Promise(r => setTimeout(r, 300));
+
+          return {
+            ok: true,
+            loaded: true,
+            pageNum: currentActivePage,
+            orderCount: currentOrderSns.length
+          };
+        }
+
+        await new Promise(r => setTimeout(r, 150));
+      }
+
+      // Hết timeout dự phòng
+      try {
+        await renderProductSkus();
+      } catch (_) {}
+      await new Promise(r => setTimeout(r, 300));
+
+      return {
+        ok: true,
+        loaded: false,
+        timeout: true,
+        pageNum: getCurrentActivePageNum(),
+        orderCount: getCurrentPageOrderSns().length
+      };
+    }
+
+    function extractBadgeSku(displayEl) {
+      if (!displayEl) return "";
+      const btn = displayEl.querySelector('button, [class*="copy"]');
+      if (btn) {
+        const t = btn.getAttribute('title') || btn.getAttribute('aria-label') || "";
+        const m = t.match(/(?:Copy\s*SKU\s*|SKU\s*[:\s]*)(.+)$/i);
+        if (m && m[1].trim()) return m[1].trim();
+      }
+      const clone = displayEl.cloneNode(true);
+      clone.querySelectorAll('button, svg, i, [class*="copy"]').forEach(n => n.remove());
+      let text = (clone.textContent || "").trim();
+      text = text.replace(/^SKU\s*[:\s]*/i, '').trim();
+      return text;
+    }
+
+    function lookupSkuFromSpShopee(itemName, itemVar, spData, preferredGian) {
+      if (!itemName || !spData || !spData.length) return "";
+
+      const normItemName = normalizeText(itemName).toLowerCase();
+      const normItemVar = normalizeText(itemVar || "").toLowerCase();
+      const cleanItemVar = normItemVar.replace(/^(?:variation|ph\u00e2n lo\u1ea1i h\u00e0ng|ph\u00e2n lo\u1ea1i)\s*[:\s]*/i, "").trim();
+      const prefGianNorm = (preferredGian || "").trim().toLowerCase();
+
+      // 2 vòng tìm kiếm: Vòng 1 ưu tiên đúng mã gian, Vòng 2 tìm toàn sheet nếu không thấy
+      const passes = prefGianNorm ? [prefGianNorm, null] : [null];
+
+      for (const filterGian of passes) {
+        for (const row of spData) {
+          const sheetName = (row[1] || "").trim();
+          const sheetVar = (row[3] || "").trim();
+          const sheetSku = getShopeeSkuFromRow(row);
+          const isFallbackProductSku = isShopeeSkuFallbackFromProductSku(row);
+          const sheetGian = (row[11] || "").trim().toLowerCase();
+
+          if (!sheetName || !sheetSku) continue;
+          if (filterGian && sheetGian && sheetGian !== filterGian) continue;
+
+          const isNameMatch = isShopeeProductNameMatch(sheetName, itemName);
+          if (!isNameMatch) continue;
+
+          const normSheetVar = normalizeText(sheetVar).toLowerCase();
+          let isVarMatch = false;
+          if (isFallbackProductSku || (!normSheetVar && !cleanItemVar)) {
+            isVarMatch = true;
+          } else if (normSheetVar && cleanItemVar) {
+            if (normSheetVar === cleanItemVar || cleanItemVar.includes(normSheetVar) || normSheetVar.includes(cleanItemVar)) {
+              isVarMatch = true;
+            }
+          }
+
+          if (isNameMatch && isVarMatch) {
+            return sheetSku;
+          }
+        }
+      }
+
+      return "";
+    }
+
+    // =========================================================================
+    // XỬ LÝ ĐỌC DANH SÁCH ĐƠN TỪ TRANG SHOPEE SELLER LIST (/portal/sale/order)
+    // =========================================================================
+    if (message?.action === "SHOPEE_READ_ORDER_LIST_PAGE" || message?.type === "SHOPEE_READ_ORDER_LIST_PAGE") {
+      if (window.self !== window.top) return false;
+      (async () => {
+        try {
+          // 1. Chờ nếu trang đang trong trạng thái loading
+          let loadWait = 0;
+          while (isShopeePageLoading() && loadWait < 10000) {
+            await new Promise(r => setTimeout(r, 200));
+            loadWait += 200;
+          }
+
+          // 2. Chạy renderProductSkus() để đảm bảo tất cả badge SKU được tiêm
+          try {
+            await renderProductSkus();
+          } catch (e) {
+            console.warn("Lỗi renderProductSkus trước khi đọc trang:", e);
+          }
+          await new Promise(r => setTimeout(r, 250));
+
+          // 3. Tải trước dữ liệu SP_SHOPEE để đối chiếu fallback nếu item thiếu badge
+          let spShopeeData = [];
+          try {
+            spShopeeData = await loadSpShopeeData() || [];
+          } catch (e) {
+            console.warn("Lỗi loadSpShopeeData:", e);
+          }
+
+          let preferredGian = "";
+          try {
+            const stRes = await new Promise(r => chrome.storage.local.get(["maGian", "dhHoanTextValue"], r));
+            preferredGian = (stRes?.maGian || stRes?.dhHoanTextValue || "").trim();
+          } catch (_) {}
+
+          const orders = [];
+          const seenKeys = new Set();
+
+          const containers = Array.from(document.querySelectorAll(
+            'a.order-card, .order-card, [data-testid="order-item"], .order-item, [class*="order-item"], [class*="orderItem"], [class*="orderCard"], [class*="order-box"], tr.shopee-table__row, .shopee-table__row, a[href*="/portal/sale/order/"], a[href*="/portal/sale/order"]'
+          ));
+
+          const uniqueContainers = [];
+          const processedEls = new Set();
+
+          for (const el of containers) {
+            const outerCard = el.closest('.order-card, [class*="order-card"], [class*="orderCard"], [class*="order-box"], tr.shopee-table__row, .shopee-table__row') || el.closest('[data-testid="order-item"], .order-item, tr') || el;
+            if (!processedEls.has(outerCard)) {
+              processedEls.add(outerCard);
+              uniqueContainers.push(outerCard);
+            }
+          }
+
+          uniqueContainers.forEach(container => {
+            try {
+              const containerText = container.innerText || container.textContent || "";
+              if (!containerText && !container.getAttribute('href')) return;
+
+              // 1. Mã đơn hàng (Order SN)
+              let orderSn = "";
+
+              const orderSnEl = container.querySelector('.order-sn, [class*="order-sn"], [class*="ordersn"], [data-testid="order-sn"], .order-id, [class*="order-id"], [class*="orderId"]');
+              if (orderSnEl) {
+                const clone = orderSnEl.cloneNode(true);
+                clone.querySelectorAll('button, [role="button"], i, svg, .eds-icon, [class*="copy"], [class*="btn"], [class*="action"], [data-shopee-qlsp-copy-all-order-id], .ud-ct-badge, .shopee-qlsp-bulk-checkbox').forEach(b => b.remove());
+                const rawSnText = clone.textContent.trim();
+                const snMatch = rawSnText.match(/(?:Mã đơn hàng|Order SN|Mã đơn|Mã ĐH)?[:\s]*([A-Z0-9]{10,30})/i);
+                if (snMatch) {
+                  orderSn = cleanOrderCode(snMatch[1]);
+                }
+              }
+
+              if (!orderSn) {
+                const copyAllBtn = container.querySelector('[data-shopee-qlsp-copy-all-order-id]');
+                if (copyAllBtn) {
+                  orderSn = cleanOrderCode(copyAllBtn.getAttribute('data-shopee-qlsp-copy-all-order-id') || "");
+                }
+              }
+
+              if (!orderSn) {
+                const attrId = container.getAttribute('data-order-id') || container.getAttribute('data-ordersn') || container.getAttribute('data-sn');
+                if (attrId) orderSn = cleanOrderCode(attrId);
+              }
+
+              let href = (container.getAttribute('href') || container.querySelector('a[href*="/portal/sale/order"]')?.getAttribute('href') || '').trim();
+              let urlId = "";
+              if (href) {
+                const mHref = href.match(/\/portal\/sale\/order\/(?:detail\/)?([a-zA-Z0-9_-]+)/);
+                if (mHref && !/^(order|list|mass|shipping|shipment|return|setting|settings|batch|all|unprocessed|toship|completed|cancelled|inprocess)$/i.test(mHref[1])) {
+                  urlId = cleanOrderCode(mHref[1]);
+                }
+              }
+
+              if (!orderSn) {
+                const clone = container.cloneNode(true);
+                clone.querySelectorAll('button, [role="button"], i, svg, .eds-icon, [class*="copy"], [class*="btn"], [class*="action"], [data-shopee-qlsp-copy-all-order-id], .ud-ct-badge, .shopee-qlsp-bulk-checkbox').forEach(b => b.remove());
+                const cText = clone.textContent || "";
+                const snMatch = cText.match(/(?:Mã đơn hàng|Order SN|Mã đơn|Mã ĐH)[:\s]+([A-Z0-9]{10,30})/i)
+                  || cText.match(/\b(2[0-9]{5}[A-Z0-9]{6,20})\b/)
+                  || cText.match(/\b([0-9]{14,20})\b/);
+                if (snMatch) {
+                  orderSn = cleanOrderCode(snMatch[1]);
+                } else if (urlId) {
+                  orderSn = urlId;
+                }
+              }
+
+              if (!orderSn && !urlId) return;
+              const finalMdh = cleanOrderCode(orderSn || urlId);
+
+              const dedupKey = finalMdh.toLowerCase();
+              if (seenKeys.has(dedupKey)) return;
+              seenKeys.add(dedupKey);
+
+              // 2. Mã vận đơn (Tracking No)
+              let trackingNo = "";
+              const trackingEl = container.querySelector('.tracking-number, [class*="tracking-number"], .tracking-number-list, [class*="trackingNo"], [class*="tracking-no"], [class*="shipping-carrier"], [data-testid="tracking-number"]');
+              if (trackingEl) {
+                const clone = trackingEl.cloneNode(true);
+                clone.querySelectorAll('button, [role="button"], i, svg, .eds-icon, [class*="copy"], [class*="btn"], [class*="action"]').forEach(b => b.remove());
+                const tText = clone.textContent.trim();
+                const tMatch = tText.match(/([A-Z0-9_-]{6,30})/i);
+                if (tMatch) trackingNo = cleanOrderCode(tMatch[1]);
+              }
+
+              if (!trackingNo) {
+                const clone = container.cloneNode(true);
+                clone.querySelectorAll('button, [role="button"], i, svg, .eds-icon, [class*="copy"], [class*="btn"], [class*="action"]').forEach(b => b.remove());
+                const cText = clone.textContent || "";
+                const mvdMatch = cText.match(/(?:Mã vận đơn|Tracking No|MVD|Tracking|Vận đơn)[:\s]+([A-Z0-9_-]{6,30})/i)
+                  || cText.match(/\b(VN[0-9A-Z]{8,22}|SPX[0-9A-Z]{8,22}|GHN[0-9A-Z]{6,22}|JNT[0-9A-Z]{6,22}|LEX[0-9A-Z]{6,22}|VNP[0-9A-Z]{6,22}|BEST[0-9A-Z]{6,22}|NJV[0-9A-Z]{6,22})\b/i);
+                if (mvdMatch) {
+                  trackingNo = cleanOrderCode(mvdMatch[1]);
+                }
+              }
+
+              // 3. Link đơn hàng
+              let fullLink = "";
+              if (href) {
+                fullLink = href.startsWith('http') ? href : `https://banhang.shopee.vn${href.startsWith('/') ? '' : '/'}${href}`;
+              } else {
+                fullLink = `https://banhang.shopee.vn/portal/sale/order/${finalMdh}`;
+              }
+
+              // 4. Ngày đặt hàng
+              let orderDate = "";
+              const dateMatch = containerText.match(/(\d{4}[-/]\d{1,2}[-/]\d{1,2})/);
+              if (dateMatch) {
+                orderDate = dateMatch[1].replace(/\//g, "-");
+              } else {
+                const dateVnMatch = containerText.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+                if (dateVnMatch) {
+                  orderDate = `${dateVnMatch[3]}-${dateVnMatch[2].padStart(2, '0')}-${dateVnMatch[1].padStart(2, '0')}`;
+                }
+              }
+
+              // 5. Tên khách hàng (Buyer Username)
+              let buyerUsername = "";
+              const buyerEl = container.querySelector('.buyer-username, [data-testid="buyer-username"], [class*="buyer-username"], [class*="buyerName"], [class*="buyer-name"]');
+              if (buyerEl) {
+                buyerUsername = buyerEl.textContent.trim();
+              }
+
+              // 6. Trạng thái đơn hàng
+              let orderStatus = "";
+              const statusEl = container.querySelector('[data-testid="order-status"], [class*="order-status"], [class*="orderStatus"], [class*="order-card-status"], [class*="status-badge"]');
+              if (statusEl) {
+                orderStatus = statusEl.textContent.trim();
+              } else {
+                const statusMatch = containerText.match(/(Chờ xác nhận|Chờ lấy hàng|Đang giao|Đã giao|Đã hủy|Trả hàng\/Hoàn tiền|Hoàn tiền|Đang xử lý)/i);
+                if (statusMatch) orderStatus = statusMatch[1];
+              }
+
+              // 7. Tổng tiền đơn hàng
+              let totalAmount = 0;
+              const totalEl = container.querySelector('[class*="order-total"], [class*="total-price"], [class*="income-value"], [class*="payment-amount"], [class*="order-price"]');
+              if (totalEl) {
+                const numStr = totalEl.textContent.replace(/[^0-9]/g, '');
+                if (numStr) totalAmount = parseInt(numStr, 10);
+              }
+              if (!totalAmount) {
+                const totalMatch = containerText.match(/(?:Tổng tiền|Tổng thanh toán|Số tiền|Thành tiền|Tổng giá trị)[:\s]*₫?\s*([\d\.,]+)/i);
+                if (totalMatch) {
+                  totalAmount = parseInt(totalMatch[1].replace(/[^0-9]/g, ''), 10) || 0;
+                }
+              }
+
+              // 8. SKU / Tên SP / Số lượng (tách biệt per-item, chống nhiễm chéo SKU)
+              const parsedItems = [];
+
+              // Tìm tất cả các phần tử tên sản phẩm trong card
+              const allNameNodes = Array.from(container.querySelectorAll('div.item-name, .order-item-name, [class*="product-name"], [class*="item-name"], [class*="goods-name"]'))
+                .filter(el => !el.classList?.contains('shopee-qlsp-sku-display') && !el.closest('.shopee-qlsp-sku-display'));
+
+              const uniqueNameEls = allNameNodes.filter(ne => !allNameNodes.some(other => other !== ne && other.contains(ne)));
+
+              if (uniqueNameEls.length > 0) {
+                uniqueNameEls.forEach(nameEl => {
+                  const itemEl = nameEl.closest('div.item, .order-item, [class*="order-item"], [class*="orderProduct"], [class*="item-card"], [class*="product-item"], tr, li') || nameEl.parentElement || nameEl;
+
+                  // Tên SP
+                  const cloneN = nameEl.cloneNode(true);
+                  cloneN.querySelectorAll('button, .shopee-qlsp-sku-display, [class*="copy"]').forEach(n => n.remove());
+                  const itemNameClean = cloneN.textContent.replace(/\s+/g, ' ').trim();
+
+                  // Phân loại hàng (Variation)
+                  const varEl = (itemEl !== nameEl ? itemEl.querySelector('div.item-description, .order-item-variation, [class*="item-description"], [class*="variation"]') : null)
+                    || nameEl.parentElement?.querySelector('div.item-description, .order-item-variation, [class*="item-description"], [class*="variation"]');
+                  let varText = "";
+                  if (varEl) {
+                    const cloneV = varEl.cloneNode(true);
+                    cloneV.querySelectorAll('button, .shopee-qlsp-sku-display, [class*="copy"]').forEach(n => n.remove());
+                    varText = cloneV.textContent.replace(/\s+/g, ' ').trim();
+                    varText = varText.replace(/^(?:Phân loại hàng|Phân loại|Variation)\s*[:\s]*/i, '').trim();
+                  }
+
+                  // Số lượng
+                  let itemQty = 1;
+                  const qtyEl = (itemEl !== nameEl ? itemEl.querySelector('div.item-amount, .order-item-amount, [class*="item-quantity"], [class*="item-count"], [class*="goods-num"]') : null)
+                    || nameEl.parentElement?.querySelector('div.item-amount, .order-item-amount, [class*="item-quantity"], [class*="item-count"], [class*="goods-num"]');
+                  if (qtyEl) {
+                    const qMatch = qtyEl.textContent.match(/x\s*(\d+)/i) || qtyEl.textContent.match(/(\d+)/);
+                    if (qMatch) itemQty = parseInt(qMatch[1], 10) || 1;
+                  }
+
+                  // SKU: Tìm riêng cho item này
+                  let itemSku = "";
+
+                  // A. Tìm badge .shopee-qlsp-sku-display nằm ngay sau varEl hoặc nameEl
+                  let sib = (varEl || nameEl)?.nextElementSibling;
+                  while (sib) {
+                    if (sib.classList?.contains("shopee-qlsp-sku-display") || sib.matches?.('.shopee-qlsp-sku-display, [class*="sku-display"]')) {
+                      itemSku = extractBadgeSku(sib);
+                      break;
+                    }
+                    if (sib.classList?.contains("item-name") || sib.querySelector?.("div.item-name, .order-item-name")) break;
+                    sib = sib.nextElementSibling;
+                  }
+
+                  // B. Tìm bên trong itemEl (chỉ khi itemEl chỉ chứa duy nhất 1 sản phẩm này)
+                  if (!itemSku && itemEl && itemEl !== container) {
+                    const namesInItem = itemEl.querySelectorAll('div.item-name, .order-item-name, [class*="product-name"]');
+                    if (namesInItem.length <= 1) {
+                      const disp = itemEl.querySelector('.shopee-qlsp-sku-display, [class*="sku-display"]');
+                      if (disp) {
+                        itemSku = extractBadgeSku(disp);
+                      }
+                    }
+                  }
+
+                  // C. Tìm SKU tự nhiên do Shopee hiển thị
+                  if (!itemSku && itemEl && itemEl !== container) {
+                    const nativeSkuEl = itemEl.querySelector?.('[class*="item-sku"], [class*="sku-name"], [class*="model-name"], .sku');
+                    if (nativeSkuEl) {
+                      const cloneS = nativeSkuEl.cloneNode(true);
+                      cloneS.querySelectorAll('button, svg, i, [class*="copy"]').forEach(n => n.remove());
+                      let t = cloneS.textContent.trim();
+                      const m = t.match(/(?:SKU|Mã SKU|SKU phân loại)\s*[:\s]*([A-Z0-9_.-]+)/i);
+                      if (m) {
+                        itemSku = m[1].trim();
+                      } else if (/^[A-Z0-9_.-]{4,35}$/i.test(t)) {
+                        itemSku = t;
+                      }
+                    }
+                    if (!itemSku) {
+                      const rawText = itemEl.innerText || itemEl.textContent || "";
+                      const m = rawText.match(/(?:SKU phân loại|Mã SKU|SKU)\s*[:\s]+([A-Z0-9_.-]+)/i);
+                      if (m) itemSku = m[1].trim();
+                    }
+                  }
+
+                  // D. Fallback đối chiếu trực tiếp với dữ liệu SP_SHOPEE
+                  if (!itemSku && spShopeeData && spShopeeData.length > 0) {
+                    itemSku = lookupSkuFromSpShopee(itemNameClean, varText, spShopeeData, preferredGian);
+                  }
+
+                  if (itemSku || itemNameClean) {
+                    parsedItems.push({
+                      sku: itemSku || "",
+                      tenSp: itemNameClean,
+                      tenPhanLoai: varText,
+                      slg: itemQty
+                    });
+                  }
+                });
+              }
+
+              // Fallback nếu không có uniqueNameEls
+              if (parsedItems.length === 0) {
+                let itemName = "";
+                const nameEl = container.querySelector('div.item-name, .order-item-name, [class*="product-name"], [class*="item-name"], [class*="goods-name"]');
+                if (nameEl) {
+                  const cloneN = nameEl.cloneNode(true);
+                  cloneN.querySelectorAll('button, .shopee-qlsp-sku-display, [class*="copy"]').forEach(n => n.remove());
+                  itemName = cloneN.textContent.trim();
+                }
+
+                let varText = "";
+                const varEl = container.querySelector('div.item-description, .order-item-variation, [class*="item-description"], [class*="variation"]');
+                if (varEl) {
+                  const cloneV = varEl.cloneNode(true);
+                  cloneV.querySelectorAll('button, .shopee-qlsp-sku-display, [class*="copy"]').forEach(n => n.remove());
+                  varText = cloneV.textContent.replace(/\s+/g, ' ').trim();
+                  varText = varText.replace(/^(?:Phân loại hàng|Phân loại|Variation)\s*[:\s]*/i, '').trim();
+                }
+
+                let itemQty = 1;
+                const qtyEl = container.querySelector('div.item-amount, .order-item-amount, [class*="item-quantity"], [class*="item-count"], [class*="goods-num"]');
+                if (qtyEl) {
+                  const qMatch = qtyEl.textContent.match(/x\s*(\d+)/i) || qtyEl.textContent.match(/(\d+)/);
+                  if (qMatch) itemQty = parseInt(qMatch[1], 10) || 1;
+                }
+
+                let itemSku = "";
+                const disp = container.querySelector('.shopee-qlsp-sku-display, [class*="sku-display"]');
+                if (disp) itemSku = extractBadgeSku(disp);
+                if (!itemSku && spShopeeData && spShopeeData.length > 0) {
+                  itemSku = lookupSkuFromSpShopee(itemName, varText, spShopeeData, preferredGian);
+                }
+
+                parsedItems.push({ sku: itemSku || "", tenSp: itemName, tenPhanLoai: varText, slg: itemQty });
+              }
+
+              // Chống trùng lặp dòng sản phẩm trong cùng 1 card đơn hàng
+              const seenItemSigs = new Set();
+              const finalItems = parsedItems.filter(it => {
+                const sig = `${it.sku}__${it.tenSp}__${it.tenPhanLoai}__${it.slg}`;
+                if (seenItemSigs.has(sig)) return false;
+                seenItemSigs.add(sig);
+                return true;
+              });
+
+              finalItems.forEach(it => {
+                orders.push({
+                  mdh: finalMdh,
+                  mvd: trackingNo,
+                  linkDon: fullLink,
+                  ngay: orderDate,
+                  tenKhach: buyerUsername,
+                  trangThai: orderStatus,
+                  tongTien: totalAmount,
+                  sku: it.sku,
+                  tenSp: it.tenSp,
+                  tenPhanLoai: it.tenPhanLoai,
+                  slg: it.slg,
+                  donGia: 0,
+                  thanhTien: 0
+                });
+              });
+            } catch (e) {
+              console.warn("Lỗi trích xuất 1 card đơn hàng:", e);
+            }
+          });
+
+          if (orders.length === 0) {
+            // Quét fallback toàn bộ các link đơn hàng trên trang
+            const allLinks = Array.from(document.querySelectorAll('a[href*="/portal/sale/order/"]'));
+            for (const a of allLinks) {
+              const href = a.getAttribute('href') || '';
+              const m = href.match(/\/portal\/sale\/order\/(?:detail\/)?([a-zA-Z0-9_-]+)/);
+              if (m && !/^(order|list|mass|shipping|shipment|return|setting|settings|batch|all|unprocessed|toship|completed|cancelled|inprocess)$/i.test(m[1])) {
+                const sn = m[1].trim();
+                if (sn && !seenKeys.has(sn.toLowerCase())) {
+                  seenKeys.add(sn.toLowerCase());
+                  orders.push({
+                    mdh: sn,
+                    mvd: "",
+                    linkDon: href.startsWith('http') ? href : `https://banhang.shopee.vn${href.startsWith('/') ? '' : '/'}${href}`,
+                    ngay: "",
+                    tenKhach: "",
+                    trangThai: "",
+                    tongTien: 0,
+                    sku: "",
+                    tenSp: "",
+                    tenPhanLoai: "",
+                    slg: 1,
+                    donGia: 0,
+                    thanhTien: 0
+                  });
+                }
+              }
+            }
+
+            if (orders.length === 0) {
+              const allText = document.body.innerText;
+              const matches = allText.matchAll(/(?:Mã đơn hàng|Order SN|Mã đơn)[:\s]+([A-Z0-9]{10,25})/gi);
+              for (const m of matches) {
+                const sn = m[1].trim();
+                if (sn && !seenKeys.has(sn.toLowerCase())) {
+                  seenKeys.add(sn.toLowerCase());
+                  orders.push({
+                    mdh: sn,
+                    mvd: "",
+                    linkDon: `https://banhang.shopee.vn/portal/sale/order/${sn}`,
+                    ngay: "",
+                    tenKhach: "",
+                    trangThai: "",
+                    tongTien: 0,
+                    sku: "",
+                    tenSp: "",
+                    tenPhanLoai: "",
+                    slg: 1,
+                    donGia: 0,
+                    thanhTien: 0
+                  });
+                }
+              }
+            }
+          }
+
+          sendResponse({ ok: true, count: orders.length, orders });
+        } catch (err) {
+          sendResponse({ ok: false, error: err.message, orders: [] });
+        }
+      })();
+      return true;
+    }
+
+    if (message?.action === "SHOPEE_CLICK_NEXT_PAGE" || message?.type === "SHOPEE_CLICK_NEXT_PAGE") {
+      if (window.self !== window.top) return false;
+      (async () => {
+        try {
+          const nextBtn = document.querySelector(
+            '.eds-pager__next:not(.disabled):not([disabled]), ' +
+            'button.shopee-pager__next:not([disabled]), ' +
+            '[class*="pager"] button[aria-label*="next"]:not([disabled]), ' +
+            '[class*="pagination"] button:last-child:not([disabled]), ' +
+            'button.shopee-icon-button--right:not([disabled]), ' +
+            '.eds-pagination__next:not(.disabled):not([disabled]), ' +
+            '[class*="pagination"] li:last-child:not(.disabled) button, ' +
+            '.shopee-icon-next'
+          );
+
+          if (!nextBtn || nextBtn.disabled || nextBtn.classList.contains("disabled") || nextBtn.getAttribute("aria-disabled")?.includes("true")) {
+            sendResponse({ ok: true, hasNext: false, message: "Đã ở trang cuối cùng." });
+            return;
+          }
+
+          const oldOrderSns = getCurrentPageOrderSns();
+          const oldPageNum = getCurrentActivePageNum();
+
+          const targetToClick = nextBtn.closest('button, li') || nextBtn;
+          ['mousedown', 'mouseup', 'click'].forEach(ev => {
+            try {
+              targetToClick.dispatchEvent(new MouseEvent(ev, { bubbles: true, cancelable: true }));
+            } catch (e) {}
+          });
+          if (targetToClick.click) targetToClick.click();
+          if (nextBtn !== targetToClick && nextBtn.click) nextBtn.click();
+
+          // Chờ trang mới tải xong hoàn toàn + tiêm badge SKU ổn định
+          const waitResult = await waitForPageToFinishLoading(oldOrderSns, oldPageNum, 15000);
+
+          sendResponse({
+            ok: true,
+            hasNext: true,
+            pageNum: waitResult.pageNum,
+            orderCount: waitResult.orderCount,
+            timeout: waitResult.timeout || false
+          });
+        } catch (err) {
+          sendResponse({ ok: false, error: err.message, hasNext: false });
+        }
+      })();
+      return true;
+    }
+
+    if (message?.action === "upload_video_from_url" || message?.type === "upload_video_from_url") {
+      (async () => {
+        try {
+          const fileInput = Array.from(document.querySelectorAll('input[type="file"]'))
+            .find(input => input.accept && (input.accept.includes('video') || input.accept.includes('mp4')))
+            || document.querySelector('input[type="file"]');
+          if (!fileInput) {
+            sendResponse({ success: false, message: "Không tìm thấy khung tải video trên trang" });
+            return;
+          }
+          const response = await fetch(message.url);
+          if (!response.ok) throw new Error("Không thể tải video từ link gốc");
+          const blob = await response.blob();
+          const filename = `shopee-video-${Date.now()}.mp4`;
+          const file = new File([blob], filename, { type: "video/mp4" });
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          fileInput.files = dataTransfer.files;
+          fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+          sendResponse({ success: true });
+        } catch (e) {
+          sendResponse({ success: false, message: e.message });
+        }
+      })();
+      return true;
+    }
+
+    if (message?.action === "EXECUTE_AUTO_CHAT_BUYER" || message?.type === "EXECUTE_AUTO_CHAT_BUYER") {
+      runAutoChatBuyerSafe(message.buyerName, message.message)
+        .then(result => sendResponse(result))
+        .catch(err => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+
+    if (message?.action === "GET_SHOPEE_CHAT_DATA" || message?.type === "GET_SHOPEE_CHAT_DATA") {
+      try {
+        const detailChat = document.querySelector('._3h5To4QZew, [data-cy="webchat-conversation-detail-chat"], ._2WZcuAW5Qo') || document.body;
+        let productInfo = { name: "", image: "", price: "", originalPrice: "", stock: "", sold: "", discount: "", source: "" };
+        const pinnedProduct = detailChat.querySelector('.Wy5_SjKidw, ._ki3uOms2o, [class*="pinned-product"]');
+        if (pinnedProduct) {
+          const nameEl = pinnedProduct.querySelector('.rFHc1_XxbI, .CFm21BsdMu, [class*="title"]');
+          if (nameEl) productInfo.name = nameEl.textContent.trim();
+          const imgEl = pinnedProduct.querySelector('img.EOkaqhE5Vk, img');
+          if (imgEl) productInfo.image = imgEl.src || "";
+          const priceEl = pinnedProduct.querySelector('.izywe_mFbr, [class*="price"]');
+          if (priceEl) productInfo.price = priceEl.textContent.trim();
+          const origPriceEl = pinnedProduct.querySelector('.NY59qgWgc3, [class*="origin-price"]');
+          if (origPriceEl) productInfo.originalPrice = origPriceEl.textContent.trim();
+          productInfo.source = "Thẻ sản phẩm ghim đầu chat";
+        }
+        const messages = [];
+        let lastCustomerMessage = "";
+        const rawMsgElements = Array.from(detailChat.querySelectorAll('#messagesContainer .DEwekPN7v2, #messagesContainer .RtO616EACf, [data-cy^="webchat-message"]'));
+        const msgElements = rawMsgElements.filter(el => !rawMsgElements.some(other => other !== el && other.contains(el)));
+        msgElements.forEach(msgEl => {
+          const isReceive = msgEl.querySelector('[data-cy="webchat-message-receive"]') || msgEl.classList.contains('x_vjYCA89K') || msgEl.getAttribute('data-cy') === 'webchat-message-receive';
+          const isSend = msgEl.querySelector('[data-cy="webchat-message-send"]') || msgEl.classList.contains('IjkExKWyR_') || msgEl.getAttribute('data-cy') === 'webchat-message-send';
+          const sender = isReceive ? "customer" : (isSend ? "shop" : "system");
+          const isAutoReply = !!msgEl.querySelector('.ufjjFujTb2, [class*="autoreply"]');
+          const timeEl = msgEl.querySelector('.sSIhmxFOh6, .pE0ax8leZo, .ps7_zN15iV');
+          const timeStr = timeEl ? timeEl.textContent.trim() : "";
+          let text = "";
+          const textContainer = msgEl.querySelector('.w2C67vtnXi, .FkK7VxR2qX, .i6xFxbUJy0');
+          if (textContainer) {
+            const clone = textContainer.cloneNode(true);
+            clone.querySelectorAll('.sSIhmxFOh6, .pE0ax8leZo, .ujrf_CG21r, .ChatbotUI-icon, svg').forEach(x => x.remove());
+            text = clone.textContent.trim();
+          }
+          if (text) {
+            messages.push({ sender, text, time: timeStr, isAutoReply });
+            if (sender === "customer") lastCustomerMessage = text;
+          }
+        });
+        sendResponse({ ok: true, url: window.location.href, product: productInfo, messages: messages.slice(-15), lastCustomerQuestion: lastCustomerMessage });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+      return true;
+    }
+
+    if (message?.action === "FILL_SHOPEE_CHAT_INPUT" || message?.type === "FILL_SHOPEE_CHAT_INPUT") {
+      try {
+        const textarea = document.querySelector('textarea.E2MWg3w8y6, [data-cy="webchat-conversation-detail-input"] textarea, #inputField textarea, textarea[placeholder*="tin nhắn"], textarea');
+        if (textarea) {
+          textarea.focus();
+          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+          if (nativeSetter) nativeSetter.call(textarea, message.text || "");
+          else textarea.value = message.text || "";
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          textarea.dispatchEvent(new Event('change', { bubbles: true }));
+          if (message.autoSend) {
+            setTimeout(() => {
+              const sendBtn = document.querySelector('.XsR3zIeGOc, .kgP1yPCqxR, [data-cy="webchat-conversation-detail-input"] [class*="send"]');
+              if (sendBtn) sendBtn.click();
+              else textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+            }, 300);
+          }
+          sendResponse({ ok: true });
+        } else {
+          sendResponse({ ok: false, error: "Không tìm thấy ô nhập tin nhắn" });
+        }
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+      return true;
+    }
+
+    if (message?.action === "SHOPEE_FETCH_ORDER_PAGE" || message?.type === "SHOPEE_FETCH_ORDER_PAGE") {
+      (async () => {
+        try {
+          const { page = 1, pageSize = 40, status = "all", startTime, endTime } = message;
+          const endpoints = [];
+          if (startTime && endTime) {
+            endpoints.push(`/api/v3/order/search_order_list?page_number=${page}&page_size=${pageSize}&order_status=${encodeURIComponent(status)}&source_type=all&start_time=${startTime}&end_time=${endTime}`);
+          }
+          endpoints.push(`/api/v3/order/get_order_list?page_number=${page}&page_size=${pageSize}&total=0&source=&order_status=${encodeURIComponent(status)}&source_type=all`);
+          for (const url of endpoints) {
+            try {
+              const res = await fetch(url, { method: "GET", credentials: "include", headers: { "Accept": "application/json, text/plain, */*" } });
+              if (!res.ok) continue;
+              const json = await res.json();
+              if (json && (json.data || json.orders || json.order_list || json.code === 0)) {
+                sendResponse({ ok: true, data: json });
+                return;
+              }
+            } catch (e) {}
+          }
+          sendResponse({ ok: false, error: "Không thể tải dữ liệu API Shopee" });
+        } catch (err) {
+          sendResponse({ ok: false, error: err.message });
+        }
+      })();
+      return true;
+    }
+
+    if (message?.action === "SHOPEE_FETCH_ORDER_DETAIL_API" || message?.type === "SHOPEE_FETCH_ORDER_DETAIL_API") {
+      (async () => {
+        try {
+          const { orderId } = message;
+          if (!orderId) throw new Error("Thiếu orderId");
+          const res = await fetch(`/api/v3/order/get_order_detail?order_id=${encodeURIComponent(orderId)}`, {
+            method: "GET",
+            credentials: "include",
+            headers: { "Accept": "application/json, text/plain, */*" }
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const json = await res.json();
+          sendResponse({ ok: true, data: json });
+        } catch (err) {
+          sendResponse({ ok: false, error: err.message });
+        }
+      })();
+      return true;
+    }
+
+    if (message?.type) {
+      return false;
+    }
+
+    return false;
+  });
+
+  // ============================================================
+  // SHOPEE WEBCHAT REALTIME MUTATION OBSERVER
+  // ============================================================
+  if (window.location.href.includes("webchat") || window.location.href.includes("banhang.shopee.vn")) {
+    let chatMutationTimer = null;
+    function notifyChatUpdate() {
+      if (chatMutationTimer) clearTimeout(chatMutationTimer);
+      chatMutationTimer = setTimeout(() => {
+        try {
+          chrome.runtime.sendMessage({ action: "SHOPEE_CHAT_REALTIME_UPDATE" }).catch(() => {});
+        } catch (e) {}
+      }, 300);
+    }
+
+    try {
+      const chatDomObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          if (m.addedNodes.length > 0 || m.type === 'childList') {
+            notifyChatUpdate();
+            break;
+          }
+        }
+      });
+
+      function attachChatObserver() {
+        const target = document.querySelector('._3h5To4QZew, #messagesContainer, [data-cy="webchat-conversation-detail-chat"], ._2WZcuAW5Qo, [data-cy="webchat-conversation-list"]') || document.body;
+        if (target) {
+          chatDomObserver.observe(target, { childList: true, subtree: true });
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', attachChatObserver);
+      } else {
+        attachChatObserver();
+      }
+    } catch (e) {}
+  }
+
+  // =========================================================================
+  // SHOPEE WEBCHAT AUTO-CHAT AUTOMATION (TỰ ĐỘNG CHAT KHÁCH HÀNG)
+  // =========================================================================
+  function showWebchatToast(msg, type = "info") {
+    let toast = document.getElementById("shopee-ext-webchat-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "shopee-ext-webchat-toast";
+      toast.style.cssText = "position: fixed; top: 20px; right: 20px; z-index: 9999999; padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; box-shadow: 0 4px 16px rgba(0,0,0,0.3); color: white; display: flex; align-items: center; gap: 8px; transition: all 0.3s ease; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;";
+      document.body.appendChild(toast);
+    }
+    if (type === "success") {
+      toast.style.backgroundColor = "#10b981";
+    } else if (type === "error") {
+      toast.style.backgroundColor = "#ef4444";
+    } else {
+      toast.style.backgroundColor = "#0284c7";
+    }
+    toast.textContent = msg;
+    toast.style.display = "flex";
+    toast.style.opacity = "1";
+    if (window._shopeeToastTimer) clearTimeout(window._shopeeToastTimer);
+    window._shopeeToastTimer = setTimeout(() => {
+      if (toast) {
+        toast.style.opacity = "0";
+        setTimeout(() => { if (toast) toast.style.display = "none"; }, 300);
+      }
+    }, 4500);
+  }
+
+  function findWebchatSearchContainer() {
+    // 1. Đúng selector chính xác mà user cung cấp: div.shopee-react-input._2VVLYzIyBp hoặc div._2VVLYzIyBp
+    const specific = document.querySelector('div.shopee-react-input._2VVLYzIyBp, div._2VVLYzIyBp');
+    if (specific) return specific;
+
+    // 2. Tìm container shopee-react-input chứa input placeholder Tìm kiếm
+    const allContainers = Array.from(document.querySelectorAll('div.shopee-react-input, div.shopee-react-input__inner, div[class*="search"]'));
+    for (const c of allContainers) {
+      if (c.querySelector('input.shopee-react-input__input, input[placeholder*="Tìm kiếm"], input[placeholder*="search" i]')) {
+        return c;
+      }
+    }
+
+    // 3. Nằm trong sidebar hoặc conversation list
+    const sidebar = document.querySelector('[data-cy="webchat-conversation-list"], [class*="conversation-list"], [class*="sidebar"], [class*="chat-list"]');
+    if (sidebar) {
+      const c = sidebar.querySelector('div.shopee-react-input._2VVLYzIyBp, div._2VVLYzIyBp, div.shopee-react-input');
+      if (c) return c;
+    }
+
+    return null;
+  }
+
+  function findWebchatSearchInput(container) {
+    if (container) {
+      const inp = container.querySelector('input.shopee-react-input__input, input[placeholder*="Tìm kiếm"], input');
+      if (inp) return inp;
+    }
+
+    const specific = document.querySelector('div.shopee-react-input._2VVLYzIyBp input, div._2VVLYzIyBp input');
+    if (specific) return specific;
+
+    const allInputs = Array.from(document.querySelectorAll('input'));
+    let target = allInputs.find(i => {
+      const ph = (i.getAttribute('placeholder') || '').toLowerCase();
+      return (ph.includes('tìm kiếm') || ph.includes('search') || ph.includes('tìm')) && i.offsetParent !== null;
+    }) || allInputs.find(i => {
+      const ph = (i.getAttribute('placeholder') || '').toLowerCase();
+      return ph.includes('tìm kiếm') || ph.includes('search') || ph.includes('tìm');
+    });
+    if (target) return target;
+
+    target = allInputs.find(i => {
+      const cls = i.className || '';
+      return cls.includes('shopee-react-input__input') && !i.closest('[data-cy="webchat-conversation-detail"]');
+    });
+    if (target) return target;
+
+    return document.querySelector('input.shopee-react-input__input, input[placeholder*="Tìm kiếm"]');
+  }
+
+  async function waitForSearchContainer(timeoutMs = 25000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const c = findWebchatSearchContainer();
+      if (c) return c;
+      const inp = findWebchatSearchInput(null);
+      if (inp) return inp.closest('div.shopee-react-input') || inp.parentElement || inp;
+      await new Promise(r => setTimeout(r, 400));
+    }
+    return null;
+  }
+
+  // Điền giá trị vào React Input/Textarea bằng 3 cơ chế đồng thời:
+  // 1. Script injection vào MAIN world (truy cập trực tiếp prototype, React fiber, _valueTracker)
+  // 2. window.postMessage tới shopee-fetch-interceptor.js (chạy trong MAIN world)
+  // 3. Setter trực tiếp trong ISOLATED world
+  async function applyValueToReactElement(input, value, isSearch = true) {
+    if (!input) return false;
+    const text = String(value || "");
+
+    // 1. Nếu là ô tìm kiếm: Click vào container div.shopee-react-input._2VVLYzIyBp trước theo đúng quy trình!
+    if (isSearch) {
+      const container = input.closest('div.shopee-react-input._2VVLYzIyBp, div._2VVLYzIyBp, div.shopee-react-input') ||
+                        findWebchatSearchContainer();
+      if (container) {
+        try {
+          container.scrollIntoView({ block: "center", inline: "nearest" });
+          container.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+          container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+          container.click();
+          const inner = container.querySelector('.shopee-react-input__inner');
+          if (inner) inner.click();
+        } catch (_) {}
+
+        // Nếu có nút xóa cũ (clear button), bấm để xóa sạch trước khi dán
+        const clearBtn = container.querySelector('.shopee-react-input__clear-btn, [class*="clear-btn"]') ||
+                         document.querySelector('.shopee-react-input__clear-btn');
+        if (clearBtn) {
+          try { clearBtn.click(); } catch (_) {}
+        }
+      }
+    }
+
+    input.scrollIntoView({ block: "center", inline: "nearest" });
+    input.focus();
+    input.click();
+    input.select();
+
+    // 2. Chạy snippet trực tiếp trong MAIN world qua thẻ <script>
+    try {
+      const script = document.createElement("script");
+      script.textContent = `(function() {
+        const text = ${JSON.stringify(text)};
+        const isSearch = ${isSearch ? "true" : "false"};
+        let el = null;
+        if (isSearch) {
+          const container = document.querySelector('div.shopee-react-input._2VVLYzIyBp, div._2VVLYzIyBp, div.shopee-react-input');
+          if (container) {
+            try {
+              container.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+              container.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+              container.click();
+              const inner = container.querySelector('.shopee-react-input__inner');
+              if (inner) inner.click();
+              const clearBtn = container.querySelector('.shopee-react-input__clear-btn, [class*="clear-btn"]');
+              if (clearBtn) clearBtn.click();
+            } catch(e) {}
+            el = container.querySelector('input.shopee-react-input__input, input');
+          }
+          if (!el) {
+            const allInputs = Array.from(document.querySelectorAll('input'));
+            el = allInputs.find(i => {
+              const ph = (i.getAttribute('placeholder') || '').toLowerCase();
+              return (ph.includes('tìm kiếm') || ph.includes('search') || ph.includes('tìm')) && i.offsetParent !== null;
+            }) || allInputs.find(i => {
+              const ph = (i.getAttribute('placeholder') || '').toLowerCase();
+              return ph.includes('tìm kiếm') || ph.includes('search') || ph.includes('tìm');
+            }) || allInputs.find(i => {
+              const cls = i.className || '';
+              return cls.includes('shopee-react-input__input') && !i.closest('[data-cy="webchat-conversation-detail"]');
+            }) || document.querySelector('input.shopee-react-input__input, input[placeholder*="Tìm kiếm"]');
+          }
+        } else {
+          el = document.querySelector('textarea.E2MWg3w8y6, [data-cy="webchat-conversation-detail-input"] textarea, #inputField textarea, textarea[placeholder*="tin nhắn"], textarea');
+        }
+        if (!el) return;
+
+        el.focus();
+        el.click();
+        el.select();
+
+        if (el._valueTracker) {
+          try { el._valueTracker.setValue(''); } catch(e) {}
+        }
+
+        // Thử lệnh chèn paste giả lập DataTransfer
+        try {
+          const dt = new DataTransfer();
+          dt.setData('text/plain', text);
+          dt.setData('Text', text);
+          el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        } catch(e) {}
+
+        try {
+          document.execCommand('insertText', false, text);
+        } catch(e) {}
+
+        const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set ||
+                       Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')?.set;
+        if (setter) {
+          setter.call(el, text);
+        } else {
+          el.value = text;
+        }
+
+        try {
+          el.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, data: text, inputType: 'insertFromPaste' }));
+        } catch(e) {}
+        el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+        const propKey = Object.keys(el).find(k => k.startsWith('__reactProps$') || k.startsWith('__reactEventHandlers$'));
+        if (propKey && el[propKey]) {
+          const p = el[propKey];
+          const ev = { target: el, currentTarget: el, bubbles: true, defaultPrevented: false, persist: () => {} };
+          if (typeof p.onInput === 'function') try { p.onInput(ev); } catch(e) {}
+          if (typeof p.onChange === 'function') try { p.onChange(ev); } catch(e) {}
+        }
+      })();`;
+      (document.head || document.documentElement).appendChild(script);
+      script.remove();
+    } catch (_) {}
+
+    // 3. Gửi message tới shopee-fetch-interceptor.js (chạy trong MAIN world)
+    try {
+      window.postMessage({
+        channel: 'SPLQ_SET_REACT_VALUE',
+        text: text,
+        isSearch: !!isSearch
+      }, '*');
+    } catch (_) {}
+
+    // 4. Đồng thời gán và dispatch trực tiếp trên element từ ISOLATED world
+    try {
+      input.select();
+      document.execCommand('insertText', false, text);
+    } catch (_) {}
+
+    if (input.value !== text) {
+      try {
+        const proto = Object.getPrototypeOf(input);
+        const descriptor = Object.getOwnPropertyDescriptor(proto, "value") ||
+                           Object.getOwnPropertyDescriptor(input.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype, "value");
+        if (descriptor?.set) {
+          descriptor.set.call(input, text);
+        } else {
+          input.value = text;
+        }
+      } catch (_) {
+        input.value = text;
+      }
+    }
+
+    try {
+      input.dispatchEvent(new InputEvent('beforeinput', { bubbles: true, cancelable: true, data: text, inputType: 'insertFromPaste' }));
+    } catch (_) {}
+    input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+
+    return true;
+  }
+
+  function setReactInputValue(input, value) {
+    return applyValueToReactElement(input, value, true);
+  }
+
+  async function waitForSearchInput(timeoutMs = 25000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const inp = findWebchatSearchInput();
+      if (inp) return inp;
+      await new Promise(r => setTimeout(r, 400));
+    }
+    return null;
+  }
+
+  async function waitForAndClickConversation(buyerName, timeoutMs = 15000) {
+    const start = Date.now();
+    const cleanTarget = (buyerName || "").toLowerCase().trim();
+
+    while (Date.now() - start < timeoutMs) {
+      let targetItem = null;
+      let targetInner = null;
+
+      // 1. Tìm span.nFvbiqyLrq hoặc div[title] có chứa tên khách theo cấu trúc HTML Shopee Webchat
+      const allSpans = Array.from(document.querySelectorAll('span.nFvbiqyLrq, [class*="nFvbiqyLrq"], div.RWr1KSlda2, [class*="RWr1KSlda2"], div.uvqQaOy6aO, [title]'));
+      for (const sp of allSpans) {
+        const txt = (sp.textContent || sp.getAttribute('title') || '').toLowerCase().trim();
+        if (cleanTarget && (txt === cleanTarget || txt.includes(cleanTarget))) {
+          targetInner = sp;
+          targetItem = sp.closest('div.SW7LUhQFDH, div.AV0w9P7wpj, div.flWmPLsUAa, [class*="SW7LUhQFDH"], [class*="AV0w9P7wpj"], [class*="flWmPLsUAa"], div[role="listitem"]') || sp;
+          break;
+        }
+      }
+
+      // 2. Nếu chưa thấy, tìm trong các item class SW7LUhQFDH / AV0w9P7wpj / flWmPLsUAa
+      if (!targetItem) {
+        const itemCandidates = Array.from(document.querySelectorAll(
+          'div.SW7LUhQFDH, div.AV0w9P7wpj, div.flWmPLsUAa, [class*="SW7LUhQFDH"], [class*="AV0w9P7wpj"], [class*="flWmPLsUAa"], [data-cy*="conversation-list-item"], [role="listitem"], div[class*="conversation-item"], div[class*="chat-item"]'
+        )).filter(el => el.offsetHeight > 15 && el.offsetWidth > 30);
+
+        if (itemCandidates.length > 0) {
+          if (cleanTarget) {
+            targetItem = itemCandidates.find(it => (it.innerText || it.textContent || "").toLowerCase().includes(cleanTarget)) || itemCandidates[0];
+          } else {
+            targetItem = itemCandidates[0];
+          }
+          if (targetItem) {
+            targetInner = targetItem.querySelector('span.nFvbiqyLrq, [class*="nFvbiqyLrq"], div.RWr1KSlda2, div.uR4DA9zSmz, span, div');
+          }
+        }
+      }
+
+      if (targetItem) {
+        try {
+          targetItem.scrollIntoView({ block: "center", inline: "nearest" });
+        } catch (_) {}
+
+        // Gửi lệnh click qua MAIN world (shopee-fetch-interceptor.js)
+        try {
+          window.postMessage({
+            channel: 'SPLQ_CLICK_CONVERSATION_ITEM',
+            buyerName: cleanTarget
+          }, '*');
+        } catch (_) {}
+
+        // Click bằng chuỗi sự kiện chuột & pointer
+        const triggerClickSequence = (el) => {
+          if (!el) return;
+          ['mouseenter', 'mouseover', 'pointerdown', 'mousedown', 'focus', 'pointerup', 'mouseup', 'click'].forEach(evtName => {
+            try {
+              if (evtName.startsWith('pointer')) {
+                el.dispatchEvent(new PointerEvent(evtName, { bubbles: true, cancelable: true, view: window }));
+              } else if (evtName === 'focus') {
+                el.focus();
+              } else {
+                el.dispatchEvent(new MouseEvent(evtName, { bubbles: true, cancelable: true, view: window }));
+              }
+            } catch (_) {}
+          });
+          try { el.click(); } catch (_) {}
+        };
+
+        triggerClickSequence(targetItem);
+        if (targetInner && targetInner !== targetItem) {
+          triggerClickSequence(targetInner);
+        }
+
+        // Script MAIN world trực tiếp kích hoạt React props onClick
+        try {
+          const clickScript = document.createElement('script');
+          clickScript.textContent = `(() => {
+            try {
+              const target = document.querySelector('div.SW7LUhQFDH, div.AV0w9P7wpj, div.flWmPLsUAa, [class*="SW7LUhQFDH"]');
+              if (target) {
+                const k = Object.keys(target).find(k => k.startsWith('__reactProps$') || k.startsWith('__reactEventHandlers$'));
+                if (k && target[k] && typeof target[k].onClick === 'function') {
+                  target[k].onClick({ target, currentTarget: target, bubbles: true, defaultPrevented: false, persist: () => {} });
+                }
+              }
+            } catch(_) {}
+          })();`;
+          (document.head || document.documentElement).appendChild(clickScript);
+          clickScript.remove();
+        } catch (_) {}
+
+        return true;
+      }
+
+      await new Promise(r => setTimeout(r, 400));
+    }
+    return false;
+  }
+
+  async function waitForChatTextarea(timeoutMs = 15000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const textarea = document.querySelector(
+        'textarea.E2MWg3w8y6, [data-cy="webchat-conversation-detail-input"] textarea, #inputField textarea, textarea[placeholder*="tin nhắn"], textarea[placeholder*="Nhập"], textarea'
+      );
+      if (textarea && textarea.offsetHeight > 10) {
+        return textarea;
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
+    return document.querySelector('textarea');
+  }
+
+  function findWebchatSendButton() {
+    // 1. Tìm chính xác theo SVG path mà Shopee Webchat sử dụng cho nút gửi
+    // <svg viewBox="0 0 24 24" ...><path d="M4 14.497v3.724L18.409 12 4 5.779v3.718l10 2.5-10 2.5zM2.698 3.038l18.63 8.044a1 1 0 010 1.836l-18.63 8.044a.5.5 0 01-.698-.46V3.498a.5.5 0 01.698-.459z"></path></svg>
+    const sendPaths = Array.from(document.querySelectorAll('svg path')).filter(p => {
+      const d = p.getAttribute('d') || '';
+      return d.includes('M4 14.497') || d.includes('18.409 12') || d.includes('2.698 3.038') || d.includes('18.63 8.044');
+    });
+
+    if (sendPaths.length > 0) {
+      const pathEl = sendPaths[sendPaths.length - 1];
+      const btn = pathEl.closest('button, [role="button"], i, div._3OdQhKfJ0m, div') || pathEl.closest('svg') || pathEl;
+      if (btn) return btn;
+    }
+
+    // 2. Tìm theo class selector phổ biến
+    const btnCandidate = document.querySelector(
+      '.XsR3zIeGOc, .kgP1yPCqxR, [data-cy="webchat-conversation-detail-input"] [class*="send"], button[class*="send"], [data-cy="send-btn"], button[type="submit"]'
+    );
+    if (btnCandidate) return btnCandidate;
+
+    return null;
+  }
+
+  async function sendWebchatChatMessage(textarea, messageText) {
+    if (!textarea) return false;
+    const text = String(messageText || "");
+
+    // 1. Điền nội dung tin nhắn vào textarea bằng cơ chế MAIN world
+    await applyValueToReactElement(textarea, text, false);
+
+    // Chờ 300ms cho React state update và nút gửi sáng lên
+    await new Promise(r => setTimeout(r, 300));
+
+    // 2. Gửi lệnh click nút gửi qua MAIN world
+    try {
+      window.postMessage({ channel: 'SPLQ_CLICK_SEND_BUTTON' }, '*');
+    } catch (_) {}
+
+    // 3. Tìm và click trực tiếp trên DOM
+    const sendBtn = findWebchatSendButton();
+    if (sendBtn) {
+      const triggerEvts = (el) => {
+        if (!el) return;
+        ['mouseenter', 'mouseover', 'pointerdown', 'mousedown', 'focus', 'pointerup', 'mouseup', 'click'].forEach(evtName => {
+          try {
+            if (evtName.startsWith('pointer')) {
+              el.dispatchEvent(new PointerEvent(evtName, { bubbles: true, cancelable: true, view: window }));
+            } else if (evtName === 'focus') {
+              el.focus();
+            } else {
+              el.dispatchEvent(new MouseEvent(evtName, { bubbles: true, cancelable: true, view: window }));
+            }
+          } catch (_) {}
+        });
+        try { el.click(); } catch (_) {}
+      };
+
+      triggerEvts(sendBtn);
+      const innerSvg = sendBtn.querySelector('svg');
+      if (innerSvg && innerSvg !== sendBtn) {
+        triggerEvts(innerSvg);
+      }
+    }
+
+    // 4. Nhấn Enter trên textarea để đảm bảo tin nhắn được gửi đi
+    setTimeout(() => {
+      if (textarea) {
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+        textarea.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+        textarea.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+      }
+    }, 400);
+
+    return true;
+  }
+
+  async function runAutoChatBuyer(buyerName, messageText) {
+    let cleanBuyerName = String(buyerName || "").trim();
+    if (!cleanBuyerName) {
+      try {
+        const stored = await chrome.storage.local.get(["pendingAutoChat"]);
+        if (stored?.pendingAutoChat?.buyerName) {
+          cleanBuyerName = String(stored.pendingAutoChat.buyerName).trim();
+        }
+      } catch (_) {}
+    }
+    if (!cleanBuyerName) {
+      try {
+        const clip = await navigator.clipboard.readText();
+        if (clip && clip.trim()) cleanBuyerName = clip.trim();
+      } catch (_) {}
+    }
+    if (!cleanBuyerName) {
+      showWebchatToast("Không có tên khách hàng để tìm kiếm!", "error");
+      return { ok: false, error: "Thiếu tên người mua" };
+    }
+    const textToSend = messageText || DEFAULT_CHAT_KHACH_MESSAGE;
+
+    showWebchatToast(`🔍 Đang click ô tìm kiếm và dán tên "${cleanBuyerName}"...`, "info");
+
+    // 1. Chờ container ô tìm kiếm xuất hiện (theo đúng class user cung cấp: div.shopee-react-input._2VVLYzIyBp)
+    const searchContainer = await waitForSearchContainer(25000);
+    if (searchContainer) {
+      searchContainer.scrollIntoView({ block: "center", inline: "nearest" });
+      searchContainer.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      searchContainer.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      searchContainer.click();
+      const inner = searchContainer.querySelector('.shopee-react-input__inner');
+      if (inner) inner.click();
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    // 2. Tìm ô nhập input bên trong container
+    const searchInput = findWebchatSearchInput(searchContainer) || await waitForSearchInput(10000);
+    if (!searchInput) {
+      showWebchatToast(`Không tìm thấy ô nhập! Đã copy tên khách: ${cleanBuyerName}`, "error");
+      return { ok: false, error: "Không tìm thấy ô tìm kiếm Webchat" };
+    }
+
+    // 3. Click nút xóa cũ nếu có
+    const clearBtn = searchContainer ? searchContainer.querySelector('.shopee-react-input__clear-btn, [class*="clear-btn"]') : document.querySelector('.shopee-react-input__clear-btn');
+    if (clearBtn) {
+      clearBtn.click();
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    // 4. Dán tên khách vào ô tìm kiếm với VÒNG LẶP XÁC NHẬN
+    let pastedConfirmed = false;
+    for (let attempt = 1; attempt <= 8; attempt++) {
+      const currentContainer = findWebchatSearchContainer() || searchContainer;
+      if (currentContainer && attempt <= 2) {
+        currentContainer.click();
+      }
+      const currentInput = findWebchatSearchInput(currentContainer) || searchInput;
+      await applyValueToReactElement(currentInput, cleanBuyerName, true);
+
+      // Chờ 250ms kiểm tra giá trị thực tế
+      await new Promise(r => setTimeout(r, 250));
+      if (currentInput.value === cleanBuyerName) {
+        // Chờ thêm 250ms xem React có re-render xóa giá trị không
+        await new Promise(r => setTimeout(r, 250));
+        if (currentInput.value === cleanBuyerName) {
+          pastedConfirmed = true;
+          break;
+        }
+      }
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    // 5. Kích hoạt tìm kiếm (Dispatch phím Enter + Click icon tìm kiếm)
+    const activeInput = findWebchatSearchInput(searchContainer) || searchInput;
+    if (activeInput) {
+      activeInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+      activeInput.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+      activeInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+    }
+
+    const searchIcon = searchContainer ? searchContainer.querySelector('._3OdQhKfJ0m, .shopee-react-input__prefix, svg.chat-icon') : null;
+    if (searchIcon) {
+      try { searchIcon.click(); } catch (_) {}
+    }
+
+    showWebchatToast(`Đã dán "${cleanBuyerName}". Đang lọc hội thoại...`, "info");
+
+    // 6. Chờ và chọn hội thoại
+    await new Promise(r => setTimeout(r, 1200));
+    const conversationClicked = await waitForAndClickConversation(cleanBuyerName, 12000);
+
+    // 7. Chờ khung chat & textarea
+    showWebchatToast(`Đang chuẩn bị gửi tin nhắn cho "${cleanBuyerName}"...`, "info");
+    const textarea = await waitForChatTextarea(15000);
+    if (!textarea) {
+      showWebchatToast(`⚠️ Đã dán tên "${cleanBuyerName}". Vui lòng click chọn hội thoại để gửi tin.`, "error");
+      return { ok: false, error: "Không tìm thấy khung chat" };
+    }
+
+    // 8. Điền tin nhắn & Bấm gửi
+    await sendWebchatChatMessage(textarea, textToSend);
+    showWebchatToast(`✓ Đã gửi tin nhắn cho khách "${cleanBuyerName}" thành công!`, "success");
+    return { ok: true };
+  }
+
+  let isAutoChatting = false;
+  async function runAutoChatBuyerSafe(buyerName, messageText) {
+    if (isAutoChatting) return { ok: false, error: "Đang có tiến trình chat đang chạy" };
+    isAutoChatting = true;
+    try {
+      return await runAutoChatBuyer(buyerName, messageText);
+    } catch (err) {
+      console.error("[Shopee Ext] Lỗi auto chat buyer:", err);
+      showWebchatToast(`Lỗi gửi tin: ${err.message}`, "error");
+      return { ok: false, error: err.message };
+    } finally {
+      setTimeout(() => { isAutoChatting = false; }, 3000);
+    }
+  }
+
+  // Tự động kiểm tra tác vụ chat khách chờ xử lý khi mở trang Webchat (chỉ chạy ở top window)
+  if (window.location.href.includes("webchat") && window === window.top) {
+    const checkPendingChat = () => {
+      try {
+        chrome.storage.local.get(["pendingAutoChat"], (res) => {
+          if (res && res.pendingAutoChat) {
+            const task = res.pendingAutoChat;
+            if (Date.now() - (task.timestamp || 0) < 120000 && task.buyerName) {
+              chrome.storage.local.remove(["pendingAutoChat"]);
+              runAutoChatBuyerSafe(task.buyerName, task.message);
+            } else {
+              chrome.storage.local.remove(["pendingAutoChat"]);
+            }
+          }
+        });
+      } catch (e) {}
+    };
+
+    setTimeout(checkPendingChat, 500);
+    setTimeout(checkPendingChat, 2000);
+  }
+
+  let dsSpCache = null;
+  let isFetchingDsSp = false;
+  let lastDsSpFetchTime = 0;
+
+  async function fetchDsSpData() {
+    if (dsSpCache) return dsSpCache;
+    const now = Date.now();
+    if (now - lastDsSpFetchTime < 10000) return null; // Throttle to 10 seconds on failure
+    if (isFetchingDsSp) return null;
+    isFetchingDsSp = true;
+    lastDsSpFetchTime = now;
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "FETCH_DS_SP" }, (response) => {
+        isFetchingDsSp = false;
+        if (response && response.ok && response.values && response.values.length > 0) {
+          const headers = response.values[0];
+          const normalizeHeader = (t) => String(t || "").trim().toLowerCase();
+          const idSpCtIdx = headers.findIndex(h => {
+             const nh = normalizeHeader(h);
+             return nh === "id_sp_ct" || nh === "id_sp_con";
+          });
+          const giaBanIdx = headers.findIndex(h => normalizeHeader(h) === "gia_ban");
+          
+          if (idSpCtIdx !== -1 && giaBanIdx !== -1) {
+            dsSpCache = new Map();
+            for (let i = 1; i < response.values.length; i++) {
+              const row = response.values[i];
+              const idSpCt = row[idSpCtIdx];
+              const giaBanRaw = row[giaBanIdx];
+              if (idSpCt) {
+                 const giaBan = parseInt(String(giaBanRaw).replace(/[^0-9]/g, '')) || 0;
+                 const idKey = String(idSpCt).trim();
+                 dsSpCache.set(idKey, giaBan);
+                 dsSpCache.set(idKey.toUpperCase(), giaBan);
+                 dsSpCache.set(idKey.toLowerCase(), giaBan);
+              }
+            }
+            resolve(dsSpCache);
+          } else {
+            console.warn("Khong tim thay cot id_sp_ct hoac gia_ban");
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+
+  // =========================================================================
+  // ENHANCE ORDER DETAIL PRODUCTS (/portal/sale/order/*)
+  // - Copy icon for Product Name
+  // - Copy icon for Variation SKU
+  // - Lookup Mã Sản Phẩm in Sheet SP_SHOPEE (matching Mã Gian & Tên SP)
+  // - Button "Mở Sản Phẩm" -> https://banhang.shopee.vn/portal/product/[Mã Sản Phẩm]
+  // =========================================================================
+  let orderDetailSpCache = null;
+  let orderDetailMaGian = "";
+  let orderDetailLoadingSp = false;
+
+  function loadOrderDetailSpData(callback) {
+    if (orderDetailSpCache && orderDetailSpCache.length > 1) {
+      if (callback) callback(orderDetailSpCache, orderDetailMaGian);
+      return;
+    }
+    if (orderDetailLoadingSp) {
+      // Đang tải, đợi một chút rồi gọi lại callback
+      setTimeout(() => loadOrderDetailSpData(callback), 500);
+      return;
+    }
+    orderDetailLoadingSp = true;
+
+    chrome.storage.local.get(['sp_shopee_cache_data', 'maGian', 'dhHoanTextValue'], (res) => {
+      orderDetailMaGian = (res?.maGian || res?.dhHoanTextValue || "").trim().toLowerCase();
+      if (res && res.sp_shopee_cache_data && res.sp_shopee_cache_data.length > 1) {
+        orderDetailSpCache = res.sp_shopee_cache_data;
+        orderDetailLoadingSp = false;
+        if (callback) callback(orderDetailSpCache, orderDetailMaGian);
+      } else {
+        chrome.runtime.sendMessage({ type: "FETCH_SP_SHOPEE" }, (fRes) => {
+          orderDetailLoadingSp = false;
+          if (fRes && fRes.ok && fRes.values && fRes.values.length > 1) {
+            orderDetailSpCache = fRes.values;
+            chrome.storage.local.set({ sp_shopee_cache_data: fRes.values });
+            if (callback) callback(orderDetailSpCache, orderDetailMaGian);
+          } else {
+            orderDetailSpCache = [];
+            if (callback) callback(orderDetailSpCache, orderDetailMaGian);
+          }
+        });
+      }
+    });
+  }
+
+  function findMaSanPhamFromSheet(productName, currentMaGian, spRows) {
+    if (!productName || !spRows || spRows.length <= 1) return null;
+    
+    const cleanStr = (val) => {
+      if (!val) return "";
+      return String(val)
+        .normalize("NFC")
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .replace(/\.\.\.$/, '')
+        .replace(/\u2026$/, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+    };
+
+    const cleanP = cleanStr(productName);
+    const targetGian = cleanStr(currentMaGian);
+
+    const headers = spRows[0].map(v => cleanStr(v));
+    let maSpIdx = headers.findIndex(col => col.includes('mã sản phẩm') || col.includes('ma san pham') || col === 'ma sp' || col === 'mã sp' || col === 'item id' || col === 'id');
+    if (maSpIdx === -1) maSpIdx = 0;
+    
+    let pIdx = headers.findIndex(col => col.includes('tên sản phẩm') || col.includes('ten san pham') || col === 'ten sp' || col === 'name');
+    if (pIdx === -1) pIdx = 1;
+
+    let gIdx = headers.findIndex(col => col === 'gian' || col === 'mã gian' || col === 'ma gian' || col === 'ma_gian');
+    if (gIdx === -1) gIdx = 11;
+
+    // Lọc theo gian trước nếu có
+    let candidateRows = [];
+    if (targetGian) {
+      for (let i = 1; i < spRows.length; i++) {
+        const row = spRows[i];
+        const sG = cleanStr(row[gIdx]);
+        if (sG === targetGian || sG.includes(targetGian) || targetGian.includes(sG)) {
+          candidateRows.push(row);
+        }
+      }
+    }
+    if (candidateRows.length === 0) {
+      candidateRows = spRows.slice(1);
+    }
+
+    const getWordOverlap = (s1, s2) => {
+      if (!s1 || !s2) return 0;
+      const w1 = s1.split(' ').filter(w => w.length > 1);
+      const w2 = s2.split(' ').filter(w => w.length > 1);
+      let count = 0;
+      for (const w of w1) {
+        if (w2.includes(w)) count++;
+      }
+      return count;
+    };
+
+    const extractCodes = (str) => {
+      const matches = str.match(/[a-z0-9]+[0-9]+[a-z0-9]*/gi) || [];
+      return matches.map(m => m.toLowerCase());
+    };
+
+    const pCodes = extractCodes(cleanP);
+
+    let bestScore = -1;
+    let bestMaSp = "";
+
+    for (const row of candidateRows) {
+      const sheetName = cleanStr(row[pIdx]);
+      const maSp = String(row[maSpIdx] || "").trim();
+      if (!sheetName || !maSp) continue;
+
+      let score = 0;
+      if (sheetName === cleanP) {
+        score += 10000;
+      } else if (sheetName.startsWith(cleanP) || cleanP.startsWith(sheetName)) {
+        score += 5000;
+      } else if (sheetName.includes(cleanP) || cleanP.includes(sheetName)) {
+        score += 3000;
+      } else {
+        const sheetCodes = extractCodes(sheetName);
+        let codeMatch = false;
+        for (const c of pCodes) {
+          if (c.length >= 3 && sheetCodes.includes(c)) {
+            score += 2000;
+            codeMatch = true;
+          }
+        }
+        const overlap = getWordOverlap(cleanP, sheetName);
+        if (overlap >= 2 || codeMatch) {
+          score += overlap * 100;
+        }
+      }
+
+      if (score > bestScore && score > 0) {
+        bestScore = score;
+        bestMaSp = maSp;
+      }
+    }
+
+    return bestMaSp || null;
+  }
+
+  function renderOrderDetailProductEnhancements() {
+    if (!window.location.href.includes('/portal/sale/order/')) return;
+
+    // 1. Dọn dẹp bất kỳ footer trùng lặp nào trước đó nếu có
+    const existingFooters = document.querySelectorAll('.ext-product-actions-footer');
+    if (existingFooters.length > 10) {
+      existingFooters.forEach(f => f.remove());
+    }
+
+    // 2. Tìm các khung sản phẩm cấp con chứa tên sản phẩm trực tiếp, tránh chọn cả container cha lẫn con
+    const productDetailElements = Array.from(document.querySelectorAll('.product-detail, [class*="product-detail"]'))
+      .filter(el => el.querySelector('.product-name, [class*="product-name"], .ct-item-product-name, .item-name'));
+
+    const targets = productDetailElements.length > 0 ? productDetailElements : Array.from(document.querySelectorAll('.order-product-wrapper, .order-item, .product-item, .order-view-item'))
+      .filter(el => el.querySelector('.product-name, [class*="product-name"], .ct-item-product-name, .item-name'));
+
+    if (targets.length === 0) return;
+
+    targets.forEach(detailEl => {
+      // Tránh lặp: nếu đã có footer hoặc cha/con đã có footer thì bỏ qua
+      if (detailEl.querySelector('.ext-product-actions-footer') || detailEl.closest('.order-view-item, .order-item')?.querySelector('.ext-product-actions-footer')) return;
+
+      const nameEl = detailEl.querySelector('.product-name, [class*="product-name"], .ct-item-product-name, .item-name');
+      if (!nameEl) return;
+
+      const productName = (nameEl.getAttribute('title') || nameEl.innerText || nameEl.textContent || "").replace(/\s+/g, ' ').trim();
+      if (!productName) return;
+
+      let skuVal = "";
+      const metaDivs = Array.from(detailEl.querySelectorAll('.product-meta > div, [class*="product-meta"] > div, .item-meta, .ct-item-meta, [class*="meta"]'));
+      for (const mDiv of metaDivs) {
+        const text = (mDiv.innerText || mDiv.textContent || "").trim();
+        if (text.includes('SKU phân loại:') || text.includes('SKU:') || text.includes('Mã phân loại:') || text.includes('Mã sản phẩm:')) {
+          skuVal = text.replace(/.*(?:SKU phân loại|SKU|Mã phân loại|Mã sản phẩm)\s*:\s*/i, '').trim();
+          skuVal = skuVal.replace(/copy\s*sku|sao\s*ch[eé]p\s*sku|copy|sao\s*ch[eé]p/gi, '').trim();
+          if (skuVal) break;
+        }
+      }
+
+      // Tạo footer actions riêng
+      const actionsFooter = document.createElement('div');
+      actionsFooter.className = 'ext-product-actions-footer';
+      actionsFooter.style.cssText = 'margin-top: 8px !important; display: flex !important; align-items: center !important; gap: 8px !important; flex-wrap: wrap !important;';
+      detailEl.appendChild(actionsFooter);
+
+      // 1. Nút Copy Tên
+      const copyNameBtn = document.createElement('button');
+      copyNameBtn.type = 'button';
+      copyNameBtn.className = 'ext-copy-prod-name-btn';
+      copyNameBtn.title = 'Bấm để copy tên sản phẩm';
+      copyNameBtn.style.cssText = 'display: inline-flex !important; align-items: center !important; gap: 2px !important; padding: 2px 8px !important; font-size: 11px !important; font-weight: bold !important; color: #0284c7 !important; background: #e0f2fe !important; border: 1px solid #7dd3fc !important; border-radius: 4px !important; cursor: pointer !important; user-select: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;';
+      copyNameBtn.innerHTML = '📋 Copy tên';
+      copyNameBtn.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        navigator.clipboard.writeText(productName).then(() => {
+          copyNameBtn.innerHTML = '✓ Đã copy tên!';
+          copyNameBtn.style.color = '#15803d';
+          copyNameBtn.style.background = '#dcfce7';
+          copyNameBtn.style.borderColor = '#86efac';
+          setTimeout(() => {
+            copyNameBtn.innerHTML = '📋 Copy tên';
+            copyNameBtn.style.color = '#0284c7';
+            copyNameBtn.style.background = '#e0f2fe';
+            copyNameBtn.style.borderColor = '#7dd3fc';
+          }, 1200);
+        });
+      };
+      actionsFooter.appendChild(copyNameBtn);
+
+      // 2. Nút Copy SKU (nếu có SKU)
+      if (skuVal) {
+        const copySkuBtn = document.createElement('button');
+        copySkuBtn.type = 'button';
+        copySkuBtn.className = 'ext-copy-sku-btn';
+        copySkuBtn.title = 'Bấm để copy SKU: ' + skuVal;
+        copySkuBtn.style.cssText = 'display: inline-flex !important; align-items: center !important; gap: 2px !important; padding: 2px 8px !important; font-size: 11px !important; font-weight: bold !important; color: #0369a1 !important; background: #f0f9ff !important; border: 1px solid #bae6fd !important; border-radius: 4px !important; cursor: pointer !important; user-select: none !important; box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;';
+        copySkuBtn.innerHTML = '📋 Copy SKU';
+        copySkuBtn.onclick = (e) => {
+          e.preventDefault(); e.stopPropagation();
+          navigator.clipboard.writeText(skuVal).then(() => {
+            copySkuBtn.innerHTML = '✓ Đã copy SKU!';
+            copySkuBtn.style.color = '#15803d';
+            copySkuBtn.style.background = '#dcfce7';
+            copySkuBtn.style.borderColor = '#86efac';
+            setTimeout(() => {
+              copySkuBtn.innerHTML = '📋 Copy SKU';
+              copySkuBtn.style.color = '#0369a1';
+              copySkuBtn.style.background = '#f0f9ff';
+              copySkuBtn.style.borderColor = '#bae6fd';
+            }, 1200);
+          });
+        };
+        actionsFooter.appendChild(copySkuBtn);
+      }
+
+      // 3. Khung Mở Sản Phẩm
+      const openWrapper = document.createElement('span');
+      openWrapper.className = 'ext-open-product-wrapper';
+      openWrapper.innerHTML = '<span style="font-size: 11px; color: #94a3b8;">⏳ Đang tra cứu mã SP...</span>';
+      actionsFooter.appendChild(openWrapper);
+
+      loadOrderDetailSpData((spRows, currentMaGian) => {
+        const maSp = findMaSanPhamFromSheet(productName, currentMaGian, spRows);
+        if (maSp) {
+          openWrapper.innerHTML = `
+            <a href="https://banhang.shopee.vn/portal/product/${maSp}" target="_blank" class="ext-open-product-btn" style="
+              display: inline-flex !important; align-items: center !important; gap: 4px !important;
+              background: #ee4d2d !important; color: #ffffff !important;
+              font-size: 11px !important; font-weight: bold !important;
+              padding: 2px 8px !important; border-radius: 4px !important;
+              text-decoration: none !important; border: 1px solid #d03b1f !important;
+              box-shadow: 0 1px 3px rgba(238, 77, 45, 0.25) !important; cursor: pointer !important;
+            ">🌐 Mở sản phẩm (${maSp}) ↗</a>
+          `;
+        } else {
+          openWrapper.innerHTML = `
+            <a href="https://banhang.shopee.vn/portal/product/list/all?search=name&keyword=${encodeURIComponent(productName.substring(0, 35))}" target="_blank" style="
+              display: inline-flex !important; align-items: center !important; gap: 2px !important;
+              font-size: 11px !important; color: #0284c7 !important; background: #e0f2fe !important;
+              padding: 2px 8px !important; border: 1px solid #7dd3fc !important; border-radius: 4px !important;
+              text-decoration: none !important; font-weight: 500 !important;
+            ">🔍 Tìm SP trên Shopee ↗</a>
+          `;
+        }
+      });
+    });
+  }
+
+  // =========================================================================
+  // NÂNG CẤP BẤM MỞ RỘNG ĐƠN TRÊN TRANG SHOPEE FINANCE (CHỐNG MỞ TAB TUYỆT ĐỐI)
+  // =========================================================================
+  function clickOnlyArrowIcon(row) {
+    if (!row) return;
+
+    // Tìm icon mũi tên (có chứa SVG mũi tên xuống hoặc nằm trong cột số tiền)
+    const arrowIcon = row.querySelector('path[d*="9.18933983"]')?.closest('i') ||
+                      row.querySelector('.transaction-amount-wrapper i.eds-icon') ||
+                      row.querySelector('.transaction-amount-wrapper i') ||
+                      row.querySelector('i.eds-icon');
+
+    if (!arrowIcon) return;
+    if (arrowIcon.tagName === 'A' || arrowIcon.closest('a')) return; // Chặn tuyệt đối nếu nằm trong thẻ A
+
+    // Tạm thời chặn mọi hành vi mở link thẻ <a> trong lúc bấm
+    const preventLink = (e) => {
+      if (e.target.closest('a') || e.target.tagName === 'A') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    };
+    window.addEventListener('click', preventLink, true);
+
+    try {
+      const opts = { bubbles: true, cancelable: true, view: window };
+      arrowIcon.dispatchEvent(new MouseEvent('mousedown', opts));
+      arrowIcon.dispatchEvent(new MouseEvent('mouseup', opts));
+      arrowIcon.dispatchEvent(new MouseEvent('click', opts));
+    } catch (_) {}
+
+    setTimeout(() => {
+      window.removeEventListener('click', preventLink, true);
+    }, 200);
+  }
+
+  function injectFinanceExpandButtons() {
+    if (!window.location.href.includes('/portal/finance/income')) {
+      const floatBtn = document.getElementById('ext-btn-expand-all-finance');
+      if (floatBtn) floatBtn.remove();
+      return;
+    }
+
+    // 1. Nút nổi ở góc dưới bên phải màn hình
+    if (!document.getElementById('ext-btn-expand-all-finance')) {
+      const floatBtn = document.createElement('button');
+      floatBtn.id = 'ext-btn-expand-all-finance';
+      floatBtn.type = 'button';
+      floatBtn.innerHTML = '⚡ Mở Rộng Tất Cả Đơn';
+      floatBtn.title = 'Bấm để tự động mở rộng toàn bộ các dòng đơn hàng trên trang này';
+      floatBtn.style.cssText = 'position: fixed !important; bottom: 20px !important; right: 20px !important; z-index: 999999 !important; background: #ee4d2d !important; color: #ffffff !important; border: 2px solid #ffffff !important; border-radius: 20px !important; padding: 10px 18px !important; font-size: 13px !important; font-weight: bold !important; cursor: pointer !important; box-shadow: 0 4px 14px rgba(238, 77, 45, 0.4) !important; font-family: Arial, sans-serif !important; display: flex !important; align-items: center !important; gap: 6px !important;';
+
+      floatBtn.onclick = async (e) => {
+        e.preventDefault(); e.stopPropagation();
+        floatBtn.innerHTML = '⏳ Đang mở rộng...';
+        floatBtn.style.background = '#0284c7';
+
+        // Tự động chuyển 50 đơn/trang nếu cần
+        try {
+          const sizeSpan = document.querySelector('.eds-pagination-sizes__content');
+          if (sizeSpan && !sizeSpan.innerText.includes('50')) {
+            sizeSpan.click();
+            await new Promise(r => setTimeout(r, 400));
+            const item50 = Array.from(document.querySelectorAll('.eds-dropdown-item, .eds-dropdown-menu li')).find(el => el.innerText.trim() === '50' || el.textContent.trim() === '50');
+            if (item50) {
+              item50.click();
+              await new Promise(r => setTimeout(r, 1200));
+            }
+          }
+        } catch (_) {}
+
+        // Mở rộng tất cả các dòng chỉ bằng icon mũi tên
+        const rows = Array.from(document.querySelectorAll('.grid-table-body .grid-table-row, .transaction-table .grid-table-row, .grid-table-row'));
+        rows.forEach(r => clickOnlyArrowIcon(r));
+
+        floatBtn.innerHTML = '✓ Đã mở rộng ' + rows.length + ' đơn!';
+        floatBtn.style.background = '#16a34a';
+        setTimeout(() => {
+          floatBtn.innerHTML = '⚡ Mở Rộng Tất Cả Đơn';
+          floatBtn.style.background = '#ee4d2d';
+        }, 3000);
+      };
+
+      document.body.appendChild(floatBtn);
+    }
+
+    // 2. Thêm nút [⚡ Mở rộng] trực tiếp vào từng dòng cạnh số tiền
+    const rows = Array.from(document.querySelectorAll('.grid-table-body .grid-table-row, .transaction-table .grid-table-row'));
+    rows.forEach(r => {
+      const cells = Array.from(r.children);
+      if (cells.length < 5) return;
+      const amountCell = cells[4];
+      if (!amountCell || amountCell.querySelector('.ext-btn-row-expand')) return;
+
+      const wrapper = amountCell.querySelector('.transaction-amount-wrapper') || amountCell;
+      const rowBtn = document.createElement('button');
+      rowBtn.className = 'ext-btn-row-expand';
+      rowBtn.type = 'button';
+      rowBtn.innerHTML = '⚡ Mở rộng';
+      rowBtn.title = 'Bấm để mở rộng chi tiết đơn này';
+      rowBtn.style.cssText = 'background: #0284c7 !important; color: #ffffff !important; font-size: 10px !important; font-weight: bold !important; padding: 2px 6px !important; border-radius: 4px !important; border: none !important; cursor: pointer !important; margin-left: 6px !important; display: inline-block !important; vertical-align: middle !important;';
+
+      rowBtn.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        clickOnlyArrowIcon(r);
+        rowBtn.innerHTML = '✓ Đã mở';
+        rowBtn.style.background = '#16a34a';
+      };
+
+      wrapper.appendChild(rowBtn);
+    });
+
+    // 3. Thêm nút trên thanh công cụ gần nút [Xuất]
+    const xuanBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'Xuất' || b.textContent.trim() === 'Xuất');
+    if (xuanBtn && !document.getElementById('ext-btn-toolbar-expand')) {
+      const topBtn = document.createElement('button');
+      topBtn.id = 'ext-btn-toolbar-expand';
+      topBtn.type = 'button';
+      topBtn.innerHTML = '⚡ Mở Rộng Tất Cả Đơn';
+      topBtn.style.cssText = 'background: #ee4d2d !important; color: #ffffff !important; font-weight: bold !important; padding: 5px 12px !important; border-radius: 4px !important; border: none !important; cursor: pointer !important; font-size: 12px !important; margin-left: 8px !important; display: inline-flex !important; align-items: center !important;';
+
+      topBtn.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        document.getElementById('ext-btn-expand-all-finance')?.click();
+      };
+
+      xuanBtn.parentElement.insertBefore(topBtn, xuanBtn.nextSibling);
+    }
+  }
+  async function renderOrderProfit() {
+    if (!window.location.href.includes('/portal/sale/order/')) return;
+    
+    // Find all amount elements, as requested by the user
+    const allAmountValues = document.querySelectorAll('.amount');
+    // Fallback to .income-value if .amount doesn't exist
+    const allIncomeValues = document.querySelectorAll('.income-value');
+    
+    const validElements = (allAmountValues && allAmountValues.length > 0) ? allAmountValues : allIncomeValues;
+    if (!validElements || validElements.length === 0) return;
+
+    if (document.querySelector('.custom-order-profit')) return;
+
+    // Use a robust selector for "SKU phân loại:" or "Mã phân loại:"
+    const skuElements = Array.from(document.querySelectorAll('.product-meta > div')).filter(el => {
+      const txt = el.innerText || '';
+      return txt.includes('SKU ph') || txt.includes('Mã phân loại:') || txt.includes('Mã phân loại') || txt.includes('S0');
+    });
+    
+    if (skuElements.length === 0) return;
+
+    const dsSpData = await fetchDsSpData();
+    if (!dsSpData) return;
+    
+    // Check again after await
+    const currentAmountValues = document.querySelectorAll('.amount');
+    const currentIncomeValues = document.querySelectorAll('.income-value');
+    const finalValidElements = (currentAmountValues && currentAmountValues.length > 0) ? currentAmountValues : currentIncomeValues;
+    
+    if (!finalValidElements || finalValidElements.length === 0 || document.querySelector('.custom-order-profit')) return;
+    
+    // The final total is usually the last one on the page
+    const currentFinalValueElement = finalValidElements[finalValidElements.length - 1];
+
+    let totalGiaBan = 0;
+    let productsCount = 0;
+    let productDetails = [];
+    
+    skuElements.forEach(el => {
+      const text = el.innerText || '';
+      if (!text.includes('SKU') && !text.includes('Mã phân loại')) return;
+      // Extract everything after the colon
+      const match = text.match(/:\s*(.*)/);
+      const skuFull = match ? match[1].trim() : text.replace(/.*(?:SKU|Mã).*?:/, '').trim();
+      const sku10 = skuFull.substring(0, 10);
+      const giaBan = dsSpData.get(sku10);
+      
+      if (giaBan !== undefined) {
+         let qty = 1;
+         const listItem = el.closest('.product-list-item');
+         if (listItem) {
+           const qtyElement = listItem.querySelector('.qty');
+           if (qtyElement) {
+              const qtyParsed = parseInt(qtyElement.innerText.replace(/[^0-9]/g, ''));
+              if (!isNaN(qtyParsed)) qty = qtyParsed;
+           }
+         }
+         productsCount += qty;
+         totalGiaBan += (giaBan * qty);
+         productDetails.push({ sku: sku10, qty, giaBan, total: giaBan * qty });
+      }
+    });
+
+    if (productsCount === 0) return;
+
+    const incomeRawText = currentFinalValueElement.innerText || '';
+    const incomeValueParsed = parseInt(incomeRawText.replace(/[^0-9]/g, '')) || 0;
+    const loiNhuan = incomeValueParsed - totalGiaBan;
+
+    const container = document.createElement('div');
+    container.className = 'custom-order-profit';
+    container.style.marginTop = '15px';
+    container.style.paddingTop = '15px';
+    container.style.borderTop = '1px dashed #e5e5e5';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'flex-end';
+    container.style.width = '100%';
+
+    const formatVND = (val) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+
+    let detailRowsHTML = '';
+    if (productsCount >= 2) {
+      productDetails.forEach((p, index) => {
+         detailRowsHTML += `
+            <div style="font-size: 13px; color: #888; display: flex; justify-content: flex-end; width: 100%; margin-bottom: 4px;">
+               <span style="text-align: right; margin-right: 20px;">SP ${index + 1} (${p.sku}) x${p.qty}:</span>
+               <span style="width: 120px; text-align: right;">${formatVND(p.total)}</span>
+            </div>
+         `;
+      });
+    }
+
+    container.innerHTML = `
+      ${detailRowsHTML}
+      <div style="font-size: 14px; color: #666; display: flex; justify-content: flex-end; width: 100%; margin-bottom: 8px;">
+        <span style="text-align: right; margin-right: 20px;">Tổng vốn (${productsCount} SP):</span>
+        <span style="width: 120px; text-align: right;"><strong>${formatVND(totalGiaBan)}</strong></span>
+      </div>
+            <div style="font-size: 16px; color: ${loiNhuan >= 0 ? '#ee4d2d' : 'red'}; display: flex; justify-content: flex-end; width: 100%;">
+        <span style="text-align: right; margin-right: 20px;">Lợi nhuận:</span>
+        <span style="width: 120px; text-align: right;"><strong>${formatVND(loiNhuan)}</strong></span>
+      </div>
+    `;
+
+    // The payment detail block usually has rows. Let's find the parent row of the last income value.
+    let targetRow = currentFinalValueElement.closest('.income-row') || currentFinalValueElement.closest('.flex') || currentFinalValueElement.parentElement;
+    
+    // Find the wrapper block to append cleanly at the bottom
+    let wrapperBlock = currentFinalValueElement.closest('.shopee-popover__ref') || currentFinalValueElement.closest('.right-col') || currentFinalValueElement.closest('ul') || targetRow.parentElement;
+
+    if (wrapperBlock) {
+       wrapperBlock.appendChild(container);
+    } else {
+       targetRow.insertAdjacentElement('afterend', container);
+    }
+  }
+
+  let cachedDhHoanStatusMap = new Map(); // mdh -> status
+  let cachedDhHoanIds = new Set();
+  let isFetchingDhHoanIds = false;
+  let lastFetchDhHoanIdsTime = 0;
+
+  async function updateDhHoanIdsCache(force = false) {
+      if (isFetchingDhHoanIds) return;
+      const now = Date.now();
+      if (!force && now - lastFetchDhHoanIdsTime < 30000) return;
+      isFetchingDhHoanIds = true;
+      try {
+          const response = await new Promise(resolve => chrome.runtime.sendMessage({ type: "FETCH_DH_HOAN_IDS" }, resolve));
+          if (response && response.ok && response.values) {
+              cachedDhHoanIds.clear();
+              cachedDhHoanStatusMap.clear();
+              for (const row of response.values) {
+                  const id = String(row[0] || "").trim();
+                  if (id) cachedDhHoanIds.add(id);
+              }
+              if (response.statusMap) {
+                  for (const [id, st] of Object.entries(response.statusMap)) {
+                      cachedDhHoanStatusMap.set(id, st);
+                  }
+              }
+              lastFetchDhHoanIdsTime = Date.now();
+              updateCopyButtonColors();
+              updateCopyAllButtonColors();
+          }
+      } catch(e) {
+          console.error(e);
+      } finally {
+          isFetchingDhHoanIds = false;
+      }
+  }
+
+  let cachedUdCtMdhIds = new Map();
+  let isFetchingUdCtMdhIds = false;
+  let lastFetchUdCtMdhIdsTime = 0;
+
+  async function updateUdCtMdhIdsCache() {
+      if (isFetchingUdCtMdhIds) return;
+      const now = Date.now();
+      if (now - lastFetchUdCtMdhIdsTime < 30000) return;
+      isFetchingUdCtMdhIds = true;
+      try {
+          const response = await new Promise(resolve => chrome.runtime.sendMessage({ type: "FETCH_UD_CT_MDH" }, resolve));
+          if (response && response.ok && response.values) {
+              cachedUdCtMdhIds.clear();
+              for (const row of response.values) {
+                  const id = String(row[8] || "").trim();
+                  if (id) {
+                      const ngay = String(row[0] || "").trim();
+                      const san = String(row[4] || "").trim();
+                      const khungh = String(row[5] || "").trim();
+                      const mvd = String(row[7] || id || "").trim();
+                      const idspct = String(row[12] || "").trim();
+                      const trangthai = String(row[20] || "").trim();
+                      const displayText = [ngay, san, khungh, mvd, idspct, trangthai].filter(Boolean).join(" - ");
+                      const idUpper = id.toUpperCase();
+                      const prev = cachedUdCtMdhIds.get(id) || cachedUdCtMdhIds.get(idUpper) || "";
+                      const combined = prev ? prev + "<br>" + displayText : displayText;
+                      cachedUdCtMdhIds.set(id, combined);
+                      if (idUpper !== id) {
+                          cachedUdCtMdhIds.set(idUpper, combined);
+                      }
+                  }
+              }
+              lastFetchUdCtMdhIdsTime = Date.now();
+              updateUdCtBadgeColors();
+          }
+      } catch(e) {
+          console.error(e);
+      } finally {
+          isFetchingUdCtMdhIds = false;
+      }
+  }
+
+  let cachedDonHangMdhIndices = new Map();
+  let cachedDonHangData = new Map();
+  let isFetchingDonHangMdh = false;
+  let lastFetchDonHangMdhTime = 0;
+
+  async function updateDonHangMdhCache(force = false) {
+      if (isFetchingDonHangMdh) return;
+      const now = Date.now();
+      if (!force && now - lastFetchDonHangMdhTime < 30000) return;
+      isFetchingDonHangMdh = true;
+      try {
+          const response = await new Promise(resolve => chrome.runtime.sendMessage({ type: "FETCH_DON_HANG_MDH" }, resolve));
+          if (response && response.ok && response.values) {
+              cachedDonHangMdhIndices.clear();
+              cachedDonHangData.clear();
+              for (let i = 0; i < response.values.length; i++) {
+                  const row = response.values[i];
+                  const id = String(row[0] || "").trim();
+                  if (id) {
+                      const rowIdx = i + 1;
+                      if (!cachedDonHangMdhIndices.has(id)) {
+                          cachedDonHangMdhIndices.set(id, []);
+                      }
+                      cachedDonHangMdhIndices.get(id).push(rowIdx);
+                  }
+              }
+              lastFetchDonHangMdhTime = Date.now();
+              updateCopyAllButtonColors();
+              updateCopyButtonColors();
+          }
+      } catch(e) {
+          console.error(e);
+      } finally {
+          isFetchingDonHangMdh = false;
+      }
+  }
+
+  function updateUdCtBadgeColors() {
+      document.querySelectorAll('.ud-ct-badge').forEach(badge => {
+          if (badge.dataset.shopeeQlspUdCtFilled === "1") return;
+          const id = badge.dataset.shopeeQlspOrderId;
+          const idUpper = id ? id.toUpperCase() : "";
+          const val = (id && cachedUdCtMdhIds.has(id))
+              ? cachedUdCtMdhIds.get(id)
+              : (idUpper && cachedUdCtMdhIds.has(idUpper) ? cachedUdCtMdhIds.get(idUpper) : null);
+          if (val) {
+              badge.innerHTML = val;
+              badge.style.backgroundColor = "#22c55e";
+              badge.style.color = "white";
+              badge.style.border = "none";
+              badge.style.padding = "2px 6px";
+              badge.style.borderRadius = "4px";
+          } else {
+              badge.textContent = "";
+              badge.style.backgroundColor = "transparent";
+              badge.style.color = "transparent";
+              badge.style.border = "none";
+              badge.style.padding = "0";
+          }
+      });
+  }
+
+  let cachedHhBhData = new Map();
+  let isFetchingHhBhMvdIds = false;
+  let lastFetchHhBhMvdIdsTime = 0;
+
+  async function updateHhBhMvdIdsCache() {
+      if (isFetchingHhBhMvdIds) return;
+      const now = Date.now();
+      if (now - lastFetchHhBhMvdIdsTime < 30000) return;
+      isFetchingHhBhMvdIds = true;
+      try {
+          const response = await new Promise(resolve => chrome.runtime.sendMessage({ type: "FETCH_HH_BH_MVD" }, resolve));
+          if (response && response.ok && response.values && response.values.length > 0) {
+              const headers = response.values[0] || [];
+              const normalize = s => String(s || "").trim().toLowerCase();
+              const idxMap = {};
+              ['ngay_nhan', 'mvd', 'mvd_2', 'ma_gian', 'sku_ct', 'slg', 'tinh_trang', 'kho'].forEach(key => {
+                  idxMap[key] = headers.findIndex(h => normalize(h) === normalize(key));
+              });
+
+              cachedHhBhData.clear();
+              for (let i = 1; i < response.values.length; i++) {
+                  const row = response.values[i];
+                  const mvdIdx = idxMap['mvd'];
+                  if (mvdIdx === -1) continue;
+                  
+                  const mvd = String(row[mvdIdx] || "").trim();
+                  if (mvd) {
+                      const dataObj = {};
+                      ['ngay_nhan', 'mvd', 'mvd_2', 'ma_gian', 'sku_ct', 'slg', 'tinh_trang', 'kho'].forEach(key => {
+                          const idx = idxMap[key];
+                          dataObj[key] = (idx !== -1 && row[idx]) ? row[idx] : "";
+                      });
+                      cachedHhBhData.set(mvd, dataObj);
+                  }
+              }
+              lastFetchHhBhMvdIdsTime = Date.now();
+              updateTrackingNumberColors();
+          }
+      } catch(e) {
+          console.error(e);
+      } finally {
+          isFetchingHhBhMvdIds = false;
+      }
+  }
+
+  function updateTrackingNumberColors() {
+      document.querySelectorAll('.tracking-number').forEach(el => {
+          const textNodes = Array.from(el.childNodes).filter(n => n.nodeType === Node.TEXT_NODE);
+          const mvd = textNodes.map(n => n.textContent).join('').trim();
+          
+          if (mvd && cachedHhBhData.has(mvd)) {
+              el.style.backgroundColor = "#22c55e";
+              el.style.color = "white";
+              el.style.padding = "2px 4px";
+              el.style.borderRadius = "4px";
+              el.style.border = "none";
+              el.style.display = "inline-flex";
+              el.style.alignItems = "center";
+              el.style.flexWrap = "wrap";
+              
+              const dataObj = cachedHhBhData.get(mvd);
+              let infoSpan = el.querySelector('.hh-bh-info');
+              if (!infoSpan) {
+                  infoSpan = document.createElement('span');
+                  infoSpan.className = 'hh-bh-info';
+                  infoSpan.style.marginLeft = '10px';
+                  infoSpan.style.fontSize = '12px';
+                  infoSpan.style.color = '#333';
+                  infoSpan.style.backgroundColor = '#f0f0f0';
+                  infoSpan.style.padding = '2px 6px';
+                  infoSpan.style.borderRadius = '4px';
+                  el.appendChild(infoSpan);
+              }
+              infoSpan.textContent = `${dataObj.ngay_nhan} | ${dataObj.mvd} | ${dataObj.mvd_2} | ${dataObj.ma_gian} | ${dataObj.sku_ct} | ${dataObj.slg} | ${dataObj.tinh_trang} | ${dataObj.kho}`;
+          } else {
+              el.style.backgroundColor = "transparent";
+              el.style.color = "inherit";
+              el.style.padding = "0";
+              el.style.border = "1px solid white";
+              
+              const infoSpan = el.querySelector('.hh-bh-info');
+              if (infoSpan) infoSpan.remove();
+          }
+      });
+  }
+
+  function extractShopeeCode(elementOrText) {
+    if (!elementOrText) return "";
+    let text = typeof elementOrText === "string" ? elementOrText : (elementOrText.textContent || "");
+    text = text.replace(/copy|sao\s*ch[eé]p|m[aã]\s*([đd][oơ]n\s*h[aà]ng|y[eê]u\s*c[aầ]u\s*tr[aả]\s*h[aà]ng)/gi, " ").trim();
+    const m = text.match(/([0-9]{6}[A-Z0-9]{7,14})/i);
+    if (m) {
+      let code = m[1].toUpperCase();
+      if (code.endsWith("COPY")) code = code.slice(0, -4);
+      return code;
+    }
+    return "";
+  }
+
+  function extractReturnRowData(orderIdEl) {
+    let current = orderIdEl;
+    let rowContainer = orderIdEl;
+    while(current && current.parentElement && current.parentElement !== document.body) {
+        if (current.parentElement.querySelectorAll(".id.order-id, .order-id, .return-row-item").length > 1) {
+            break;
+        }
+        current = current.parentElement;
+        rowContainer = current;
+    }
+
+    // 1. Trích xuất chính xác Mã đơn hàng (orderId)
+    let orderId = "";
+    const orderNode = (rowContainer && rowContainer.querySelector(".order-id .id-content, .id.order-id .id-content, .order-id, .id.order-id")) || orderIdEl;
+    if (orderNode) {
+      const contentEl = orderNode.querySelector(".id-content") || orderNode;
+      orderId = extractShopeeCode(contentEl.textContent);
+    }
+    if (!orderId && orderIdEl) {
+      orderId = extractShopeeCode(orderIdEl.textContent);
+    }
+
+    // 2. Trích xuất chính xác Mã yêu cầu trả hàng (returnId)
+    let returnId = "";
+    if (rowContainer) {
+      const returnIdNode = rowContainer.querySelector(".return-id .id-content, .id.return-id .id-content, .return-id, .id.return-id");
+      if (returnIdNode) {
+        const returnContent = returnIdNode.querySelector(".id-content") || returnIdNode;
+        returnId = extractShopeeCode(returnContent.textContent);
+      }
+    }
+
+    // Đảm bảo orderId không bị lấy nhầm thành returnId
+    if (orderId && returnId && orderId === returnId) {
+      const distinctOrderNode = rowContainer?.querySelector(".order-id .id-content");
+      if (distinctOrderNode) {
+        orderId = extractShopeeCode(distinctOrderNode.textContent);
+      }
+    }
+
+    // 3. Trích xuất mã vận đơn trả hàng
+    let tracking = "";
+    if (rowContainer) {
+      const trackingEl = rowContainer.querySelector(".item-return-logistic .tracking-number, .tracking-number, [class*=\"tracking\"]");
+      if (trackingEl) {
+        tracking = trackingEl.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+      } else {
+        const logisticHint = rowContainer.querySelector(".logistics-hint-text");
+        if (logisticHint && logisticHint.parentElement) {
+           const tEl = logisticHint.parentElement.querySelector(".tracking-number");
+           if (tEl) tracking = tEl.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+        }
+      }
+    }
+
+    // 4. Trích xuất lý do
+    let reason = "";
+    if (rowContainer) {
+      const rowText = rowContainer.innerText || rowContainer.textContent || "";
+      const commonReasons = [
+        "Khác với mô tả", "Tôi muốn thay đổi sản phẩm", "Thiếu hàng", "Hàng lỗi",
+        "Không hoạt động", "Hư hỏng", "Giao sai", "Hàng giả", "Chưa nhận được hàng",
+        "hàng không nguyên vẹn", "Bể vỡ", "Hết hạn sử dụng", "Tôi muốn cập nhật địa chỉ/sđt nhận hàng", "Tôi muốn thêm/thay đổi Mã giảm giá"
+      ];
+      for (const cr of commonReasons) {
+         if (rowText.includes(cr)) {
+             reason = cr;
+             break;
+         }
+      }
+      if (!reason) {
+          const allDivs = Array.from(rowContainer.querySelectorAll("div"));
+          const reasonDiv = allDivs.find(div => {
+              const txt = div.textContent.trim();
+              return txt && !div.children.length && txt.length > 5 && txt.length < 100 && !txt.includes("Mã") && !txt.includes("đơn hàng") && !txt.includes("Ngày") && !txt.includes("Giao") && !txt.includes("hoàn") && !txt.includes("yêu cầu");
+          });
+          if (reasonDiv) reason = reasonDiv.textContent.trim();
+      }
+    }
+
+    return { orderId, reason, returnId, tracking };
+  }
+
+  function updateCopyAllButtonColors() {
+      document.querySelectorAll(".btn-copy-all-check, button[aria-label*='Copy toan bo'], [class*='btn-copy-all']").forEach(btn => {
+          const id = btn.dataset.shopeeQlspCopyAllOrderId || getOrderSnFromText(btn.closest('.order-sn, [class*="order-sn"], tr, div')?.textContent || "");
+          if (id && (cachedDonHangMdhIndices.has(id) || cachedDhHoanIds.has(id))) {
+              btn.style.setProperty("background-color", "#cbb89d", "important"); // màu be
+              btn.style.setProperty("border-color", "#b7a285", "important");
+              btn.style.setProperty("color", "#3d3124", "important");
+              btn.style.setProperty("font-weight", "bold", "important");
+          } else {
+              btn.style.removeProperty("background-color");
+              btn.style.removeProperty("border-color");
+              btn.style.removeProperty("color");
+              btn.style.removeProperty("font-weight");
+          }
+      });
+  }
+
+  function updateCopyButtonColors() {
+      document.querySelectorAll(".btn-copy-return-data-check").forEach(btn => {
+          const id = btn.dataset.shopeeQlspCopyReturnOrderId;
+          if (!id) return;
+
+          // 1. ĐÃ CẬP NHẬT TRẠNG THÁI (Hủy / Hoàn / Trả) -> ĐỔI SANG MÀU XANH LÁ
+          if (cachedDhHoanStatusMap.has(id)) {
+              btn.style.setProperty("background-color", "#22c55e", "important"); // Màu xanh lá (#22c55e)
+              btn.style.setProperty("border-color", "#16a34a", "important");
+              btn.style.setProperty("color", "#ffffff", "important");
+              btn.style.setProperty("font-weight", "bold", "important");
+              btn.title = `Đã cập nhật trạng thái: ${cachedDhHoanStatusMap.get(id)}`;
+          }
+          // 2. ĐÃ CÓ TRONG SHEET DH (chưa cập nhật trạng thái Hủy/Hoàn/Trả) -> MÀU BE
+          else if (cachedDonHangMdhIndices.has(id) || cachedDhHoanIds.has(id)) {
+              btn.style.setProperty("background-color", "#cbb89d", "important"); // Màu be
+              btn.style.setProperty("border-color", "#b7a285", "important");
+              btn.style.setProperty("color", "#3d3124", "important");
+              btn.style.setProperty("font-weight", "bold", "important");
+              btn.title = "Đã có trong Sheet DH (chưa cập nhật trạng thái)";
+          }
+          // 3. CHƯA CÓ TRONG SHEET DH -> MÀU ĐỎ CAM
+          else {
+              btn.style.setProperty("background-color", "#ee4d2d", "important");
+              btn.style.removeProperty("border-color");
+              btn.style.setProperty("color", "#ffffff", "important");
+              btn.style.removeProperty("font-weight");
+              btn.title = "Chưa có trong Sheet DH";
+          }
+      });
+  }
+
+  function findOrderRowHref(orderIdEl, fallbackOrderId) {
+    let orderId = fallbackOrderId;
+    if (!orderId && orderIdEl) {
+      const data = extractReturnRowData(orderIdEl);
+      orderId = data.orderId;
+    }
+    if (!orderId && orderIdEl) {
+      orderId = extractShopeeCode(orderIdEl.textContent);
+    }
+    // Tuyệt đối không mở link /portal/sale/return/... (Mã yêu cầu trả hàng), mà luôn mở đúng trang Chi tiết đơn hàng (/portal/sale/order/...)
+    if (orderId) {
+      return `https://banhang.shopee.vn/portal/sale/order/${orderId}`;
+    }
+    return `https://banhang.shopee.vn/portal/sale/order`;
+  }
+
+  function buildDhRowFromReturnRow(data, maGian, action) {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2, "0");
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const yyyy = now.getFullYear();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const min = String(now.getMinutes()).padStart(2, "0");
+    
+    const ngay = `${dd}/${mm}/${yyyy}`;
+    const ngayGio = `${ngay} ${hh}:${min}`;
+    const mdh = String(data.orderId || "").trim();
+    const mvd = String(data.tracking || "").trim();
+    const linkDon = mdh ? `https://banhang.shopee.vn/portal/sale/order/${mdh}` : "";
+
+    const isHuy = action === "Hủy" || action === "HỦY" || /^h[uủ]y$/i.test(action);
+    const isHoan = /^ho[aà]n$/i.test(action) || action === "Hoàn" || action === "HOÀN";
+    const isTra = /^tr[aả]$/i.test(action) || action === "Trả" || action === "TRẢ";
+    const tinhTrang = isHuy ? "HỦY" : (isHoan ? "HOÀN" : (isTra ? "TRẢ" : ""));
+    const trangThai = "";
+
+    return [
+      maGian || "bce",                         // Col A (1): gian
+      ngay,                                   // Col B (2): ngay
+      ngayGio,                                // Col C (3): ngay_gio
+      mdh,                                    // Col D (4): mdh
+      mvd,                                    // Col E (5): mvd
+      0,                                      // Col F (6): tong_tien
+      0,                                      // Col G (7): ma_giam_gia
+      0,                                      // Col H (8): phi_vc
+      0,                                      // Col I (9): phu_phi
+      0,                                      // Col J (10): thue
+      0,                                      // Col K (11): doanh_thu
+      "",                                     // Col L (12): phi_khac
+      0,                                      // Col M (13): tien_sp
+      0,                                      // Col N (14): loi_nhuan
+      tinhTrang,                              // Col O (15): tinh_trang
+      trangThai,                              // Col P (16): trang_thai
+      "",                                     // Col Q (17): sku
+      "",                                     // Col R (18): id_sp
+      1,                                      // Col S (19): slg
+      0,                                      // Col T (20): don_gia
+      0,                                      // Col U (21): thanh_tien
+      "",                                     // Col V (22): ten_khach
+      "",                                     // Col W (23): ng_nhan
+      "",                                     // Col X (24): dia_chi
+      linkDon,                                // Col Y (25): link_don
+      data.returnId || "",                    // Col Z (26): ma_yc_tra_hang
+      mvd || ""                               // Col AA (27): vc_hang_hoan
+    ];
+  }
+
+  function handleDhHoanAction(action, orderIdEl, btn, customData = null) {
+      let data = customData;
+      if (!data && orderIdEl) {
+          data = extractReturnRowData(orderIdEl);
+      }
+      if (!data || !data.orderId) {
+          let oId = extractSellerOrderIdFromPage();
+          if (!oId) {
+              const urlMatch = window.location.pathname.match(/\/portal\/sale\/order\/(?:detail\/)?([0-9]{6}[A-Z0-9]{6,14})/i);
+              if (urlMatch && urlMatch[1] && /[A-Z]/i.test(urlMatch[1])) {
+                  oId = urlMatch[1].trim().toUpperCase();
+              }
+          }
+          if (oId) {
+              const pkg = extractSellerOrderPackageInfo() || {};
+              const tracking = pkg.tracking || "";
+              const returnId = extractSellerOrderReturnId() || "";
+              const reason = extractSellerOrderCancelOrReturnReason() || "";
+              data = { orderId: oId, tracking, returnId, reason };
+          }
+      }
+
+      if (!data || !data.orderId) {
+          alert("Không tìm thấy Mã đơn hàng!");
+          return;
+      }
+
+      const isHuy = action === "Hủy" || action === "HỦY" || /^h[uủ]y$/i.test(action);
+
+      // QUY TẮC: Ấn HỦY thì CHỈ cập nhật đơn nào CHƯA CẬP NHẬT TRẠNG THÁI!
+      // Nếu đơn này đã cập nhật trạng thái trước đó (nút Copy Data màu xanh lá):
+      if (isHuy && cachedDhHoanStatusMap.has(data.orderId)) {
+          alert(`Đơn hàng "${data.orderId}" đã cập nhật trạng thái (${cachedDhHoanStatusMap.get(data.orderId)}) rồi!\n\nChỉ cập nhật đơn nào chưa cập nhật trạng thái thôi.`);
+          return;
+      }
+      
+      const originalText = btn.dataset.originalText || btn.textContent;
+      btn.dataset.originalText = originalText;
+      btn.textContent = "⏳...";
+      btn.disabled = true;
+
+      let isFinished = false;
+      const resetBtnState = (newText = originalText, delayMs = 0) => {
+        if (isFinished) return;
+        isFinished = true;
+        clearTimeout(timer);
+        if (delayMs > 0) {
+          btn.textContent = newText;
+          setTimeout(() => {
+            btn.disabled = false;
+            btn.textContent = originalText;
+          }, delayMs);
+        } else {
+          btn.disabled = false;
+          btn.textContent = newText;
+        }
+      };
+
+      const timer = setTimeout(() => {
+        if (!isFinished) {
+          resetBtnState("Lỗi!", 2500);
+          alert(`Hết thời gian chờ khi cập nhật đơn "${data.orderId}". Vui lòng thử lại!`);
+        }
+      }, 30000);
+
+      chrome.storage.local.get(["maGian", "dhHoanTextValue"], (result) => {
+          const maGian = (result.maGian || result.dhHoanTextValue || "").trim();
+          const dhValues = [buildDhRowFromReturnRow(data, maGian, action)];
+
+          try {
+            chrome.runtime.sendMessage({ 
+                type: "UPDATE_DH_RETURN_STATUS", 
+                status: action === "Cập nhật" ? "" : action,
+                orderId: data.orderId, 
+                reason: data.reason, 
+                returnId: data.returnId, 
+                tracking: data.tracking,
+                maGian: maGian,
+                values: dhValues
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                  resetBtnState("Lỗi!", 2500);
+                  alert("Lỗi kết nối tiện ích: " + chrome.runtime.lastError.message);
+                  return;
+                }
+
+                if (response && response.ok) {
+                    if (response.skipped || response.notFound) {
+                        resetBtnState(response.alreadyUpdated ? "Đã có TT" : "Bỏ qua", 2500);
+                        alert(response.message || `Mã đơn "${data.orderId}" không có trong Sheet DH nên đã bỏ qua.`);
+                        if (response.alreadyUpdated) {
+                            cachedDhHoanStatusMap.set(data.orderId, "Đã cập nhật");
+                            updateCopyButtonColors();
+                        }
+                        return;
+                    }
+                    cachedDhHoanIds.add(data.orderId);
+                    cachedDhHoanStatusMap.set(data.orderId, action);
+                    updateCopyButtonColors();
+                    if (typeof updateOrderDetailButtonsStatus === "function") {
+                        updateOrderDetailButtonsStatus(data.orderId);
+                    }
+                    resetBtnState("OK!", 2000);
+                } else {
+                    resetBtnState("Lỗi!", 2500);
+                    alert("Lỗi cập nhật: " + (response?.error || "Không thể cập nhật Sheet DH"));
+                }
+            });
+          } catch (err) {
+            resetBtnState("Lỗi!", 2500);
+            alert("Lỗi gửi yêu cầu: " + err.message);
+          }
+      });
+  }
+
+  function createActionBtn(text, color, onClick) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = text;
+      btn.className = "eds-btn eds-btn--primary";
+      btn.style.marginLeft = "6px";
+      btn.style.padding = "0 8px";
+      btn.style.height = "22px";
+      btn.style.fontSize = "11px";
+      btn.style.lineHeight = "22px";
+      btn.style.cursor = "pointer";
+      btn.style.display = "inline-block";
+      btn.style.backgroundColor = color;
+      btn.style.border = "none";
+      btn.style.borderRadius = "3px";
+      btn.style.color = "#fff";
+      btn.style.fontWeight = "bold";
+
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onClick(e);
+      });
+      btn.addEventListener("mousedown", (e) => {
+        e.stopPropagation();
+      });
+      btn.addEventListener("mouseup", (e) => {
+        e.stopPropagation();
+      });
+      return btn;
+  }
+
+
+
+
+  function ensureReturnListCompactStyles() {
+    const styleId = "shopee-qlsp-return-compact-style";
+    if (document.getElementById(styleId)) return;
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      /* Bỏ thanh cuộn ngang và bóng mờ che khuất cột Vận chuyển hàng hoàn */
+      .order-list-section .scrollable-column,
+      .return-list-header-container .scrollable-column,
+      .return-row-item-content .scrollable-column {
+        overflow: visible !important;
+        width: 73% !important;
+        flex: 0 0 73% !important;
+        max-width: 73% !important;
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+      }
+      .order-list-section .return-list-header-wrapper > .item-product,
+      .order-list-section .return-row-item-content > .item-product {
+        width: 18% !important;
+        flex: 0 0 18% !important;
+        max-width: 18% !important;
+        padding-left: 6px !important;
+        padding-right: 4px !important;
+      }
+      .order-list-section .return-list-header-wrapper > .item-action,
+      .order-list-section .return-row-item-content > .eds-col:last-child {
+        width: 9% !important;
+        flex: 0 0 9% !important;
+        max-width: 9% !important;
+        padding-left: 4px !important;
+        padding-right: 6px !important;
+      }
+      .order-list-section .scrollable-content-wrapper,
+      .return-list-header-container .scrollable-content-wrapper,
+      .return-row-item-content .scrollable-content-wrapper {
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        scrollbar-width: none !important;
+      }
+      .order-list-section .scrollable-content-wrapper::-webkit-scrollbar,
+      .return-list-header-container .scrollable-content-wrapper::-webkit-scrollbar,
+      .return-row-item-content .scrollable-content-wrapper::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+      .order-list-section .right-shadow,
+      .order-list-section .left-shadow {
+        display: none !important;
+      }
+
+      /* Ép hàng chứa các cột giữa co vừa 100% khung nhìn */
+      .order-list-section .scrollable-content-wrapper > .eds-row,
+      .return-list-header-container .scrollable-content-wrapper > .eds-row,
+      .return-row-item-content .scrollable-content-wrapper > .eds-row,
+      .order-list-section .return-item-main-content {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        box-sizing: border-box !important;
+      }
+
+      /* Thu gọn khoảng cách chữ của tất cả cột bên trong */
+      .order-list-section .scrollable-content-wrapper > .eds-row > .eds-col,
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col,
+      .order-list-section .return-item-main-content > .eds-col {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+        word-break: break-word !important;
+        overflow-wrap: anywhere !important;
+        font-size: 12px !important;
+      }
+
+      /* 1. Số tiền hoàn cho Người mua */
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(1),
+      .order-list-section .return-item-main-content > .eds-col:nth-child(1) {
+        flex: 0 0 11% !important;
+        width: 11% !important;
+        max-width: 11% !important;
+      }
+
+      /* 2. Ẩn cột Số tiền bồi thường cho Người bán */
+      .order-list-section .scrollable-content-wrapper > .eds-row > .eds-col.item-compensation-amount,
+      .order-list-section .scrollable-content-wrapper > .eds-row > .eds-col:has(.item-compensation-amount),
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(2),
+      .order-list-section .return-item-main-content > .eds-col:nth-child(2) {
+        display: none !important;
+      }
+
+      /* 3. Lý do */
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(3),
+      .order-list-section .return-item-main-content > .eds-col:nth-child(3) {
+        flex: 0 0 13% !important;
+        width: 13% !important;
+        max-width: 13% !important;
+      }
+
+      /* 4. Lý do điều chỉnh bởi Shopee */
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(4),
+      .order-list-section .return-item-main-content > .eds-col:nth-child(4) {
+        flex: 0 0 8% !important;
+        width: 8% !important;
+        max-width: 8% !important;
+      }
+
+      /* 5. Phương án cho Người mua */
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(5),
+      .order-list-section .return-item-main-content > .eds-col:nth-child(5) {
+        flex: 0 0 11% !important;
+        width: 11% !important;
+        max-width: 11% !important;
+      }
+
+      /* 6. Trạng thái */
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(6),
+      .order-list-section .return-item-main-content > .eds-col:nth-child(6) {
+        flex: 0 0 16% !important;
+        width: 16% !important;
+        max-width: 16% !important;
+      }
+
+      /* 7. Vận chuyển chiều giao hàng */
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(7),
+      .order-list-section .return-item-main-content > .eds-col:nth-child(7) {
+        flex: 0 0 18% !important;
+        width: 18% !important;
+        max-width: 18% !important;
+      }
+
+      /* 8. Vận chuyển hàng hoàn (hiển thị đầy đủ mã vận đơn hoàn & thông tin kho) */
+      .return-list-header-container .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(8),
+      .order-list-section .return-item-main-content > .eds-col:nth-child(8) {
+        flex: 0 0 23% !important;
+        width: 23% !important;
+        max-width: 23% !important;
+      }
+
+      .order-list-section .hh-bh-info {
+        margin-left: 4px !important;
+        margin-top: 2px !important;
+        font-size: 11px !important;
+        line-height: 1.3 !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function renderReturnInfoCopyButtons() {
+    const href = (window.location.href || "").toLowerCase();
+    if (!href.includes('/portal/sale/returnrefundcancel') && !href.includes('/portal/sale/return')) {
+      return;
+    }
+
+    ensureReturnListCompactStyles();
+    updateDhHoanIdsCache().then(() => updateCopyButtonColors());
+    updateHhBhMvdIdsCache().then(() => updateTrackingNumberColors());
+    updateUdCtMdhIdsCache().then(() => updateUdCtBadgeColors());
+    updateTrackingNumberColors();
+    updateUdCtBadgeColors();
+
+    // Dọn dẹp bất kỳ badge tiêu đề cũ nào ở trên (chỉ giữ 1 ô hiển thị bên dưới trong cụm nút)
+    document.querySelectorAll('.ud-ct-badge').forEach(badge => {
+      if (!badge.closest('.shopee-ext-return-btn-container')) {
+        badge.remove();
+      }
+    });
+
+    const orderIdElements = document.querySelectorAll('.order-id, .id.order-id, [class*="order-id"]');
+    for (const orderIdEl of orderIdElements) {
+      if (orderIdEl.dataset.shopeeQlspCopyReturnInfo === "1" || orderIdEl.closest('.shopee-ext-return-btn-container')) {
+        continue;
+      }
+
+      const data = extractReturnRowData(orderIdEl);
+      const directOrderId = data.orderId || extractShopeeCode(orderIdEl.textContent);
+      if (!directOrderId) continue;
+
+      orderIdEl.dataset.shopeeQlspCopyReturnInfo = "1";
+
+      const container = document.createElement("span");
+      container.className = "shopee-ext-return-btn-container";
+      container.style.display = "inline-flex";
+      container.style.alignItems = "center";
+      container.style.marginLeft = "8px";
+      container.style.verticalAlign = "middle";
+      container.addEventListener("click", (e) => { e.stopPropagation(); });
+      container.addEventListener("mousedown", (e) => { e.stopPropagation(); });
+
+      const btnCopy = createActionBtn("Copy Data", "#ee4d2d", () => {
+        const rowData = extractReturnRowData(orderIdEl);
+        if (!rowData) return;
+        const copyLines = [];
+        if (rowData.orderId) copyLines.push(`Mã đơn hàng: ${rowData.orderId}`);
+        if (rowData.reason) copyLines.push(`Lý do: ${rowData.reason}`);
+        if (rowData.returnId) copyLines.push(`Mã yêu cầu trả hàng: ${rowData.returnId}`);
+        if (rowData.tracking) copyLines.push(`Vận chuyển hàng hoàn: ${rowData.tracking}`);
+        const udCtVal = cachedUdCtMdhIds.get(directOrderId) || (directOrderId && cachedUdCtMdhIds.get(directOrderId.toUpperCase()));
+        if (udCtVal) {
+          copyLines.push(`Xuất kho (UD_CT): ${udCtVal.replace(/<br\s*\/?>/gi, ' ; ')}`);
+        }
+        const copyText = copyLines.join('\n');
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(copyText).then(() => {
+                btnCopy.textContent = "Copied!";
+                setTimeout(() => { btnCopy.textContent = "Copy Data"; }, 1500);
+            });
+        } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = copyText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+            btnCopy.textContent = "Copied!";
+            setTimeout(() => { btnCopy.textContent = "Copy Data"; }, 1500);
+        }
+      });
+      
+      btnCopy.dataset.shopeeQlspCopyReturnOrderId = directOrderId;
+      btnCopy.classList.add("btn-copy-return-data-check");
+      
+      if (directOrderId) {
+          if (cachedDhHoanStatusMap.has(directOrderId)) {
+              btnCopy.style.backgroundColor = "#22c55e"; // màu xanh lá
+              btnCopy.style.borderColor = "#16a34a";
+              btnCopy.style.color = "#ffffff";
+              btnCopy.style.fontWeight = "bold";
+          } else if (cachedDhHoanIds.has(directOrderId) || cachedDonHangMdhIndices.has(directOrderId)) {
+              btnCopy.style.backgroundColor = "#cbb89d"; // màu be
+              btnCopy.style.borderColor = "#b7a285";
+              btnCopy.style.color = "#3d3124";
+              btnCopy.style.fontWeight = "bold";
+          }
+      }
+      container.appendChild(btnCopy);
+
+      const btnTra = createActionBtn("Trả", "#3b82f6", () => handleDhHoanAction("Trả", orderIdEl, btnTra));
+      container.appendChild(btnTra);
+
+      const btnHuy = createActionBtn("Hủy", "#ef4444", () => handleDhHoanAction("Hủy", orderIdEl, btnHuy));
+      container.appendChild(btnHuy);
+
+      const btnHoan = createActionBtn("Hoàn", "#f59e0b", () => handleDhHoanAction("Hoàn", orderIdEl, btnHoan));
+      container.appendChild(btnHoan);
+
+      const btnUpdate = createActionBtn("Cập nhật", "#64748b", () => handleDhHoanAction("Cập nhật", orderIdEl, btnUpdate));
+      container.appendChild(btnUpdate);
+
+      // Thêm badge UD_CT vào container cạnh các nút thao tác
+      const udCtBadge = document.createElement("span");
+      udCtBadge.className = "ud-ct-badge";
+      udCtBadge.dataset.shopeeQlspOrderId = directOrderId;
+      udCtBadge.dataset.shopeeQlspUdCtFilled = "0";
+      udCtBadge.style.marginLeft = "8px";
+      udCtBadge.style.padding = "2px 6px";
+      udCtBadge.style.borderRadius = "4px";
+      udCtBadge.style.fontSize = "12px";
+      udCtBadge.style.fontWeight = "bold";
+      udCtBadge.style.border = "none";
+      udCtBadge.style.display = "inline-flex";
+      udCtBadge.style.alignItems = "center";
+      const udCtTextBottom = cachedUdCtMdhIds.get(directOrderId) || (directOrderId && cachedUdCtMdhIds.get(directOrderId.toUpperCase()));
+      if (udCtTextBottom) {
+        udCtBadge.innerHTML = udCtTextBottom;
+        udCtBadge.style.backgroundColor = "#22c55e";
+        udCtBadge.style.color = "white";
+      } else {
+        udCtBadge.style.backgroundColor = "transparent";
+        udCtBadge.style.color = "transparent";
+      }
+      container.appendChild(udCtBadge);
+
+      // Gắn cụm nút ra ngoài thẻ link (nếu orderIdEl nằm trong thẻ <a>) để tránh kích hoạt link sản phẩm
+      const linkParent = orderIdEl.tagName === 'A' ? orderIdEl : orderIdEl.closest('a');
+      if (linkParent && linkParent.parentElement) {
+        linkParent.parentElement.insertBefore(container, linkParent.nextSibling);
+      } else {
+        orderIdEl.appendChild(container);
+      }
+    }
+  }
+
+  window.setTimeout(refreshVisibleProductGallery, 1200);
+  window.setTimeout(refreshVisibleProductGallery, 3500);
+  function normalizeOrderDetailText(value) {
+      return String(value || "")
+          .replace(/\u00a0/g, " ")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/\u0111/g, "d")
+          .replace(/\u0110/g, "D")
+          .replace(/đ/g, "d")
+          .replace(/Đ/g, "D")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+  }
+
+  function cleanOrderDetailText(value) {
+      return String(value || "")
+          .replace(/\u00a0/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+  }
+
+  function getOrderDetailOwnText(element) {
+      return Array.from(element?.childNodes || [])
+          .filter((node) => node.nodeType === Node.TEXT_NODE)
+          .map((node) => node.textContent || "")
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+  }
+
+  function isOrderDetailVisible(element) {
+      if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
+      const style = window.getComputedStyle(element);
+      return style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0" && element.getClientRects().length > 0;
+  }
+
+  function getOrderDetailLines(root = document.body) {
+      return String(root?.innerText || root?.textContent || "")
+          .split(/\r?\n+/)
+          .map(cleanOrderDetailText)
+          .filter(Boolean);
+  }
+
+  function extractOrderMoneyValues(text) {
+      return String(text || "").match(/(?:[-–—]\s*)?₫\s*[\d.,]+|[\d.,]+\s*₫|(?:[-–—]\s*)?\b\d{1,3}(?:\.\d{3})+(?:,\d+)?\b/g) || [];
+  }
+
+  function extractSellerOrderIdFromPage() {
+    const isValidShopeeOrderSn = (str) => {
+      if (!str) return false;
+      const s = String(str).trim();
+      // Bắt buộc KHÔNG được là chuỗi thuần số (vì thuần số dài >= 12 là Order ID nội bộ URL, ví dụ 242626023297466)
+      if (/^\d+$/.test(s)) return false;
+      // Không phải từ khóa hệ thống
+      if (/^(detail|order|undefined|null|none|cancel|refund|return|portal|sale|setting|batch|list)$/i.test(s)) return false;
+      // Mã đơn hàng Shopee chuẩn: 6 số đầu (YYMMDD) + 6-14 ký tự alphanumeric, có chứa chữ cái (ví dụ: 260909J70XAVDT)
+      if (/^[0-9]{6}[A-Z0-9]{6,14}$/i.test(s) && /[A-Z]/i.test(s)) {
+        return true;
+      }
+      // Khớp chuỗi alphanumeric 12-20 ký tự có cả chữ và số
+      if (/^[A-Z0-9]{12,20}$/i.test(s) && /[A-Z]/i.test(s) && /[0-9]/.test(s)) {
+        return true;
+      }
+      return false;
+    };
+
+    // 1. Quét nhãn "Mã đơn hàng" hoặc "Order SN"
+    const labels = Array.from(document.querySelectorAll('.label, dt, span, div, p, h3, h4, strong, b')).filter(el => {
+      const t = normalizeOrderDetailText(el.textContent || "");
+      return (t === "ma don hang" || t === "order sn" || t.startsWith("ma don hang:") || t.startsWith("order sn:")) && el.children.length <= 1;
+    });
+
+    for (const lbl of labels) {
+      // Quét các cấp cha của nhãn (lên tới 5 cấp để bao trọn toàn bộ Card/Panel "Mã đơn hàng")
+      let container = lbl.parentElement;
+      for (let depth = 0; depth < 5 && container; depth++) {
+        const candidates = Array.from(container.querySelectorAll('span, div, p, strong, b, a, dd, .body, [class*="value"], [class*="content"]'));
+        for (const cand of candidates) {
+          if (cand === lbl) continue;
+          const txt = (cand.innerText || cand.textContent || "").trim();
+          if (isValidShopeeOrderSn(txt)) {
+            return txt.toUpperCase();
+          }
+          const m = txt.match(/\b([0-9]{6}[A-Z0-9]{6,14})\b/i);
+          if (m && isValidShopeeOrderSn(m[1])) {
+            return m[1].toUpperCase();
+          }
+        }
+        const cText = (container.innerText || container.textContent || "");
+        const mCont = cText.match(/\b([0-9]{6}[A-Z0-9]{6,14})\b/i);
+        if (mCont && isValidShopeeOrderSn(mCont[1])) {
+          return mCont[1].toUpperCase();
+        }
+        container = container.parentElement;
+      }
+    }
+
+    // 2. Quét trong các thẻ có class chứa order-sn, order-id, ordersn
+    const directSnEls = Array.from(document.querySelectorAll(".order-sn, .order-id, [class*='order-sn'], [class*='orderId'], [class*='ordersn']"));
+    for (const directEl of directSnEls) {
+      const txt = (directEl.innerText || directEl.textContent || "").trim();
+      if (isValidShopeeOrderSn(txt)) return txt.toUpperCase();
+      const m = txt.match(/\b([0-9]{6}[A-Z0-9]{6,14})\b/i);
+      if (m && isValidShopeeOrderSn(m[1])) return m[1].toUpperCase();
+    }
+
+    // 3. Quét toàn bộ dòng text trên trang tìm mã đơn dạng 260909J70XAVDT
+    const lines = getOrderDetailLines();
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const norm = normalizeOrderDetailText(line);
+      if (norm.includes("ma don hang") || norm.includes("order sn")) {
+        for (let off = 0; off <= 3; off++) {
+          const targetLine = lines[i + off] || "";
+          const m = targetLine.match(/\b([0-9]{6}[A-Z0-9]{6,14})\b/i);
+          if (m && isValidShopeeOrderSn(m[1])) return m[1].toUpperCase();
+        }
+      }
+    }
+
+    // 4. Quét tìm bất kỳ mã nào trên toàn trang có dạng YYMMDD + Alphanumeric (e.g. 260909J70XAVDT, 24xxxx, 25xxxx)
+    for (const line of lines) {
+      const mAlpha = line.match(/\b([0-9]{6}[A-Z0-9]{6,14})\b/i);
+      if (mAlpha && isValidShopeeOrderSn(mAlpha[1])) {
+        return mAlpha[1].toUpperCase();
+      }
+    }
+
+    // 5. Query param ?order_sn=...
+    const searchMatch = location.search.match(/[?&](?:order_sn|ordersn)=([0-9]{6}[A-Z0-9]{6,14})/i);
+    if (searchMatch && isValidShopeeOrderSn(searchMatch[1])) return searchMatch[1].toUpperCase();
+
+    // 6. Pathname chỉ lấy nếu là mã alphanumeric thực sự có chữ cái (TUYỆT ĐỐI KHÔNG lấy dãy số ID nội bộ URL)
+    const urlMatch = location.pathname.match(/\/sale\/order\/(?:detail\/)?([0-9]{6}[A-Z0-9]{6,14})/i);
+    if (urlMatch && isValidShopeeOrderSn(urlMatch[1])) return urlMatch[1].toUpperCase();
+
+    return "";
+  }
+
+  function findOrderPackageContainer(trackingText) {
+      const candidates = Array.from(document.querySelectorAll("span.label, div, span")).filter(isOrderDetailVisible);
+      const trackingNeedle = normalizeOrderDetailText(trackingText || "").replace(/^#\s*/, "");
+      const matching = candidates.find((element) => {
+          const text = normalizeOrderDetailText(element.textContent);
+          return trackingNeedle && text.includes(trackingNeedle);
+      });
+
+      let current = matching;
+      for (let depth = 0; depth < 8 && current; depth++) {
+          const text = normalizeOrderDetailText(current.innerText || current.textContent);
+          if (text.includes("kien hang") || text.includes("giao hang") || text.includes("nhanh")) {
+              return current;
+          }
+          current = current.parentElement;
+      }
+      return matching || null;
+  }
+
+  function extractSellerOrderCreatedAt() {
+    const timePattern1 = /\b(\d{1,2}:\d{2}(?::\d{2})?)\s+(\d{1,2}\/\d{1,2}\/\d{4})\b/;
+    const timePattern2 = /\b(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?)\b/;
+
+    const parseTimeFromText = (txt) => {
+      if (!txt) return "";
+      const m1 = txt.match(timePattern1);
+      if (m1) return `${m1[1]} ${m1[2]}`;
+      const m2 = txt.match(timePattern2);
+      if (m2) return `${m2[2]} ${m2[1]}`;
+      return "";
+    };
+
+    // 1. ƯU TIÊN SỐ 1 TUYỆT ĐỐI: Khung Lịch sử đơn hàng (.order-history, [data-testid="sdp-order-history"], .od-log)
+    // Tìm đúng .od-log có chứa "Đơn hàng mới"
+    const historyLogs = Array.from(document.querySelectorAll('.order-history .od-log, [data-testid="sdp-order-history"] .od-log, .od-log'));
+    for (const log of historyLogs) {
+      const statusEl = log.querySelector('.status, .status-log, [class*="status"]');
+      const statusText = normalizeOrderDetailText(statusEl ? statusEl.textContent : log.textContent);
+      if (statusText.includes("don hang moi") || statusText.includes("thoi gian dat hang") || statusText.includes("ngay dat") || statusText.includes("dat hang thanh cong") || statusText.includes("order placed")) {
+        const timeEl = log.querySelector('.time, [class*="time"]');
+        if (timeEl) {
+          const t = parseTimeFromText(timeEl.textContent);
+          if (t) return t;
+        }
+        const t = parseTimeFromText(log.textContent);
+        if (t) return t;
+      }
+    }
+
+    // Nếu không khớp chữ, trong .order-history, mốc cuối cùng chính là "Đơn hàng mới"
+    if (historyLogs.length > 0) {
+      for (let i = historyLogs.length - 1; i >= 0; i--) {
+        const log = historyLogs[i];
+        const timeEl = log.querySelector('.time, [class*="time"]');
+        const t = parseTimeFromText(timeEl ? timeEl.textContent : log.textContent);
+        if (t) return t;
+      }
+    }
+
+    // 2. Tìm phần tử chứa chữ "Đơn hàng mới" (chỉ lấy leaf node / element nhỏ nhất)
+    const statusEls = Array.from(document.querySelectorAll('.status, div, span, p')).filter(el => {
+      const t = normalizeOrderDetailText(el.textContent);
+      return (t === "don hang moi" || t.startsWith("don hang moi:") || t === "thoi gian dat hang" || t === "ngay dat hang") && el.children.length === 0;
+    });
+
+    for (const sEl of statusEls) {
+      const parent = sEl.closest('.od-log, .eds-timeline-item, .timeline-item, .status-log, div');
+      if (parent) {
+        const timeEl = parent.querySelector('.time, [class*="time"]');
+        if (timeEl) {
+          const t = parseTimeFromText(timeEl.textContent);
+          if (t) return t;
+        }
+        const t = parseTimeFromText(parent.textContent);
+        if (t) return t;
+      }
+    }
+
+    // 3. Fallback: Dòng text cạnh "đơn hàng mới"
+    const lines = getOrderDetailLines();
+    for (let i = 0; i < lines.length; i++) {
+      const norm = normalizeOrderDetailText(lines[i]);
+      if (norm.includes("don hang moi") || norm.includes("thoi gian dat") || norm.includes("ngay dat")) {
+        for (let off = 0; off <= 3; off++) {
+          const l = lines[i + off] || "";
+          const t = parseTimeFromText(l);
+          if (t) return t;
+        }
+      }
+    }
+
+    return "";
+  }
+
+  function extractSellerOrderPackageInfo() {
+      const labelTexts = Array.from(document.querySelectorAll("span.label, div.label, .label"))
+          .map((element) => cleanOrderDetailText(element.textContent))
+          .filter(Boolean);
+      let tracking = "";
+      const trackingLabel = labelTexts.find((text) => /#\s*[A-Z0-9-]+/i.test(text));
+      if (trackingLabel) {
+          tracking = (trackingLabel.match(/#\s*([A-Z0-9-]+)/i) || [])[1] || "";
+      }
+
+      const globalLines = getOrderDetailLines();
+      if (!tracking) {
+          const trackingLine = globalLines.find((line) => /#\s*[A-Z0-9-]+/i.test(line));
+          tracking = trackingLine ? ((trackingLine.match(/#\s*([A-Z0-9-]+)/i) || [])[1] || "") : "";
+      }
+
+      if (!tracking) {
+          const directTrkEl = document.querySelector('.tracking-number, [class*="tracking-number"], [data-testid="tracking-number"], .item-return-logistic .tracking-number');
+          if (directTrkEl) {
+              const tText = (directTrkEl.textContent || "").replace(/^#\s*/, '').replace(/copy|sao\s*ch[eé]p/gi, '').trim();
+              if (tText) tracking = tText;
+          }
+      }
+
+      if (!tracking) {
+          for (const line of globalLines) {
+              const mvdMatch = line.match(/(?:Mã vận đơn|Tracking No|MVD|Mã kiện hàng|Tracking)[:\s#]*([A-Z0-9_-]{6,30})/i);
+              if (mvdMatch) {
+                  tracking = mvdMatch[1].trim();
+                  break;
+              }
+              const carrierCodeMatch = line.match(/\b(SPXVN[A-Z0-9]+|VNP[A-Z0-9]+|VN[0-9]{8,}[A-Z0-9]*|JNT[A-Z0-9]+)\b/i);
+              if (carrierCodeMatch) {
+                  tracking = carrierCodeMatch[1].trim();
+                  break;
+              }
+          }
+      }
+
+      const container = findOrderPackageContainer(tracking);
+      const lines = getOrderDetailLines(container || document.body);
+      let packageName = "";
+      let shippingType = "";
+      let carrier = "";
+
+      const packageIndex = lines.findIndex((line) => normalizeOrderDetailText(line).includes("kien hang"));
+      if (packageIndex >= 0) {
+          packageName = lines[packageIndex].replace(/:$/, "").trim();
+      }
+
+      const startIndex = packageIndex >= 0 ? packageIndex + 1 : 0;
+      const packageDataLines = lines.slice(startIndex).filter((line) => {
+          const normalized = normalizeOrderDetailText(line);
+          return line &&
+              !normalized.includes("ma don hang") &&
+              !normalized.includes("sku phan loai") &&
+              !normalized.includes("so luong") &&
+              !extractOrderMoneyValues(line).length &&
+              !/^#/.test(line.trim());
+      });
+
+      const trackingLine = lines.find((line) => /#\s*[A-Z0-9-]+/i.test(line));
+      if (!tracking && trackingLine) {
+          tracking = (trackingLine.match(/#\s*([A-Z0-9-]+)/i) || [])[1] || "";
+      }
+
+      shippingType = packageDataLines[0] || "";
+      carrier = packageDataLines[1] || "";
+
+      return { packageName, shippingType, carrier, tracking };
+  }
+
+  function collectSellerOrderPaymentItems() {
+      const items = [];
+      const addItem = (label, value) => {
+          const cleanLabel = cleanOrderDetailText(label);
+          const cleanValue = cleanOrderDetailText(value);
+          if (!cleanLabel || !cleanValue || !extractOrderMoneyValues(cleanValue).length) return;
+          const norm = normalizeOrderDetailText(cleanLabel);
+          const key = `${norm}|||${cleanValue}`;
+          if (!items.some((item) => item.key === key)) {
+              items.push({ key, label: cleanLabel, normalizedLabel: norm, value: cleanValue });
+          }
+      };
+
+      // Tìm đúng các khối Doanh thu / Chi phí của Shopee (Bỏ qua hoàn toàn các khối tiện ích chèn vào)
+      const incomeRoots = Array.from(document.querySelectorAll(
+        ".order-income-section, .order-panel-income, .order-income, .income-section, " +
+        "[class*='order-income'], [class*='income-detail'], [data-testid*='income'], [data-testid*='payment'], .income-info"
+      )).filter(el => !el.closest("#ext-sidebar-root, .ext-panel, .shopee-qlsp-container, [id*='nhieu-don'], [id*='tab-']"));
+
+      const searchRoots = incomeRoots.length > 0 ? incomeRoots : [document.body];
+
+      for (const root of searchRoots) {
+        const itemContainers = root.querySelectorAll(
+          ".income-item, .income-detail-item, .payment-item, .order-income-item, " +
+          "[class*='income-item'], [class*='incomeItem'], [class*='cost-item'], .item, tr, dt"
+        );
+        itemContainers.forEach((item) => {
+          if (item.closest("#ext-sidebar-root, .ext-panel, .shopee-qlsp-container, [id*='nhieu-don'], [id*='tab-']")) return;
+
+          const labelEl = item.querySelector(".income-label-text, .label, .income-label, [class*='label'], [class*='title'], dt, span:first-child");
+          const valueEl = item.querySelector(".income-value, .amount, .value, [class*='value'], [class*='amount'], dd, span:last-child");
+          if (labelEl && valueEl && labelEl !== valueEl) {
+            addItem(labelEl.textContent || "", valueEl.textContent || "");
+          }
+        });
+
+        // Chỉ quét text các dòng nằm trong đúng khối incomeRoots của Shopee
+        if (root !== document.body) {
+          const lines = getOrderDetailLines(root);
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const sameLineMoney = extractOrderMoneyValues(line);
+            if (sameLineMoney.length) {
+              const label = line.replace(sameLineMoney[sameLineMoney.length - 1], "").trim();
+              if (label) addItem(label, sameLineMoney[sameLineMoney.length - 1]);
+            }
+            if (lines[i + 1] && extractOrderMoneyValues(lines[i + 1]).length) {
+              addItem(line, lines[i + 1]);
+            }
+          }
+        }
+      }
+
+      return items;
+  }
+
+  function findSellerOrderPaymentValue(paymentItems, labels) {
+      const keys = labels.map(normalizeOrderDetailText).filter(Boolean);
+      for (const key of keys) {
+          const exact = paymentItems.find((item) => item.normalizedLabel === key);
+          if (exact) return exact.value;
+      }
+      for (const key of keys) {
+          const starts = paymentItems.find((item) => item.normalizedLabel.startsWith(key));
+          if (starts) return starts.value;
+      }
+      for (const key of keys) {
+          const includes = paymentItems.find((item) => item.normalizedLabel.includes(key));
+          if (includes) return includes.value;
+      }
+      return "";
+  }
+
+  function findSellerOrderProductContainer(skuElement) {
+      let current = skuElement;
+      for (let depth = 0; depth < 8 && current; depth++) {
+          const className = String(current.className || "");
+          if (/product|item|order/i.test(className) && (current.querySelector(".qty") || extractOrderMoneyValues(current.innerText || "").length)) {
+              return current;
+          }
+          current = current.parentElement;
+      }
+      return skuElement.parentElement || skuElement;
+  }
+
+  function extractSellerOrderProducts() {
+      const rawContainers = Array.from(document.querySelectorAll(
+        ".order-view-item, .order-product-wrapper, .order-item, .product-item, .item-card, " +
+        "[class*='order-view-item'], [class*='order-item'], [class*='orderProduct'], [class*='product-item']"
+      )).filter(isOrderDetailVisible);
+
+      if (rawContainers.length > 0) {
+          // Loại bỏ các container cha bao ngoài container con để chống nhân đôi sản phẩm
+          const productContainers = rawContainers.filter(c => {
+            return !rawContainers.some(other => other !== c && c.contains(other));
+          });
+
+          const results = [];
+          const seenProductKeys = new Set();
+
+          for (const container of productContainers) {
+              const rowElement = container.closest('tr, [class*="table__row"], [class*="table-row"], [class*="order-item-row"], [class*="item-row"], [role="row"]') || container.parentElement || container;
+
+              const clone = container.cloneNode(true);
+              clone.querySelectorAll('button, .ext-copy-sku-btn, .ext-copy-prod-name-btn, .ext-open-product-wrapper, .ext-product-actions-footer, .shopee-qlsp-sku-display, .shopee-qlsp-copy-button, .btn-copy-price, .injected-sku-ct').forEach(n => n.remove());
+
+              const cleanText = (el) => el ? el.textContent.replace(/\s+/g, ' ').trim() : '';
+
+              // 1. Tên sản phẩm & Mã trong ngoặc vuông [CODE] từ tên SP
+              const titleEl = clone.querySelector(".ct-item-product-name, .product-name, [class*='product-name'], [class*='item-name']");
+              const productName = cleanText(titleEl);
+              let titleBracketCode = "";
+              const mBracket = productName.match(/\[([A-Z0-9_-]{3,35})\]/i);
+              if (mBracket && !/^(copy|sp|sku)$/i.test(mBracket[1])) {
+                  titleBracketCode = mBracket[1].trim();
+              }
+
+              // 2. Tìm SKU từ các dòng meta
+              let skuFromMeta = "";
+              let variationName = "";
+              const metaLines = Array.from(clone.querySelectorAll(".ct-item-meta, .item-meta, [class*='ct-item-meta'], [class*='item-meta'], [class*='sku'], [class*='variation'], .product-meta > div, [class*='product-meta'] > div"))
+                  .map(cleanText).filter(Boolean);
+
+              const allLines = (clone.innerText || clone.textContent || "").split('\n').map(l => l.trim()).filter(Boolean);
+              const combinedLines = [...new Set([...metaLines, ...allLines])];
+
+              for (const line of combinedLines) {
+                  if (/sku\s*ph[aâ]n\s*lo[aạ]i|m[aã]\s*ph[aâ]n\s*lo[aạ]i|m[aã]\s*sku|^sku\s*:/i.test(line)) {
+                      let val = line.replace(/.*(?:sku\s*ph[aâ]n\s*lo[aạ]i|m[aã]\s*ph[aâ]n\s*lo[aạ]i|m[aã]\s*sku|^sku)\s*:\s*/i, '').trim();
+                      val = val.replace(/copy\s*sku|sao\s*ch[eé]p\s*sku|copy|sao\s*ch[eé]p/gi, '').trim();
+                      if (val && !/^(copy|sku|sp)$/i.test(val)) {
+                          skuFromMeta = val;
+                          break;
+                      }
+                  }
+                  if (/m[aã]\s*s[aả]n\s*ph[aẩ]m/i.test(line)) {
+                      let val = line.replace(/.*m[aã]\s*s[aả]n\s*ph[aẩ]m\s*:\s*/i, '').trim();
+                      val = val.replace(/copy\s*sku|sao\s*ch[eé]p\s*sku|copy|sao\s*ch[eé]p/gi, '').trim();
+                      if (val && !/^(copy|sku|sp)$/i.test(val)) {
+                          skuFromMeta = val;
+                          break;
+                      }
+                  }
+                  if (/ph[aâ]n\s*lo[aạ]i(?:\s*h[aà]ng)?\s*:/i.test(line) && !variationName) {
+                      variationName = line.replace(/.*ph[aâ]n\s*lo[aạ]i(?:\s*h[aà]ng)?\s*:/i, '').trim();
+                  }
+              }
+
+              let finalSku = skuFromMeta || titleBracketCode || variationName || (productName ? productName.substring(0, 35) : "SP");
+              finalSku = finalSku.replace(/copy\s*sku|sao\s*ch[eé]p/gi, '').trim();
+              if (!finalSku) finalSku = titleBracketCode || "SP";
+
+              // 3. BÓC TÁCH SỐ LƯỢNG CHÍNH XÁC (TỪ CỘT BẢNG / DOM HÀNG / TỶ LỆ TIỀN)
+              let quantity = "";
+              let unitPriceFromRow = "";
+
+              // 3.1. Tìm từ bảng: Xác định vị trí cột "Số lượng" từ Header thead
+              const tableEl = rowElement.closest('table');
+              if (tableEl) {
+                const headerEls = Array.from(tableEl.querySelectorAll('thead th, thead td, th'));
+                const qtyColIdx = headerEls.findIndex(th => {
+                  const hText = (th.textContent || "").trim().toLowerCase();
+                  return hText === "số lượng" || hText === "so luong" || hText === "qty" || hText === "quantity" || hText.includes("số lượng");
+                });
+                const unitPriceColIdx = headerEls.findIndex(th => {
+                  const hText = (th.textContent || "").trim().toLowerCase();
+                  return hText === "đơn giá" || hText === "don gia" || hText === "unit price" || hText.includes("đơn giá");
+                });
+
+                const cells = Array.from(rowElement.querySelectorAll('td, th'));
+                if (qtyColIdx !== -1 && cells[qtyColIdx]) {
+                  const cText = (cells[qtyColIdx].innerText || cells[qtyColIdx].textContent || "").trim();
+                  const m = cText.match(/^[xX*×]?\s*([1-9]\d{0,4})\s*$/);
+                  if (m) {
+                    quantity = m[1];
+                  }
+                }
+                if (unitPriceColIdx !== -1 && cells[unitPriceColIdx]) {
+                  const uText = (cells[unitPriceColIdx].innerText || cells[unitPriceColIdx].textContent || "").trim();
+                  const mU = extractOrderMoneyValues(uText);
+                  if (mU.length > 0) {
+                    unitPriceFromRow = mU[0];
+                  }
+                }
+              }
+
+              // 3.2. Quét DOM trong rowElement tìm nhãn / ô số lượng
+              if (!quantity || quantity === "1") {
+                const rowCells = Array.from(rowElement.querySelectorAll('td, .eds-table__cell, .shopee-table__cell, [class*="cell"]'));
+                for (let cIdx = 0; cIdx < rowCells.length; cIdx++) {
+                  const cell = rowCells[cIdx];
+                  // Bỏ qua cột đầu tiên (STT) nếu có nhiều cột
+                  if (cIdx === 0 && rowCells.length > 2) continue;
+                  // Bỏ qua ô chứa tên sản phẩm
+                  if (cell.querySelector('.product-name, [class*="product-name"], .ct-item-product-name, .item-name')) continue;
+
+                  const cText = (cell.innerText || cell.textContent || "").trim();
+                  // Nhận diện số lượng nguyên vẹn (ví dụ: "12", "x12", "x 12")
+                  if (/^[xX*×]?\s*([1-9]\d{0,4})\s*$/.test(cText) && !cText.includes('.')) {
+                    const numVal = parseInt(cText.replace(/[^0-9]/g, ''), 10);
+                    if (numVal >= 1 && numVal <= 10000) {
+                      quantity = String(numVal);
+                      break;
+                    }
+                  }
+                }
+              }
+
+              // 3.3. Tìm qua class qty/quantity
+              if (!quantity || quantity === "1") {
+                const qtyCandidates = Array.from(rowElement.querySelectorAll(
+                  ".ct-item-product-num, .ct-item-product-qty, .qty, .quantity, [class*='qty'], [class*='quantity'], [class*='num'], [class*='count']"
+                ));
+                for (const el of qtyCandidates) {
+                  if (el.children.length === 0) {
+                    const txt = (el.innerText || el.textContent || "").trim();
+                    if (/^[xX*×]?\s*([1-9]\d{0,4})\s*$/.test(txt)) {
+                      const m = txt.match(/^[xX*×]?\s*([1-9]\d{0,4})\s*$/);
+                      if (m) {
+                        quantity = m[1];
+                        break;
+                      }
+                    }
+                    if (/(?:số lượng|sl|qty|quantity)\s*:\s*([1-9]\d{0,4})/i.test(txt)) {
+                      const m = txt.match(/(?:số lượng|sl|qty|quantity)\s*:\s*([1-9]\d{0,4})/i);
+                      if (m) {
+                        quantity = m[1];
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+
+              // 3.4. Tính toán qua tỷ lệ tiền trong hàng: Thành tiền / Đơn giá (Ví dụ: 2.760.000 / 230.000 = 12)
+              const rawMoneyMatches = extractOrderMoneyValues(rowElement.innerText || rowElement.textContent || "");
+              const numericAmounts = rawMoneyMatches.map(parseSellerOrderMoneyNumber).filter(n => n > 0);
+              
+              if (numericAmounts.length >= 2) {
+                const sortedPrices = [...new Set(numericAmounts)].sort((a, b) => a - b);
+                for (let i = 0; i < sortedPrices.length; i++) {
+                  for (let j = i + 1; j < sortedPrices.length; j++) {
+                    const pLow = sortedPrices[i];
+                    const pHigh = sortedPrices[j];
+                    if (pLow > 0 && pHigh > 0 && pHigh % pLow === 0) {
+                      const calcQty = Math.round(pHigh / pLow);
+                      if (calcQty >= 1 && calcQty <= 10000) {
+                        if (!quantity || quantity === "1") {
+                          quantity = String(calcQty);
+                        }
+                        if (!unitPriceFromRow) {
+                          unitPriceFromRow = String(pLow);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Bỏ qua container nếu không có bất kỳ thông tin sản phẩm nào (tên SP, SKU, phân loại, tiền)
+              if (!productName && !skuFromMeta && !variationName && !titleBracketCode && rawMoneyMatches.length === 0) {
+                  continue;
+              }
+
+              if (!quantity || quantity === "0") quantity = "1";
+              
+              // Xác định giá sản phẩm (đơn giá)
+              let productPrice = unitPriceFromRow || rawMoneyMatches[0] || "";
+              if (numericAmounts.length >= 2) {
+                const sortedPrices = [...new Set(numericAmounts)].sort((a, b) => a - b);
+                productPrice = String(sortedPrices[0]);
+              }
+
+              // Chống thêm dòng sản phẩm trùng lặp trong cùng 1 đơn
+              const prodKey = `${finalSku}_${quantity}_${productPrice}_${productName.substring(0, 20)}`;
+              if (!seenProductKeys.has(prodKey)) {
+                seenProductKeys.add(prodKey);
+                results.push({ sku: finalSku, quantity, productPrice });
+              }
+          }
+          if (results.length > 0) return results;
+      }
+
+      // Chỉ fallback nếu trang có mã đơn hàng thực sự
+      const hasOrderOnPage = typeof extractSellerOrderIdFromPage === "function" && Boolean(extractSellerOrderIdFromPage());
+      return hasOrderOnPage ? [{ sku: "SP", quantity: "1", productPrice: "" }] : [];
+  }
+
+  function parseSellerOrderMoneyNumber(value) {
+      const text = String(value || "").trim();
+      if (!text) return 0;
+      return parseInt(text.replace(/[^0-9]/g, ""), 10) || 0;
+  }
+
+  async function calculateSellerOrderProfitData(products, payments) {
+      const dsSpData = await fetchDsSpData();
+      const details = [];
+      let totalCapital = 0;
+      let totalQuantity = 0;
+
+      const items = products.map((product, index) => {
+          const sku = String(product.sku || "").trim();
+          const sku10 = sku.substring(0, 10);
+          const quantity = parseInt(String(product.quantity || "1").replace(/[^0-9]/g, ""), 10) || 1;
+          const unitCost = dsSpData ? (dsSpData.get(sku10) || dsSpData.get(sku10.toUpperCase()) || dsSpData.get(sku10.toLowerCase()) || 0) : 0;
+          const lineCost = unitCost ? unitCost * quantity : 0;
+
+          if (sku10 && unitCost) {
+              details.push(`SP ${index + 1} (${sku10}) x${quantity}: ${lineCost}`);
+              totalCapital += lineCost;
+              totalQuantity += quantity;
+          }
+
+          return {
+              ...product,
+              idSp: sku10,
+              unitCost: unitCost ? String(unitCost) : "",
+              lineCost: lineCost ? String(lineCost) : ""
+          };
+      });
+
+      const income = parseSellerOrderMoneyNumber(payments.estimatedOrderIncome);
+      return {
+          items,
+          capitalDetails: details.join(" | "),
+          totalCapital: totalCapital ? String(totalCapital) : "",
+          profit: totalCapital ? String(income - totalCapital) : "",
+          capitalProductCount: totalQuantity ? String(totalQuantity) : ""
+      };
+  }
+
+  function extractSellerOrderCustomerInfo() {
+    let tenKhach = "";
+    let ngNhan = "";
+    let diaChi = "";
+    let linkDon = window.location.href || "";
+
+    const usernameEl = document.querySelector(".username, [class*='username'], .buyer-name, [class*='buyer-name'], .user-name");
+    if (usernameEl && usernameEl.textContent) {
+      tenKhach = cleanOrderDetailText(usernameEl.textContent).trim();
+    }
+    if (!tenKhach) {
+      const chatBtn = Array.from(document.querySelectorAll('button, a, span, div')).find(el => {
+        const t = (el.textContent || "").trim().toLowerCase();
+        return t === "chat ngay" || t.includes("chat ngay");
+      });
+      if (chatBtn) {
+        const parent = chatBtn.closest('.buyer-info, .order-panel, .panel, div') || chatBtn.parentElement?.parentElement;
+        if (parent) {
+          const directDivs = Array.from(parent.querySelectorAll('div, span, p'))
+            .map(e => cleanOrderDetailText(e.textContent).trim())
+            .filter(t => t && !t.toLowerCase().includes("chat ngay") && t.length > 2);
+          if (directDivs.length > 0) tenKhach = directDivs[0];
+        }
+      }
+    }
+
+    const shipAddressEl = document.querySelector(".ship-address, [class*='ship-address'], [class*='shipping-address'], .shipping-address");
+    if (shipAddressEl) {
+      diaChi = cleanOrderDetailText(shipAddressEl.textContent).trim();
+      const parentEl = shipAddressEl.parentElement;
+      if (parentEl) {
+        const prevDiv = parentEl.querySelector('div:not(.ship-address):not([class*="ship-address"]), span:first-child');
+        if (prevDiv && prevDiv !== shipAddressEl) {
+          ngNhan = cleanOrderDetailText(prevDiv.textContent).trim();
+        }
+      }
+    }
+
+    if (!diaChi || !ngNhan) {
+      const recipientDiv = Array.from(document.querySelectorAll('div, span, p')).find(el => {
+        const t = el.textContent || "";
+        return /\*{4,}\d{2}/.test(t) || /\d{3,4}\s*\*{3,}\s*\d{3,4}/.test(t);
+      });
+      if (recipientDiv) {
+        if (!ngNhan) ngNhan = cleanOrderDetailText(recipientDiv.textContent).trim();
+        const nextDiv = recipientDiv.nextElementSibling || recipientDiv.parentElement?.querySelector('.ship-address, div:nth-child(2)');
+        if (nextDiv && !diaChi) diaChi = cleanOrderDetailText(nextDiv.textContent).trim();
+      }
+    }
+
+    if (!diaChi || !ngNhan) {
+      const addressHeaders = Array.from(document.querySelectorAll('div, span, p, h3, h4')).filter(el => {
+        const t = normalizeOrderDetailText(el.textContent || "");
+        return t === "dia chi nhan hang" || t.includes("dia chi nhan hang");
+      });
+      for (const header of addressHeaders) {
+        const box = header.closest('.address-panel, .panel, .card, div') || header.parentElement;
+        if (box) {
+          const texts = Array.from(box.querySelectorAll('div, p, span'))
+            .map(e => cleanOrderDetailText(e.textContent).trim())
+            .filter(t => t && !normalizeOrderDetailText(t).includes("dia chi nhan hang") && !normalizeOrderDetailText(t).includes("thong tin van chuyen") && t.length > 2);
+          if (texts.length >= 2) {
+            if (!ngNhan) ngNhan = texts[0];
+            if (!diaChi) diaChi = texts[1];
+            break;
+          }
+        }
+      }
+    }
+
+    return { tenKhach, ngNhan, diaChi, linkDon };
+  }
+
+  async function waitForOrderDetailDOMReady(maxWaitMs = 500) {
+    const start = Date.now();
+    
+    // Kiểm tra nhanh lần đầu: nếu trang đã có ID đơn -> trả về true ngay tức thì (0ms)
+    const initialOrderId = extractSellerOrderIdFromPage();
+    if (initialOrderId && initialOrderId.length >= 8) {
+      return true;
+    }
+
+    while (Date.now() - start < maxWaitMs) {
+      const orderId = extractSellerOrderIdFromPage();
+      if (orderId && orderId.length >= 8) {
+        return true;
+      }
+      await new Promise(r => setTimeout(r, 30));
+    }
+    return false;
+  }
+
+  // Tự động phát hiện và trích xuất đơn hàng realtime phát sóng ngay khi trang chi tiết đơn mở
+  // Tự động gửi lại nếu có thông tin mới tải thêm (thông tin load tới đâu hiện tới đó)
+  let lastAutoExtractedSignature = "";
+  async function autoBroadcastSellerOrderDetail() {
+    if (typeof isSellerOrderDetailPage !== "function" || !isSellerOrderDetailPage()) return;
+    const orderId = extractSellerOrderIdFromPage();
+    if (!orderId) return;
+
+    try {
+      const fullData = await extractSellerOrderDetailFullData();
+      if (fullData && fullData.ok && fullData.rows && fullData.rows.length > 0) {
+        const firstRow = fullData.rows[0] || {};
+        const sig = `${orderId}_${fullData.rows.length}_${firstRow.totalProductAmount || ""}_${firstRow.estimatedOrderIncome || ""}_${firstRow.sku || ""}_${firstRow.tracking || ""}`;
+        if (sig !== lastAutoExtractedSignature) {
+          lastAutoExtractedSignature = sig;
+          chrome.runtime.sendMessage({
+            type: "ORDER_DETAIL_REALTIME_EXTRACTED",
+            detail: fullData
+          });
+        }
+      }
+    } catch (e) {
+      // silent
+    }
+  }
+
+  // Lắng nghe thay đổi DOM trên trang chi tiết đơn hàng Shopee để gửi cập nhật tức thì khi tải thêm dữ liệu
+  let orderObserverDebounceTimer = null;
+  const orderDomObserver = new MutationObserver(() => {
+    if (typeof isSellerOrderDetailPage === "function" && isSellerOrderDetailPage()) {
+      if (orderObserverDebounceTimer) clearTimeout(orderObserverDebounceTimer);
+      orderObserverDebounceTimer = setTimeout(() => {
+        if (typeof autoBroadcastSellerOrderDetail === "function") {
+          autoBroadcastSellerOrderDetail();
+        }
+      }, 50);
+    }
+  });
+
+  if (document.body) {
+    orderDomObserver.observe(document.body, { childList: true, subtree: true });
+  } else {
+    document.addEventListener("DOMContentLoaded", () => {
+      if (document.body) orderDomObserver.observe(document.body, { childList: true, subtree: true });
+    });
+  }
+
+  async function extractSellerOrderDetailFullData() {
+      if (!location.pathname.startsWith("/portal/sale/order")) {
+          return { ok: false, error: "Hãy mở trang chi tiết đơn hàng Shopee trước." };
+      }
+
+      if (typeof isSellerOrderDetailPage === "function" && !isSellerOrderDetailPage()) {
+          return { ok: false, error: "Trang hiện tại không phải là trang chi tiết đơn hàng Shopee." };
+      }
+
+      // Trích xuất tức thì (0ms). Nếu chưa có ID thì đợi tối đa 400ms
+      let orderId = extractSellerOrderIdFromPage();
+      if (!orderId) {
+          await waitForOrderDetailDOMReady(400);
+          orderId = extractSellerOrderIdFromPage();
+      }
+
+      if (!orderId) {
+          return { ok: false, error: "Chưa tải xong hoặc không tìm thấy Mã đơn hàng trên trang." };
+      }
+
+      const packageInfo = extractSellerOrderPackageInfo();
+      const orderCreatedAt = extractSellerOrderCreatedAt();
+      const customerInfo = extractSellerOrderCustomerInfo();
+      const paymentItems = collectSellerOrderPaymentItems();
+      const products = extractSellerOrderProducts();
+
+      // 🔍 TRÍCH XUẤT CHÍNH XÁC TỪ .income-container CỦA SHOPEE (THÔNG TIN DOANH THU NGƯỜI BÁN)
+      const incomeContainer = document.querySelector(".income-container, [class*='income-container'], .order-income-section, .order-panel-income, .order-income");
+      const incomeItems = [];
+      if (incomeContainer) {
+        const rows = incomeContainer.querySelectorAll(".income-item");
+        rows.forEach(row => {
+          if (row.closest("#ext-sidebar-root, .ext-panel, .shopee-qlsp-container, [id*='nhieu-don'], [id*='tab-']")) return;
+          const labelEl = row.querySelector(".income-label-text, .income-label, .label, [class*='label']");
+          const valueEl = row.querySelector(".income-value, .amount, .value, [class*='value']");
+          if (labelEl && valueEl) {
+            const clone = labelEl.cloneNode(true);
+            clone.querySelectorAll(".eds-popover, .payment-tooltip, svg, i, button").forEach(n => n.remove());
+            const labelText = cleanOrderDetailText(clone.textContent).trim();
+            const valueText = cleanOrderDetailText(valueEl.textContent).trim();
+            if (labelText && valueText) {
+              incomeItems.push({
+                label: labelText,
+                normalizedLabel: normalizeOrderDetailText(labelText),
+                value: valueText,
+                amount: parseSellerOrderMoneyNumber(valueText)
+              });
+            }
+          }
+        });
+      }
+
+      const activePaymentItems = incomeItems.length > 0 ? incomeItems : paymentItems;
+
+      let totalProductAmount = findSellerOrderPaymentValue(activePaymentItems, ["tong tien san pham", "tong tien hang", "tong gia ban", "tong tien", "gia san pham"]);
+      const productPrice = findSellerOrderPaymentValue(activePaymentItems, ["gia san pham"]);
+
+      // Fallback nếu chưa bắt được tổng tiền sản phẩm: tính từ dòng sản phẩm
+      if (!totalProductAmount || parseSellerOrderMoneyNumber(totalProductAmount) === 0) {
+        let calcProductTotal = 0;
+        for (const p of products) {
+          const pPrice = parseSellerOrderMoneyNumber(p.productPrice);
+          const pQty = parseInt(p.quantity || "1", 10) || 1;
+          calcProductTotal += pPrice * pQty;
+        }
+        if (calcProductTotal > 0) {
+          totalProductAmount = String(calcProductTotal);
+        }
+      }
+
+      let netShippingFee = 0;
+      const tongPhiVcVal = findSellerOrderPaymentValue(activePaymentItems, [
+        "tong phi van chuyen uoc tinh",
+        "tong phi van chuyen",
+        "phi van chuyen nguoi ban tra",
+        "phi van chuyen nguoi ban chiu",
+        "phi vc"
+      ]);
+      if (tongPhiVcVal && parseSellerOrderMoneyNumber(tongPhiVcVal) > 0) {
+        netShippingFee = parseSellerOrderMoneyNumber(tongPhiVcVal);
+      } else {
+        const rawEstShipping = parseSellerOrderMoneyNumber(findSellerOrderPaymentValue(activePaymentItems, ["phi van chuyen uoc tinh", "phi van chuyen"]));
+        const shopeeShippingRebate = parseSellerOrderMoneyNumber(findSellerOrderPaymentValue(activePaymentItems, ["phi van chuyen duoc tro gia tu shopee uoc tinh", "phi van chuyen duoc tro gia tu shopee", "phi van chuyen duoc tro gia", "tro gia phi van chuyen"]));
+        const buyerPaidShippingFee = findSellerOrderPaymentValue(activePaymentItems, ["phi van chuyen nguoi mua tra"]);
+        const numBuyerPaid = parseSellerOrderMoneyNumber(buyerPaidShippingFee);
+        if (rawEstShipping > 0) {
+          netShippingFee = Math.max(0, rawEstShipping - shopeeShippingRebate - numBuyerPaid);
+        }
+      }
+      const estimatedShippingTotal = String(netShippingFee);
+      const buyerPaidShippingFee = findSellerOrderPaymentValue(activePaymentItems, ["phi van chuyen nguoi mua tra"]);
+      const estimatedShippingFee = findSellerOrderPaymentValue(activePaymentItems, ["tong phi van chuyen uoc tinh", "tong phi van chuyen", "phi van chuyen uoc tinh", "phi van chuyen"]);
+      
+      const fixedFee = findSellerOrderPaymentValue(activePaymentItems, ["phi co dinh"]);
+      const serviceFee = findSellerOrderPaymentValue(activePaymentItems, ["phi dich vu"]);
+      const transactionFee = findSellerOrderPaymentValue(activePaymentItems, ["phi xu ly giao dich", "phi thanh toan", "phi giao dich"]);
+      
+      let surcharge = findSellerOrderPaymentValue(activePaymentItems, ["tong phi san", "phi san", "phu phi", "phi nguoi ban phai tra", "chi phi san"]);
+      if (!surcharge || parseSellerOrderMoneyNumber(surcharge) === 0) {
+        const subFeeSum = parseSellerOrderMoneyNumber(fixedFee) + parseSellerOrderMoneyNumber(serviceFee) + parseSellerOrderMoneyNumber(transactionFee);
+        if (subFeeSum > 0) {
+          surcharge = String(subFeeSum);
+        }
+      }
+
+      const vatTax = findSellerOrderPaymentValue(activePaymentItems, ["thue gtgt", "thue gia tri gia tang"]);
+      const pitTax = findSellerOrderPaymentValue(activePaymentItems, ["thue tncn", "thue thu nhap ca nhan"]);
+      let tax = findSellerOrderPaymentValue(activePaymentItems, ["tong thue", "thue"]);
+      if (!tax || parseSellerOrderMoneyNumber(tax) === 0) {
+        const taxSum = parseSellerOrderMoneyNumber(vatTax) + parseSellerOrderMoneyNumber(pitTax);
+        if (taxSum > 0) {
+          tax = String(taxSum);
+        }
+      }
+
+      const estimatedOrderIncome = findSellerOrderPaymentValue(activePaymentItems, ["doanh thu don hang uoc tinh", "doanh thu don hang", "thuc nhan", "so tien thanh toan"]);
+
+      // 🔍 MÃ GIẢM GIÁ CỦA SHOP: CHỈ LẤY TỪ MỤC "Trợ giá" / "Mã giảm giá của shop" trong .income-container
+      // NẾU TRONG .income-container KHÔNG CÓ THÌ MÃ GIẢM GIÁ = 0! (KHÔNG BAO GIỜ LẤY TỪ MỤC "Thanh toán của Người Mua" Ở DƯỚI)
+      let shopVoucher = "0";
+
+      for (const item of activePaymentItems) {
+        const lbl = item.normalizedLabel;
+        if (lbl.includes("phi van chuyen") || lbl.includes("van chuyen") || lbl.includes("shopee") || lbl.includes("nguoi mua")) continue;
+        if (lbl === "tro gia" || lbl.startsWith("tro gia") || lbl.includes("ma giam gia cua shop") || lbl.includes("voucher cua shop") || lbl.includes("tro gia tu nguoi ban") || lbl.includes("voucher cua nguoi ban")) {
+          const num = parseSellerOrderMoneyNumber(item.value);
+          if (num > 0) {
+            shopVoucher = String(num);
+            break;
+          }
+        }
+      }
+
+      const payments = {
+          totalProductAmount,
+          productPrice,
+          estimatedShippingTotal,
+          buyerPaidShippingFee,
+          estimatedShippingFee,
+          shopVoucher,
+          maGiamGia: shopVoucher,
+          surcharge,
+          fixedFee,
+          serviceFee,
+          transactionFee,
+          tax,
+          vatTax,
+          pitTax,
+          buyerValueAddedServiceTotal: findSellerOrderPaymentValue(activePaymentItems, ["tong phu dịch vu gia tri gia tang cho nguoi mua", "tong phu dv gtgt"]),
+          estimatedOrderIncome
+      };
+      const profitData = await calculateSellerOrderProfitData(products, payments);
+
+      const rows = (profitData.items || products).map((product) => ({
+          orderId,
+          orderCreatedAt,
+          packageName: packageInfo.packageName,
+          shippingType: packageInfo.shippingType,
+          carrier: packageInfo.carrier,
+          tracking: packageInfo.tracking,
+          tenKhach: customerInfo.tenKhach,
+          ngNhan: customerInfo.ngNhan,
+          diaChi: customerInfo.diaChi,
+          linkDon: customerInfo.linkDon,
+          sku: product.sku,
+          idSp: product.idSp || String(product.sku || "").trim().substring(0, 10),
+          quantity: product.quantity,
+          unitCost: product.unitCost || "",
+          lineCost: product.lineCost || "",
+          totalProductAmount: payments.totalProductAmount,
+          productPrice: product.productPrice || payments.productPrice,
+          shopVoucher: payments.shopVoucher,
+          maGiamGia: payments.shopVoucher,
+          estimatedShippingTotal: payments.estimatedShippingTotal,
+          buyerPaidShippingFee: payments.buyerPaidShippingFee,
+          estimatedShippingFee: payments.estimatedShippingFee,
+          surcharge: payments.surcharge,
+          fixedFee: payments.fixedFee,
+          serviceFee: payments.serviceFee,
+          transactionFee: payments.transactionFee,
+          tax: payments.tax,
+          vatTax: payments.vatTax,
+          pitTax: payments.pitTax,
+          buyerValueAddedServiceTotal: payments.buyerValueAddedServiceTotal,
+          estimatedOrderIncome: payments.estimatedOrderIncome,
+          capitalDetails: profitData.capitalDetails,
+          totalCapital: profitData.totalCapital,
+          profit: profitData.profit
+      }));
+
+      // Lọc rows chỉ giữ lại các sản phẩm có orderId
+      const validRows = rows.filter(r => r && r.orderId && (r.sku || r.productPrice || r.quantity));
+      if (validRows.length === 0) {
+          return { ok: false, error: "Không tìm thấy sản phẩm hợp lệ trong đơn hàng." };
+      }
+
+      return { ok: true, orderId, orderCreatedAt, packageInfo, customerInfo, payments, products, profitData, rows: validRows, url: location.href };
+  }
+
+  async function buildDhValuesFromDetail(rows, maGian) {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    const validRawRows = rows.filter(r => r && (r.orderId || r.sku || r.totalProductAmount));
+    if (validRawRows.length === 0) return [];
+
+    let dsSpMap = new Map();
+    try {
+      const res = await new Promise((resolve) => chrome.runtime.sendMessage({ type: "FETCH_DS_SP" }, resolve));
+      if (res && res.ok && res.values && res.values.length > 1) {
+        const headers = res.values[0].map(h => String(h || "").trim().toLowerCase());
+        const idSpIdx = headers.findIndex(h => h === "id_sp" || h === "mã sp" || h.includes("id_sp"));
+        const giaBanIdx = headers.findIndex(h => h === "gia_ban" || h === "giá bán" || h.includes("gia_ban") || h.includes("giá"));
+        
+        const bIdx = idSpIdx !== -1 ? idSpIdx : 1;
+        const eIdx = giaBanIdx !== -1 ? giaBanIdx : 4;
+
+        for (let i = 1; i < res.values.length; i++) {
+          const row = res.values[i];
+          const key = String(row[bIdx] || "").trim().toLowerCase();
+          if (key) {
+            const priceStr = String(row[eIdx] || "").replace(/[^\d-]/g, "");
+            const priceNum = parseFloat(priceStr) || 0;
+            dsSpMap.set(key, priceNum);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Không thể tải sheet DS_SP:", e);
+    }
+
+    const processedRows = validRawRows.map((row) => {
+      const mdh = String(row.orderId || "").trim();
+      const sku = String(row.sku || "").trim();
+      const idSp = sku.length >= 10 ? sku.substring(0, 10) : sku;
+      const slg = Number(String(row.quantity || "1").replace(/[^0-9]/g, "")) || 1;
+      
+      let donGia = dsSpMap.get(idSp.toLowerCase());
+      if (donGia === undefined || donGia === null || donGia === 0) {
+        const rawUnitCost = String(row.unitCost || "").replace(/[^0-9]/g, "");
+        donGia = rawUnitCost ? Number(rawUnitCost) : 0;
+      }
+
+      const thanhTien = slg * donGia;
+
+      return {
+        row,
+        mdh,
+        sku,
+        idSp,
+        slg,
+        donGia,
+        thanhTien
+      };
+    });
+
+    const tienSpMap = new Map();
+    processedRows.forEach(item => {
+      const key = item.mdh || "__order__";
+      tienSpMap.set(key, (tienSpMap.get(key) || 0) + item.thanhTien);
+    });
+
+    const parseMoneyNumber = (val) => {
+      if (val === null || val === undefined) return 0;
+      const digits = String(val).replace(/[^0-9]/g, "");
+      return digits ? Number(digits) : 0;
+    };
+
+    const extractDatePart = (timeStr) => {
+      if (!timeStr) return "";
+      const m = timeStr.match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/);
+      return m ? m[0] : timeStr;
+    };
+
+    const formatDateTime = (timeStr) => {
+      if (!timeStr) return "";
+      const m1 = timeStr.match(/(\d{1,2}:\d{2}(?::\d{2})?)\s+(\d{1,2}\/\d{1,2}\/\d{4})/);
+      if (m1) {
+        const t = m1[1].split(":");
+        const hhmm = `${t[0].padStart(2, "0")}:${t[1].padStart(2, "0")}`;
+        const ss = t[2] ? `:${t[2].padStart(2, "0")}` : ":00";
+        return `${m1[2]} ${hhmm}${ss}`;
+      }
+      const m2 = timeStr.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?)/);
+      if (m2) {
+        const t = m2[2].split(":");
+        const hhmm = `${t[0].padStart(2, "0")}:${t[1].padStart(2, "0")}`;
+        const ss = t[2] ? `:${t[2].padStart(2, "0")}` : ":00";
+        return `${m2[1]} ${hhmm}${ss}`;
+      }
+      return timeStr;
+    };
+
+    // 25 CỘT CHUẨN XÁC 100% VỚI SHEET DH (Loại bỏ mọi dòng không có MDH và SKU)
+    return processedRows
+      .filter(item => item.mdh || item.sku)
+      .map((item) => {
+      const { row, mdh, sku, idSp, slg, donGia, thanhTien } = item;
+      const tienSp = tienSpMap.get(mdh || "__order__") || 0;
+      
+      const tongTien = parseMoneyNumber(row.totalProductAmount);
+      const maGiamGia = parseMoneyNumber(row.shopVoucher || row.maGiamGia || 0);
+      const phiVc = parseMoneyNumber(row.estimatedShippingTotal);
+      const phuPhi = parseMoneyNumber(row.surcharge);
+      const thue = parseMoneyNumber(row.tax);
+      
+      // Doanh thu: ưu tiên số Shopee tính (estimatedOrderIncome), nếu không có thì tính theo công thức
+      let doanhThu = parseMoneyNumber(row.estimatedOrderIncome);
+      if (!doanhThu || doanhThu === 0) {
+        doanhThu = tongTien - maGiamGia - phiVc - phuPhi - thue;
+      }
+      const phiKhac = 0;
+
+      // Lợi nhuận = doanh_thu - phi_khac - tien_sp
+      const loiNhuan = doanhThu - phiKhac - tienSp;
+
+      return [
+        maGian,                                   // Col A (1): gian
+        extractDatePart(row.orderCreatedAt),     // Col B (2): ngay
+        formatDateTime(row.orderCreatedAt),       // Col C (3): ngay_gio
+        mdh,                                      // Col D (4): mdh
+        String(row.tracking || "").trim(),        // Col E (5): mvd
+        tongTien,                                 // Col F (6): tong_tien
+        maGiamGia,                                // Col G (7): ma_giam_gia
+        phiVc,                                    // Col H (8): phi_vc
+        phuPhi,                                   // Col I (9): phu_phi
+        thue,                                     // Col J (10): thue
+        doanhThu,                                 // Col K (11): doanh_thu
+        phiKhac,                                  // Col L (12): phi_khac
+        tienSp,                                   // Col M (13): tien_sp
+        loiNhuan,                                 // Col N (14): loi_nhuan
+        "",                                       // Col O (15): tinh_trang
+        "",                                       // Col P (16): trang_thai
+        sku,                                      // Col Q (17): sku
+        idSp,                                     // Col R (18): id_sp
+        slg,                                      // Col S (19): slg
+        donGia,                                   // Col T (20): don_gia
+        thanhTien,                                // Col U (21): thanh_tien
+        String(row.tenKhach || "").trim(),        // Col V (22): ten_khach
+        String(row.ngNhan || "").trim(),          // Col W (23): ng_nhan
+        String(row.diaChi || "").trim(),          // Col X (24): dia_chi
+        String(row.linkDon || location.href || "").trim() // Col Y (25): link_don
+      ];
+    });
+  }
+
+
+  let syncedOrderSnapshots = new Map();
+  let isAutoProcessingOrder = false;
+
+  function isOrderDetailDataReady(orderDetail) {
+    if (!orderDetail || !orderDetail.ok || !orderDetail.rows || orderDetail.rows.length === 0) return false;
+    if (!orderDetail.orderId) return false;
+    
+    // BẮT BUỘC mã đơn hàng phải đúng định dạng chuẩn (không thuần số như ID URL 240520694230100)
+    const id = String(orderDetail.orderId).trim();
+    if (id.length < 10) return false;
+    if (/^\d+$/.test(id) && id.length > 12) {
+      return false;
+    }
+
+    // BẮT BUỘC phải lấy được Ngày tạo đơn hàng từ Đơn hàng mới
+    if (!orderDetail.rows[0]?.orderCreatedAt) {
+      return false;
+    }
+
+    // BẮT BUỘC phải có DOM sản phẩm hiển thị trên trang
+    const hasProductEl = document.querySelector('.order-view-item, .order-item, .product-item, .order-product-wrapper, .ct-item-product-name, .product-name, [class*="product-name"], [class*="item-name"]');
+    if (!hasProductEl && (!orderDetail.rows[0]?.sku || orderDetail.rows[0]?.sku === "SP")) {
+      return false;
+    }
+
+    // BẮT BUỘC: Tổng tiền sản phẩm hoặc giá sản phẩm KHÔNG ĐƯỢC = 0 khi thêm mới
+    const parseMoneyNumber = (val) => {
+      if (val === null || val === undefined) return 0;
+      const digits = String(val).replace(/[^0-9]/g, "");
+      return digits ? Number(digits) : 0;
+    };
+    const tongTien = parseMoneyNumber(orderDetail.payments?.totalProductAmount) || parseMoneyNumber(orderDetail.rows[0]?.totalProductAmount) || parseMoneyNumber(orderDetail.rows[0]?.productPrice);
+    if (tongTien === 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  let lastPageUrlForSync = "";
+  let pageLoadSettleTime = 0;
+
+  async function checkAndAutoSyncDonHang(orderId) {
+    // Đã tắt hoàn toàn tính năng tự động thêm / đồng bộ đơn hàng theo yêu cầu
+    return;
+  }
+
+  function isSellerOrderDetailPage() {
+    const path = (window.location.pathname || "").toLowerCase();
+    
+    // TUYỆT ĐỐI LOẠI TRỪ TRANG TRẢ HÀNG, HOÀN TIỀN, HỦY
+    if (path.includes('returnrefundcancel') || path.includes('/sale/return') || path.includes('/cancel') || path.includes('/refund')) {
+      return false;
+    }
+
+    if (!path.startsWith('/portal/sale/order')) {
+      return false;
+    }
+
+    // CHỈ ĐỌC LINK CÓ ID: ví dụ /portal/sale/order/242102147201615 hoặc 2609032Y4756JF
+    const cleanPath = path.replace(/^\/portal\/sale\/order\/?/i, '').replace(/^detail\/?/i, '').trim();
+    if (cleanPath) {
+      const seg = cleanPath.split('/')[0].split('?')[0].trim();
+      const systemSegments = /^(order|list|mass|shipping|shipment|return|setting|settings|batch|all|unprocessed|toship|completed|cancelled)$/i;
+      if (/^[0-9a-z]{8,}$/i.test(seg) && !systemSegments.test(seg)) {
+        return true;
+      }
+    }
+
+    const search = window.location.search || "";
+    if (/[?&](?:order_sn|orderId|order_id|ordersn)=([0-9A-Z]{8,})/i.test(search)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function removeDonHangButtons() {
+    const btnContainer = document.getElementById('shopee-ext-donhang-btns');
+    if (btnContainer) btnContainer.remove();
+    const btnAdd = document.getElementById('btn-add-don-hang');
+    if (btnAdd && btnAdd.parentElement) btnAdd.remove();
+    const floatingBtn = document.getElementById('shopee-ext-floating-dh-btn');
+    if (floatingBtn) floatingBtn.remove();
+    const snActions = document.getElementById('shopee-ext-ordersn-actions');
+    if (snActions) snActions.remove();
+    document.querySelectorAll('[id^="shopee-ext-ordersn-actions"], .shopee-ext-ordersn-actions, .shopee-ext-inline-copy-btn, .btn-ext-order-huy, .btn-ext-order-hoan, .btn-ext-order-tra, .btn-ext-order-update, .shopee-ext-order-status-badge').forEach(el => el.remove());
+  }
+
+  function extractSellerOrderReturnId() {
+    const allEls = document.querySelectorAll('.label, dt, span, div, p');
+    for (const el of allEls) {
+      const t = normalizeOrderDetailText(el.textContent);
+      if (t.includes("ma yeu cau tra hang") || t.includes("ma yeu cau hoan") || t.includes("return id") || t.includes("ma tra hang")) {
+        const parent = el.parentElement;
+        if (parent) {
+          const bodyEl = parent.querySelector('.body, dd, span:last-child, div:last-child');
+          const txt = (bodyEl && bodyEl !== el ? bodyEl.textContent : parent.textContent).trim();
+          const m = txt.match(/([0-9]{6}[A-Z0-9]{6,14})/i);
+          if (m) return m[1].toUpperCase();
+        }
+      }
+    }
+    return "";
+  }
+
+  function extractSellerOrderCancelOrReturnReason() {
+    const allEls = document.querySelectorAll('.label, dt, span, div, p');
+    for (const el of allEls) {
+      const t = normalizeOrderDetailText(el.textContent);
+      if (t.includes("ly do huy") || t.includes("ly do tra hang") || t.includes("ly do hoan") || t.includes("ly do")) {
+        const parent = el.parentElement;
+        if (parent) {
+          const bodyEl = parent.querySelector('.body, dd, span:last-child, div:last-child');
+          const txt = (bodyEl && bodyEl !== el ? bodyEl.textContent : parent.textContent).trim();
+          const cleanReason = txt.replace(/^(?:Lý do(?: hủy| trả hàng| hoàn tiền)?|Reason)\s*:\s*/i, '').trim();
+          if (cleanReason && cleanReason.length > 2 && cleanReason.length < 100) return cleanReason;
+        }
+      }
+    }
+    return "";
+  }
+
+  function findOrderSnValueElement(orderId) {
+    if (!orderId) return null;
+    
+    // 1. Tìm thẻ con trực tiếp có text bằng đúng mã đơn hàng
+    const candidates = Array.from(document.querySelectorAll('span, div, p, strong, b, a')).filter(el => {
+      if (el.closest('#shopee-ext-donhang-btns') || el.classList.contains('shopee-ext-inline-copy-btn')) return false;
+      const t = (el.textContent || "").trim();
+      return (t === orderId || t === `#${orderId}`) && el.children.length === 0;
+    });
+    if (candidates.length > 0) return candidates[0];
+
+    // 2. Tìm thẻ bên cạnh nhãn "Mã đơn hàng"
+    const labels = Array.from(document.querySelectorAll('.label, dt, span, div, h3, h4, p')).filter(el => {
+      const t = normalizeOrderDetailText(el.textContent);
+      return (t === "ma don hang" || t === "order sn" || t.startsWith("ma don hang:")) && el.children.length === 0;
+    });
+    for (const lbl of labels) {
+      const parent = lbl.parentElement;
+      if (parent) {
+        const bodyEl = parent.querySelector('.body, .body-content, dd, [class*="content"], [class*="value"], span:last-child, div:last-child');
+        if (bodyEl && bodyEl !== lbl) return bodyEl;
+        if (lbl.nextElementSibling) return lbl.nextElementSibling;
+        return parent;
+      }
+    }
+
+    const snEl = document.querySelector('.order-sn, [class*="order-sn"], [class*="orderId"], .order-id');
+    if (snEl && !snEl.closest('#shopee-ext-donhang-btns')) return snEl;
+
+    return null;
+  }
+
+  function findTrackingElements(tracking) {
+    const results = [];
+    if (!tracking) return results;
+
+    const cleanTrk = tracking.replace(/^#\s*/, '').trim().toUpperCase();
+
+    // 1. .tracking-number
+    const trackingNodes = document.querySelectorAll('.tracking-number, [class*="tracking-number"], [data-testid="tracking-number"], .item-return-logistic .tracking-number');
+    trackingNodes.forEach(node => {
+      if (!node.closest('#shopee-ext-donhang-btns') && !results.includes(node)) {
+        results.push(node);
+      }
+    });
+
+    // 2. Tìm phần tử chứa mã vận đơn
+    if (cleanTrk) {
+      const allEls = document.querySelectorAll('span, div, p, a, strong, b');
+      for (const el of allEls) {
+        if (el.closest('#shopee-ext-donhang-btns') || el.classList.contains('shopee-ext-inline-copy-btn') || results.includes(el)) continue;
+        if (el.children.length === 0) {
+          const t = (el.textContent || "").trim().toUpperCase();
+          if (t.includes(cleanTrk)) {
+            results.push(el);
+          }
+        }
+      }
+    }
+
+    return results;
+  }
+
+  function renderInlineOrderDetailCopyButtons(orderId, tracking) {
+      // Đã gỡ bỏ các nút copy rải rác trong thân trang để giao diện gọn gàng, không bị rối
+      document.querySelectorAll('.shopee-ext-inline-copy-btn').forEach(el => el.remove());
+  }
+
+  function updateOrderDetailButtonsStatus(orderId) {
+      // Đã gỡ bỏ trạng thái / nút hủy hoàn trả trên trang chi tiết đơn
+  }
+
+  function findTargetContainerForDonHangButton(orderId) {
+    const breadcrumb = document.querySelector('.eds-breadcrumb, [class*="breadcrumb"], .portal-breadcrumb');
+    if (breadcrumb) {
+      return breadcrumb;
+    }
+
+    if (orderId) {
+      const allDivs = document.querySelectorAll('.body, .order-sn, .order-sn-text, .order-number, [class*="order-sn"], [class*="order-id"], div, section, p');
+      for (const div of allDivs) {
+        const txt = (div.textContent || "").trim();
+        if (txt.includes(orderId)) {
+          return div;
+        }
+      }
+    }
+
+    return document.querySelector('.order-panel-header, .order-detail-header, .portal-panel-header, .page-header, .header-container, main, #app');
+  }
+
+  function renderDonHangButtons() {
+      // 1. Chỉ chạy khi đang ở trang chi tiết đơn hàng
+      if (!isSellerOrderDetailPage()) {
+          removeDonHangButtons();
+          return;
+      }
+
+      // 2. Tìm Mã đơn hàng (orderId) từ DOM hoặc URL
+      let orderId = extractSellerOrderIdFromPage();
+      if (!orderId) {
+          const urlMatch = window.location.pathname.match(/\/portal\/sale\/(?:order|return)\/(?:detail\/)?([0-9]{6}[A-Z0-9]{6,14})/i);
+          if (urlMatch && urlMatch[1] && /[A-Z]/i.test(urlMatch[1])) {
+              orderId = urlMatch[1].trim().toUpperCase();
+          }
+      }
+
+      // Luôn dọn dẹp nút thừa, nút nổi và cụm nút trạng thái/nút inline lặp lại
+      const floatingBtn = document.getElementById('shopee-ext-floating-dh-btn');
+      if (floatingBtn) floatingBtn.remove();
+      const existingBtnAdd = document.getElementById('btn-add-don-hang');
+      if (existingBtnAdd) existingBtnAdd.remove();
+      document.querySelectorAll('#shopee-ext-ordersn-actions, [id^="shopee-ext-ordersn-actions"], .shopee-ext-inline-copy-btn, .btn-ext-order-huy, .btn-ext-order-hoan, .btn-ext-order-tra, .btn-ext-order-update, .shopee-ext-order-status-badge').forEach(el => el.remove());
+
+      updateDonHangMdhCache();
+      updateDhHoanIdsCache();
+
+      // Dữ liệu đơn hàng chi tiết hiện tại
+      const pkg = extractSellerOrderPackageInfo() || {};
+      const curTracking = pkg.tracking || "";
+
+      // 3. Gắn cụm 3 nút Copy vào Breadcrumb / Header gọn gàng
+      const targetContainer = findTargetContainerForDonHangButton(orderId);
+      if (targetContainer) {
+          let btnContainer = document.getElementById('shopee-ext-donhang-btns');
+          if (!btnContainer) {
+              btnContainer = document.createElement('div');
+              btnContainer.id = 'shopee-ext-donhang-btns';
+              btnContainer.style.cssText = 'display: inline-flex; align-items: center; gap: 6px; margin-left: 14px; vertical-align: middle; z-index: 999; flex-wrap: wrap;';
+              targetContainer.appendChild(btnContainer);
+          } else if (btnContainer.parentElement !== targetContainer) {
+              targetContainer.appendChild(btnContainer);
+          }
+
+          // 1. Nút Copy MDH (Mã đơn hàng)
+          let btnCopyMdh = document.getElementById('btn-order-detail-copy-mdh');
+          if (!btnCopyMdh) {
+              btnCopyMdh = createActionBtn("📋 Copy MDH", "#ee4d2d", async () => {
+                  const currentMdh = extractSellerOrderIdFromPage() || orderId;
+                  if (currentMdh && !/^\d{12,}$/.test(currentMdh)) {
+                      if (await copyTextToClipboard(currentMdh)) {
+                          btnCopyMdh.textContent = "✓ Đã copy MDH!";
+                          btnCopyMdh.title = `Mã đơn hàng: ${currentMdh}`;
+                          setTimeout(() => { btnCopyMdh.textContent = "📋 Copy MDH"; }, 1500);
+                      }
+                  } else {
+                      btnCopyMdh.textContent = "⚠️ Đang tìm MDH...";
+                      setTimeout(() => { btnCopyMdh.textContent = "📋 Copy MDH"; }, 1500);
+                  }
+              });
+              btnCopyMdh.id = 'btn-order-detail-copy-mdh';
+              btnCopyMdh.title = orderId ? `Copy mã đơn hàng: ${orderId}` : "Copy mã đơn hàng";
+              btnContainer.appendChild(btnCopyMdh);
+          } else if (orderId) {
+              btnCopyMdh.title = `Copy mã đơn hàng: ${orderId}`;
+          }
+
+          // 2. Nút Copy MVD (Mã vận đơn)
+          let btnCopyMvd = document.getElementById('btn-order-detail-copy-mvd');
+          if (!btnCopyMvd) {
+              btnCopyMvd = createActionBtn("📋 Copy MVD", "#2563eb", async () => {
+                  const currentPkg = extractSellerOrderPackageInfo() || {};
+                  const trk = currentPkg.tracking || curTracking;
+                  if (trk) {
+                      if (await copyTextToClipboard(trk)) {
+                          btnCopyMvd.textContent = "✓ Đã copy MVD!";
+                          setTimeout(() => { btnCopyMvd.textContent = "📋 Copy MVD"; }, 1500);
+                      }
+                  } else {
+                      btnCopyMvd.textContent = "⚠️ Chưa có MVD";
+                      setTimeout(() => { btnCopyMvd.textContent = "📋 Copy MVD"; }, 1500);
+                  }
+              });
+              btnCopyMvd.id = 'btn-order-detail-copy-mvd';
+              btnCopyMvd.title = "Copy mã vận đơn";
+              btnContainer.appendChild(btnCopyMvd);
+          }
+
+          // 3. Nút Copy Đơn + MVD
+          let btnCopyBoth = document.getElementById('btn-order-detail-copy-both');
+          if (!btnCopyBoth) {
+              btnCopyBoth = createActionBtn("📋 Copy Đơn & Vận đơn", "#059669", async () => {
+                  const currentMdh = extractSellerOrderIdFromPage() || orderId;
+                  const currentPkg = extractSellerOrderPackageInfo() || {};
+                  const trk = currentPkg.tracking || curTracking;
+                  let copyText = "";
+                  if (currentMdh && !/^\d{12,}$/.test(currentMdh)) {
+                      copyText = `Mã đơn hàng: ${currentMdh}`;
+                      if (trk) copyText += `\nMã vận đơn: ${trk}`;
+                  } else if (trk) {
+                      copyText = `Mã vận đơn: ${trk}`;
+                  }
+                  if (copyText && await copyTextToClipboard(copyText)) {
+                      btnCopyBoth.textContent = "✓ Đã copy cả 2!";
+                      setTimeout(() => { btnCopyBoth.textContent = "📋 Copy Đơn & Vận đơn"; }, 1500);
+                  }
+              });
+              btnCopyBoth.id = 'btn-order-detail-copy-both';
+              btnCopyBoth.title = "Copy cả Mã đơn hàng và Mã vận đơn";
+              btnContainer.appendChild(btnCopyBoth);
+          }
+      }
+
+      updateCopyButtonColors();
+  }
+  // Injected interceptor for FORCE_DOWNLOAD
+  if ((window.location.href.includes("auto_download_ds_sp=1") || window.location.href.includes("auto_download_giam_gia=1")) && !window.hasInjectedDownloadInterceptor) {
+      window.hasInjectedDownloadInterceptor = true;
+      const script = document.createElement('script');
+      script.textContent = `
+          const originalClick = HTMLAnchorElement.prototype.click;
+          HTMLAnchorElement.prototype.click = function() {
+              const isPdfLink = this.href && (this.href.toLowerCase().includes('.pdf') || (this.textContent && this.textContent.toLowerCase().includes('pdf')) || this.href.startsWith('blob:'));
+              
+              if ((this.download && this.href) || isPdfLink) {
+                  fetch(this.href).then(r => r.blob()).then(blob => {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                          let fName = this.download || "shopee_document.pdf";
+                          if (isPdfLink && !fName.endsWith('.pdf')) fName += '.pdf';
+                          window.postMessage({ type: 'SHOPEE_FILE_DOWNLOAD', url: reader.result, filename: fName, isPdf: isPdfLink }, '*');
+                      };
+                      reader.readAsDataURL(blob);
+                  }).catch(e => console.error("Shopee Download Intercept Error:", e));
+                  
+                  try { return originalClick.apply(this, arguments); } catch(e){}
+              } else {
+                  return originalClick.apply(this, arguments);
+              }
+          };
+
+          const originalOpen = window.open;
+          window.open = function(url, ...args) {
+              if (url && typeof url === 'string') {
+                  const isPdfUrl = url.toLowerCase().includes('.pdf') || url.includes('/api/v2/receipt/download');
+                  if (isPdfUrl || url.startsWith('blob:')) {
+                      fetch(url).then(r => r.blob()).then(blob => {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                              window.postMessage({ type: 'SHOPEE_FILE_DOWNLOAD', url: reader.result, filename: "shopee_waybill.pdf", isPdf: true }, '*');
+                          };
+                          reader.readAsDataURL(blob);
+                      }).catch(e => console.error("Shopee Window.Open Intercept Error:", e));
+                      
+                      return null;
+                  }
+              }
+              return originalOpen.apply(this, [url, ...args]);
+          };
+      `;
+      document.documentElement.appendChild(script);
+      script.remove();
+
+      window.addEventListener('message', (event) => {
+          if (event.data && event.data.type === 'SHOPEE_FILE_DOWNLOAD') {
+              chrome.storage.local.get(["maGian", "dhHoanTextValue"], (res) => {
+                  let fName = event.data.filename;
+                  const isPdf = event.data.isPdf || (fName && fName.toLowerCase().endsWith('.pdf'));
+                  
+                  if (isPdf) {
+                      let maGian = (res.maGian || res.dhHoanTextValue || "BCE").toUpperCase();
+                      const now = new Date();
+                      const dd = String(now.getDate()).padStart(2, '0');
+                      const mm = String(now.getMonth() + 1).padStart(2, '0');
+                      const yyyy = now.getFullYear();
+                      const hh = String(now.getHours()).padStart(2, '0');
+                      const m = String(now.getMinutes()).padStart(2, '0');
+                      fName = `Shopee_${maGian}_${dd}${mm}${yyyy}_${hh}${m}.pdf`;
+                  }
+
+                  // 1. Tải file về máy tính
+                  chrome.runtime.sendMessage({
+                      type: "FORCE_DOWNLOAD",
+                      url: event.data.url,
+                      filename: fName
+                  });
+              });
+              
+              const updateStatus = (msg, color) => {
+                  const isGiamGia = window.location.href.includes("auto_download_giam_gia=1");
+                  let statusDiv = document.getElementById(isGiamGia ? 'shopee-auto-giamgia-status' : 'shopee-auto-download-status');
+                  if (statusDiv) {
+                      statusDiv.textContent = msg;
+                      if (color) statusDiv.style.backgroundColor = color;
+                  }
+              };
+
+              // Prevent trying to parse PDF files as Excel
+              if (event.data.isPdf || (event.data.filename && event.data.filename.toLowerCase().endsWith('.pdf'))) {
+                  updateStatus("Đã tải xong file PDF!", "#16a34a");
+                  setTimeout(() => {
+                      const sd = document.getElementById('shopee-auto-download-status') || document.getElementById('shopee-auto-giamgia-status');
+                      if (sd) sd.remove();
+                  }, 3000);
+                  return; // Stop here, do not parse as Excel
+              }
+
+              // 2. Tự động đọc file và đẩy lên SP_SHOPEE
+              try {
+                  if (typeof XLSX === 'undefined') {
+                      updateStatus("Lỗi: Không tìm thấy thư viện XLSX!", "#dc2626");
+                      return;
+                  }
+                  
+                  updateStatus("B5. Đang đọc file Excel để tự động đẩy lên SP_SHOPEE...", "#f59e0b");
+                  
+                  const base64 = event.data.url.split(',')[1];
+                  const binary_string = window.atob(base64);
+                  const len = binary_string.length;
+                  const bytes = new Uint8Array(len);
+                  for (let i = 0; i < len; i++) {
+                      bytes[i] = binary_string.charCodeAt(i);
+                  }
+                  
+                  const workbook = XLSX.read(bytes, { type: 'array' });
+                  const sheetName = workbook.SheetNames[0];
+                  const worksheet = workbook.Sheets[sheetName];
+                  const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                  const dataRows = json.slice(1);
+                  
+                  chrome.storage.local.get(["maGian", "dhHoanTextValue"], (result) => {
+                      const maGian = result.maGian || result.dhHoanTextValue || "";
+                      const isGiamGia = window.location.href.includes("auto_download_giam_gia=1");
+                      
+                      if (maGian) {
+                          dataRows.forEach(row => {
+                              if (isGiamGia) row[8] = maGian; // Cột I cho SP_GIAM_GIA
+                              else row[11] = maGian; // Cột L cho SP_SHOPEE
+                          });
+                      }
+                      
+                      updateStatus(`B6. Đang đẩy ${dataRows.length} sản phẩm lên Google Sheet...`, "#3b82f6");
+                      const uploadType = isGiamGia ? "UPLOAD_SP_GIAM_GIA" : "UPLOAD_SP_SHOPEE";
+                      
+                      chrome.runtime.sendMessage({ type: uploadType, values: dataRows, maGian: maGian }, (response) => {
+                          if (response && response.ok) {
+                              updateStatus(`Tuyệt vời! Đã tự động đẩy xong ${dataRows.length} SP lên Sheet.`, "#16a34a");
+                              setTimeout(() => {
+                                  const sd = document.getElementById('shopee-auto-download-status');
+                                  if (sd) sd.remove();
+                              }, 7000);
+                          } else {
+                              updateStatus(`Lỗi lưu Google Sheet: ${response ? response.error : 'Unknown'}`, "#dc2626");
+                          }
+                      });
+                  });
+
+              } catch (err) {
+                  console.error("Auto upload error:", err);
+                  updateStatus("Lỗi đọc file Excel tự động: " + err.message, "#dc2626");
+              }
+          }
+      });
+  }
+// Auto Download DS_SP Logic with Floating Status
+  if (window.location.href.includes("auto_download_ds_sp=1")) {
+      const showFloatingStatus = (msg) => {
+          console.log(msg);
+          let statusDiv = document.getElementById('shopee-auto-download-status');
+          if (!statusDiv) {
+              statusDiv = document.createElement('div');
+              statusDiv.id = 'shopee-auto-download-status';
+              statusDiv.style.position = 'fixed';
+              statusDiv.style.top = '80px';
+              statusDiv.style.right = '20px';
+              statusDiv.style.padding = '15px 20px';
+              statusDiv.style.backgroundColor = '#16a34a';
+              statusDiv.style.color = '#fff';
+              statusDiv.style.fontSize = '16px';
+              statusDiv.style.fontWeight = 'bold';
+              statusDiv.style.borderRadius = '8px';
+              statusDiv.style.zIndex = '999999';
+              statusDiv.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
+              statusDiv.style.transition = 'all 0.3s ease';
+              document.body.appendChild(statusDiv);
+          }
+          statusDiv.textContent = msg;
+          
+          if (msg.includes("Lỗi") || msg.includes("Không tìm thấy")) {
+              statusDiv.style.backgroundColor = '#dc2626'; // red
+          } else if (msg.includes("Hoàn tất")) {
+              statusDiv.style.backgroundColor = '#2563eb'; // blue
+              setTimeout(() => {
+                  if (statusDiv) statusDiv.remove();
+              }, 5000);
+          }
+      };
+
+      const getFirstRowText = () => {
+          const btn = document.querySelector('button.eds-button--outline');
+          if (!btn) return "";
+          const row = btn.closest('tr, [class*="row"]');
+          return row ? row.textContent.trim() : "";
+      };
+
+      const waitForRender = setInterval(() => {
+          if (document.querySelector('button.generate-btn')) {
+              clearInterval(waitForRender);
+              showFloatingStatus("B1. Trang load xong, đợi 3s để chọn mẫu...");
+              
+              setTimeout(() => {
+                  let clickedRadio = false;
+                  const spans = document.querySelectorAll('span, div, label');
+                  for (const span of spans) {
+                      if (span.textContent && span.textContent.trim() === "Thông tin Bán hàng") {
+                          const container = span.closest('.eds-radio') || span.parentElement;
+                          const indicator = container ? container.querySelector('.eds-radio__indicator') : null;
+                          if (indicator) {
+                              indicator.click();
+                              clickedRadio = true;
+                              showFloatingStatus("B2. Đã chọn Thông tin Bán hàng. Đợi 3s...");
+                              break;
+                          }
+                      }
+                  }
+                  
+                  if (!clickedRadio) {
+                     const indicators = document.querySelectorAll('.eds-radio__indicator');
+                     if (indicators.length > 1) {
+                         indicators[1].click();
+                         showFloatingStatus("B2. Đã chọn Thông tin Bán hàng (auto). Đợi 3s...");
+                     }
+                  }
+
+                  setTimeout(() => {
+                      const btn = document.querySelector('button.generate-btn');
+                      if (btn && !btn.disabled) {
+                          const oldRowText = getFirstRowText();
+
+                          btn.click();
+                          showFloatingStatus("B3. Đã bấm Tạo Báo Cáo. Đang đợi xử lý...");
+                          
+                          let checkCount = 0;
+                          const checkDownloadExcel = setInterval(() => {
+                              checkCount++;
+                              
+                              const currentFirstBtn = document.querySelector('button.eds-button--outline');
+                              const currentFirstRow = currentFirstBtn ? currentFirstBtn.closest('tr, [class*="row"]') : null;
+                              const curRowText = currentFirstRow ? currentFirstRow.textContent.trim() : '';
+
+                              if (curRowText && curRowText !== oldRowText) {
+                                  if (currentFirstBtn && currentFirstBtn.textContent.trim() === "Tải về") {
+                                      currentFirstBtn.click();
+                                      showFloatingStatus("B4. Hoàn tất! Đã click tải file Excel.");
+                                      clearInterval(checkDownloadExcel);
+                                  } else {
+                                      showFloatingStatus(`B3. Đang xử lý báo cáo mới... (${checkCount}s)`);
+                                  }
+                              } else {
+                                  showFloatingStatus(`B3. Đang chờ báo cáo xuất hiện... (${checkCount}s)`);
+                              }
+                              
+                              if (checkCount > 120) {
+                                  showFloatingStatus("Lỗi: Quá 2 phút báo cáo chưa xong.");
+                                  clearInterval(checkDownloadExcel);
+                              }
+                          }, 1000);
+
+                      } else {
+                          showFloatingStatus("Lỗi: Không tìm thấy nút tạo báo cáo.");
+                      }
+                  }, 3500);
+                  
+              }, 3500);
+          }
+      }, 1000);
+      
+      setTimeout(() => clearInterval(waitForRender), 20000);
+  }
+
+  window.setTimeout(renderProductListQuickActions, 1200);
+  window.setTimeout(renderOrderSnCopyButtons, 1200);
+  window.setTimeout(renderItemNameCopyButtons, 1200);
+  window.setTimeout(renderTrackingNumberCopyButtons, 1200);
+  window.setTimeout(renderProductSkus, 1200);
+  window.setTimeout(injectAwbDownloadButton, 1200);
+  window.setTimeout(bindDescriptionImageDrop, 1200);
+  window.setTimeout(renderOrderProfit, 1200);
+  window.setTimeout(renderOrderDetailProductEnhancements, 1000);
+  window.setInterval(renderOrderDetailProductEnhancements, 1200);
+  window.setInterval(injectFinanceExpandButtons, 1000);
+  window.setTimeout(renderReturnInfoCopyButtons, 1200);
+  window.setInterval(renderProductListQuickActions, 1500);
+  window.setInterval(renderOrderSnCopyButtons, 1500);
+  window.setInterval(renderItemNameCopyButtons, 1500);
+  window.setInterval(renderTrackingNumberCopyButtons, 1500);
+  window.setInterval(renderProductSkus, 1500);
+  window.setInterval(injectAwbDownloadButton, 1500);
+  window.setInterval(bindDescriptionImageDrop, 1500);
+  window.setInterval(renderOrderProfit, 1500);
+  window.setInterval(renderReturnInfoCopyButtons, 1500);
+  window.setInterval(renderDonHangButtons, 600);
+  window.setTimeout(autoClickEditPromotionButton, 800);
+  window.setInterval(autoClickEditPromotionButton, 1000);
+
+  // ===== BACKGROUND AUTO-FILL =====
+  // Listens for autoFillText saved to chrome.storage by popup.js
+  // and automatically fills empty fields on the Shopee add-product page.
+
+  let lastAutoFillTimestamp = 0;
+  let isAutoFilling = false;
+
+  function parseAutoFillText(rawText) {
+    const text = String(rawText || "").trim();
+    if (!text) return { name: "", description: "" };
+    if (!text.includes("|")) {
+      return text.length > 120
+        ? { name: "", description: text }
+        : { name: text, description: "" };
+    }
+    const parts = text.split("|");
+    return {
+      name: parts[0].trim(),
+      description: parts.slice(1).join("|").trim()
+    };
+  }
+
+  async function runAutoFill(autoFillText, autoFillBrand) {
+    if (isAutoFilling) return;
+    isAutoFilling = true;
+    try {
+      const product = parseAutoFillText(autoFillText);
+      await autoFillIfEmpty(product, autoFillBrand || "");
+    } finally {
+      isAutoFilling = false;
+    }
+  }
+
+  function handleAutoFillStorage(result) {
+    const ts = result.autoFillTimestamp || 0;
+    if (ts <= lastAutoFillTimestamp) return; // already handled this one
+    lastAutoFillTimestamp = ts;
+
+    const autoFillText = String(result.autoFillText || "").trim();
+    const autoFillBrand = String(result.autoFillBrand || "").trim();
+    if (autoFillText || autoFillBrand) {
+      runAutoFill(autoFillText, autoFillBrand);
+    }
+  }
+
+  // Listen for changes from popup.js
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === "local" && changes.autoFillTimestamp) {
+      chrome.storage.local.get(["autoFillText", "autoFillBrand", "autoFillTimestamp"], handleAutoFillStorage);
+    }
+  });
+
+  // Also try on page load (in case popup was already set before page load)
+  chrome.storage.local.get(["autoFillText", "autoFillBrand", "autoFillTimestamp"], (result) => {
+    const ts = result.autoFillTimestamp || 0;
+    const now = Date.now();
+    // Only auto-fill if storage was set within last 5 minutes (fresh pick)
+    if (now - ts < 5 * 60 * 1000) {
+      lastAutoFillTimestamp = ts; // mark as handled so onChanged doesn't double-fire
+      const autoFillText = String(result.autoFillText || "").trim();
+      const autoFillBrand = String(result.autoFillBrand || "").trim();
+      if (autoFillText || autoFillBrand) {
+        // Wait for page to load fields before filling
+        setTimeout(() => runAutoFill(autoFillText, autoFillBrand), 1500);
+        setTimeout(() => runAutoFill(autoFillText, autoFillBrand), 3000);
+        setTimeout(() => runAutoFill(autoFillText, autoFillBrand), 5000);
+      }
+    }
+  });
+
+})();
+
+
+
+// Tá»± Ä‘á»™ng xoÃ¡ nÃºt c�…© náº¿u ngÆ°á»i dÃ¹ng chÆ°a táº£i láº¡i trang
+const oldFlashBtn = document.getElementById('shopee-export-flash-btn');
+if (oldFlashBtn) oldFlashBtn.remove();
+
+(function() {
+    let discountSkuMappingCache = null;
+    let isFetchingDiscountSkuMapping = false;
+    let cachedMaGian = null;
+    
+    function cleanStr(s) {
+        return String(s || "")
+            .normalize("NFC")
+            .toLowerCase()
+            .replace(/[\.…\u2026]+$/g, '')
+            .replace(/[\s\-_,]+/g, ' ')
+            .trim();
+    }
+
+    function cleanHeader(s) {
+        return cleanStr(s)
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/đ/g, 'd')
+            .replace(/Đ/g, 'd');
+    }
+
+    function makeKey(pName, vName) {
+        return cleanStr(pName) + '|||' + cleanStr(vName);
+    }
+
+    function getElTitleOrText(el) {
+        if (!el) return '';
+        const title = el.getAttribute('title') || 
+                      el.closest('[title]')?.getAttribute('title') || 
+                      el.querySelector('[title]')?.getAttribute('title') || '';
+        const text = (el.textContent || '').trim();
+        if (title && title.trim().length > text.length) {
+            return title.trim();
+        }
+        return text;
+    }
+
+    function cleanWords(s) {
+        return cleanStr(s).split(/\s+/).filter(w => w.length > 1);
+    }
+
+    function wordOverlapRatio(str1, str2) {
+        const w1 = cleanWords(str1);
+        const w2 = cleanWords(str2);
+        if (!w1.length || !w2.length) return 0;
+        const set2 = new Set(w2);
+        const matches = w1.filter(w => set2.has(w)).length;
+        return matches / Math.min(w1.length, w2.length);
+    }
+
+    function sendMessageWithTimeout(msg, timeoutMs = 10000) {
+        return new Promise(resolve => {
+            let timer = setTimeout(() => {
+                console.warn('[Shopee Discount SKU] Request timed out:', msg);
+                resolve({ ok: false, error: 'Timeout' });
+            }, timeoutMs);
+            try {
+                chrome.runtime.sendMessage(msg, res => {
+                    clearTimeout(timer);
+                    if (chrome.runtime.lastError) {
+                        console.warn('[Shopee Discount SKU] Runtime error:', chrome.runtime.lastError);
+                        resolve({ ok: false, error: chrome.runtime.lastError.message });
+                    } else {
+                        resolve(res || { ok: false });
+                    }
+                });
+            } catch (err) {
+                clearTimeout(timer);
+                console.warn('[Shopee Discount SKU] SendMessage exception:', err);
+                resolve({ ok: false, error: err.message });
+            }
+        });
+    }
+
+    async function fetchDiscountMappings() {
+        if (isFetchingDiscountSkuMapping) return null;
+        isFetchingDiscountSkuMapping = true;
+        try {
+            // 1. Read maGian from tab Cai dat (chrome.storage.local)
+            const storage = await new Promise(resolve => {
+                chrome.storage.local.get(["maGian", "dhHoanTextValue"], resolve);
+            });
+            const currentMaGian = cleanStr(storage?.maGian || storage?.dhHoanTextValue || "");
+            cachedMaGian = currentMaGian;
+
+            // 2. Fetch SP_SHOPEE!A:Z
+            let rowsSP = [];
+            const shopeeRes = await sendMessageWithTimeout({ type: "FETCH_SP_SHOPEE" }, 15000);
+            if (shopeeRes && shopeeRes.ok && shopeeRes.values && shopeeRes.values.length > 0) {
+                rowsSP = shopeeRes.values;
+            } else if (window.cachedSpShopee && window.cachedSpShopee.length > 0) {
+                rowsSP = window.cachedSpShopee;
+            }
+
+            if (!rowsSP || rowsSP.length === 0) {
+                console.warn('[Shopee Discount SKU] Could not load SP_SHOPEE data.');
+                return;
+            }
+            
+            // Resolve columns dynamically:
+            // Cột B (1): Tên Sản phẩm
+            // Cột D (3): Tên phân loại
+            // Cột E (4): SKU Sản phẩm
+            // Cột F (5): SKU
+            // Cột L (11): Gian (Mã gian)
+            let pNameIdx = 1;
+            let vNameIdx = 3;
+            let parentSkuIdx = 4;
+            let skuIdx = 5;
+            let gianIdx = 11;
+
+            if (rowsSP.length > 0) {
+                const headers = rowsSP[0].map(h => cleanStr(h));
+                const foundP = headers.findIndex(h => h.includes('tên sản phẩm') || h === 'ten sp' || h === 'tên sp' || h === 'name');
+                if (foundP !== -1) pNameIdx = foundP;
+
+                const foundV = headers.findIndex(h => (h.includes('tên phân loại') || h.includes('phân loại') || h.includes('variation')) && !h.includes('mã') && !h.includes('ma'));
+                if (foundV !== -1) vNameIdx = foundV;
+
+                const headerKeys = rowsSP[0].map(h => cleanHeader(h));
+
+                const foundParentSku = headerKeys.findIndex(h => h.includes('sku san pham') || h.includes('parent sku'));
+                if (foundParentSku !== -1) parentSkuIdx = foundParentSku;
+
+                const foundSku = headerKeys.findIndex(h => (h === 'sku' || h === 'ma sku' || h.includes('sku phan loai') || h.includes('sku ct')) && !h.includes('san pham'));
+                if (foundSku !== -1) skuIdx = foundSku;
+
+                const foundGian = headerKeys.findIndex(h => h === 'gian' || h === 'ma gian' || h === 'ma_gian' || h.includes('gian'));
+                if (foundGian !== -1) gianIdx = foundGian;
+            }
+
+            // Build SKU Map & list of filtered rows
+            const skuMap = {};
+            const rawFilteredRows = [];
+            const rawAllRows = [];
+
+            for (let i = 1; i < rowsSP.length; i++) {
+                const row = rowsSP[i];
+                if (!row || !row.some(c => c)) continue;
+
+                const rowGian = cleanStr(row[gianIdx]);
+                const rawPName = String(row[pNameIdx] || '').trim();
+                const rawVName = String(row[vNameIdx] || '').trim();
+                const rawParentSku = String(row[parentSkuIdx] || '').trim();
+                const rawVarSku = String(row[skuIdx] || '').trim();
+
+                // Lấy cột F (SKU), nếu cột F không có thì lấy cột E (SKU Sản phẩm) chỉ lấy 14 ký tự
+                let targetSku = '';
+                if (rawVarSku) {
+                    targetSku = rawVarSku;
+                } else if (rawParentSku) {
+                    targetSku = rawParentSku.slice(0, 14);
+                }
+
+                if (rawPName && targetSku) {
+                    const rowObj = {
+                        pName: cleanStr(rawPName),
+                        vName: cleanStr(rawVName),
+                        targetSku: targetSku,
+                        rowGian: rowGian
+                    };
+                    rawAllRows.push(rowObj);
+
+                    // So sánh cột L (gian) với mã gian ở tab Cài đặt.
+                    if (!currentMaGian || rowGian === currentMaGian) {
+                        const key = makeKey(rawPName, rawVName);
+                        skuMap[key] = targetSku;
+                        if (!rawVName) {
+                            skuMap[makeKey(rawPName, '')] = targetSku;
+                        }
+                        rawFilteredRows.push(rowObj);
+                    }
+                }
+            }
+            
+            // 3. Fetch DS_SP (for min price if available)
+            const priceMap = {};
+            try {
+                const dsSpRes = await sendMessageWithTimeout({ type: "FETCH_DS_SP" }, 10000);
+                if (dsSpRes && dsSpRes.ok && dsSpRes.values && dsSpRes.values.length > 0) {
+                    const rowsDS = dsSpRes.values;
+                    const headers = rowsDS[0].map(h => cleanStr(h));
+                    const idIdx = headers.findIndex(h => h === "id_sp_ct" || h === "sku" || h.includes("mã sku"));
+                    const priceIdx = headers.findIndex(h => h === "gia_thap_nhat" || h.includes("giá thấp nhất") || h.includes("gia thap nhat"));
+                    
+                    if (idIdx !== -1 && priceIdx !== -1) {
+                        for (let i = 1; i < rowsDS.length; i++) {
+                            const idVal = cleanStr(rowsDS[i][idIdx]);
+                            const priceVal = String(rowsDS[i][priceIdx] || "").trim();
+                            if (idVal && priceVal) {
+                                priceMap[idVal] = priceVal;
+                            }
+                        }
+                    }
+                }
+            } catch(e) {
+                console.warn('Could not fetch DS_SP for min prices:', e);
+            }
+            
+            discountSkuMappingCache = {
+                skuMap,
+                priceMap,
+                rawFilteredRows,
+                rawAllRows,
+                maGian: currentMaGian
+            };
+            console.log('[Shopee Discount SKU] Loaded mappings successfully: filtered =', rawFilteredRows.length, ', total =', rawAllRows.length, ', gian =', currentMaGian);
+        } catch(e) {
+            console.error('[Shopee Discount SKU] Error fetching discount mappings:', e);
+        } finally {
+            isFetchingDiscountSkuMapping = false;
+        }
+    }
+
+    function searchInRows(rows, cleanP, cleanV) {
+        if (!rows || !rows.length) return null;
+        
+        // 1. Exact pName, exact vName
+        for (const item of rows) {
+            if (item.pName === cleanP && (!cleanV || item.vName === cleanV)) {
+                return item.targetSku;
+            }
+        }
+        
+        // 2. Exact pName, partial vName
+        if (cleanV) {
+            for (const item of rows) {
+                if (item.pName === cleanP) {
+                    if (item.vName === cleanV || item.vName.includes(cleanV) || cleanV.includes(item.vName)) {
+                        return item.targetSku;
+                    }
+                }
+            }
+        }
+
+        // 3. Substring pName and matching vName
+        for (const item of rows) {
+            if (item.pName.includes(cleanP) || cleanP.includes(item.pName) || item.pName.startsWith(cleanP) || cleanP.startsWith(item.pName)) {
+                if (!cleanV && !item.vName) {
+                    return item.targetSku;
+                }
+                if (cleanV && item.vName && (item.vName === cleanV || item.vName.includes(cleanV) || cleanV.includes(item.vName))) {
+                    return item.targetSku;
+                }
+            }
+        }
+
+        // 4. Word overlap ratio >= 50%
+        for (const item of rows) {
+            if (wordOverlapRatio(item.pName, cleanP) >= 0.5) {
+                if (!cleanV && !item.vName) {
+                    return item.targetSku;
+                }
+                if (cleanV && item.vName && (item.vName === cleanV || item.vName.includes(cleanV) || cleanV.includes(item.vName))) {
+                    return item.targetSku;
+                }
+            }
+        }
+
+        // 5. If cleanV is empty and only 1 match for this product
+        if (!cleanV) {
+            const matches = rows.filter(item => item.pName.includes(cleanP) || cleanP.includes(item.pName) || wordOverlapRatio(item.pName, cleanP) >= 0.5);
+            if (matches.length === 1) {
+                return matches[0].targetSku;
+            }
+        }
+
+        return null;
+    }
+
+    function findSkuInCache(pName, vName) {
+        if (!discountSkuMappingCache || !pName) return null;
+        const { skuMap, rawFilteredRows, rawAllRows, maGian } = discountSkuMappingCache;
+        const cleanP = cleanStr(pName);
+        const cleanV = cleanStr(vName);
+        
+        // 1. Exact key match from skuMap
+        const exactKey = cleanP + '|||' + cleanV;
+        if (skuMap[exactKey]) return skuMap[exactKey];
+        if (!cleanV && skuMap[cleanP + '|||']) return skuMap[cleanP + '|||'];
+
+        // 2. Search within filtered rows for this gian
+        let sku = searchInRows(rawFilteredRows, cleanP, cleanV);
+        if (sku) return sku;
+
+        // 3. Only search all rows when no maGian is configured.
+        if (!maGian) {
+            sku = searchInRows(rawAllRows, cleanP, cleanV);
+            return sku;
+        }
+
+        return null;
+    }
+    
+    function findInputForRow(v) {
+        let curr = v;
+        while (curr && curr !== document.body) {
+            const inputs = curr.querySelectorAll('.eds-input__input, input.ant-input-number-input, input[type="text"], input[type="number"]');
+            if (inputs.length > 0) {
+                const textInputs = Array.from(inputs).filter(i => (i.type === 'text' || i.type === 'number') && !i.placeholder?.includes('Tìm'));
+                if (textInputs.length > 0) return textInputs[0];
+            }
+            curr = curr.parentElement;
+        }
+        return null;
+    }
+
+    function updateCopyButtonColor(rowContainer, injected) {
+        const copyBtn = injected?.querySelector?.('.btn-copy-price');
+        const minPriceStr = copyBtn?.getAttribute('data-min-price') || '';
+        if (!copyBtn || !minPriceStr) return;
+
+        const input = findInputForRow(rowContainer);
+        const currentPrice = Number(String(input?.value || '').replace(/[^\d]/g, ''));
+        const minPrice = Number(String(minPriceStr).replace(/[^\d]/g, ''));
+        if (!currentPrice || !minPrice) return;
+
+        if (currentPrice > minPrice) {
+            copyBtn.style.background = '#16a34a';
+        } else if (currentPrice < minPrice) {
+            copyBtn.style.background = '#dc2626';
+        } else {
+            copyBtn.style.background = '#64748b';
+        }
+    }
+
+    function createSkuElement(sku, minPrice, rowContainer) {
+        if (!sku) return null;
+
+        const skuDiv = document.createElement('div');
+        skuDiv.className = 'injected-sku-ct';
+        skuDiv.style.cssText = 'margin-top: 4px; font-size: 11px; line-height: 1.3; display: block !important; clear: both !important; text-align: left !important; z-index: 9999 !important; position: relative !important; width: 100% !important;';
+        
+        let priceHtml = '';
+        const priceNumberStr = minPrice ? String(minPrice).replace(/[^\d]/g, '') : '';
+        if (minPrice && priceNumberStr) {
+            priceHtml = `
+            <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                <span style="color:#dc2626; font-weight: bold; font-size: 10px;">Giá min: <b>${minPrice}</b></span>
+                <button type="button" class="btn-copy-price" data-min-price="${priceNumberStr}" style="background:#dc2626; color:white; border:none; border-radius:3px; padding:1px 5px; font-size:9px; cursor:pointer; font-weight: bold;">Điền</button>
+            </div>`;
+        }
+        
+        skuDiv.innerHTML = `
+        <div class="badge-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px;">
+            <div class="injected-sku-badge-text" style="display: inline-block; color: #1d4ed8; font-weight: 700; font-size: 11px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 3px; padding: 1px 6px; white-space: nowrap;">SKU: <span>${sku}</span></div>
+        </div>
+        ${priceHtml}`;
+        
+        const copyBtn = skuDiv.querySelector('.btn-copy-price');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!priceNumberStr) return;
+                
+                const input = findInputForRow(rowContainer);
+                if (input) {
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                    nativeInputValueSetter.call(input, priceNumberStr);
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    
+                    copyBtn.innerText = 'Đã điền!';
+                    setTimeout(() => {
+                        copyBtn.innerText = 'Điền';
+                    }, 1500);
+                } else {
+                    alert('Không tìm thấy ô nhập giá.');
+                }
+            });
+        }
+        
+        return skuDiv;
+    }
+
+    function getCleanDiscountText(el) {
+        if (!el) return '';
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll('button, input, textarea, select, script, style, .injected-sku-ct, .injected-sku-info, .injected-sku-price-helper').forEach(n => n.remove());
+        return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function normalizeDiscountVariantText(text) {
+        return String(text || '')
+            .replace(/\b(Bán hết|Ban het|Sold out|Hết hàng|Het hang)\b/gi, '')
+            .replace(/^Phân loại\s*:\s*/i, '')
+            .replace(/^Variation\s*:\s*/i, '')
+            .replace(/^SKU\s*:\s*\S+\s*/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function isLikelyDiscountVariantName(text) {
+        const normalized = normalizeDiscountVariantText(text);
+        const clean = cleanHeader(normalized);
+        if (!clean || clean.length < 2 || clean.length > 120) return false;
+        if (/^\d+([.,]\d+)?$/.test(clean)) return false;
+        if (/[₫đ]|\d+\s*%/.test(normalized)) return false;
+        if (/\b(gia|kho|so luong|khuyen mai|gioi han|bat tat|thao tac|khong|xoa|giam)\b/.test(clean)) return false;
+        return true;
+    }
+
+    function getDiscountRowCells(row) {
+        const cells = Array.from(row.querySelectorAll(':scope > td, :scope > [role="cell"], :scope > .eds-table__cell, :scope > [class*="cell"], :scope > div'));
+        if (cells.length) return cells;
+        return Array.from(row.children || []);
+    }
+
+    function findDiscountVariantTarget(row) {
+        const directVariation = row.querySelector('.item-variation .ellipsis-content, .item-content.item-variation .ellipsis-content, [class*="item-variation"] .ellipsis-content');
+        if (directVariation) {
+            const text = normalizeDiscountVariantText(getElTitleOrText(directVariation));
+            if (isLikelyDiscountVariantName(text)) {
+                return { el: directVariation, text };
+            }
+        }
+
+        const cells = getDiscountRowCells(row);
+        for (const cell of cells) {
+            if (!cell || cell.matches?.('input, button')) continue;
+            if (cell.querySelector('input[type="checkbox"]') && !getCleanDiscountText(cell)) continue;
+            if (cell.querySelector('.eds-select, .ant-select, [class*="select"], [class*="dropdown"]')) continue;
+
+            const ellipsis = cell.querySelector('.ellipsis-content.single, .ellipsis-content, [title]');
+            const rawText = ellipsis ? getElTitleOrText(ellipsis) : getCleanDiscountText(cell);
+            const text = normalizeDiscountVariantText(rawText);
+            if (isLikelyDiscountVariantName(text)) {
+                return { el: ellipsis || cell, text };
+            }
+        }
+
+        return null;
+    }
+
+    function getDiscountProductNameFromRow(row, allowImageFallback = true) {
+        const selectors = [
+            '.discount-item-product-name .ellipsis-content',
+            '.discount-item-product-name',
+            '[class*="product-name"] .ellipsis-content',
+            '[class*="product-name"]',
+            '[class*="item-title"] .ellipsis-content',
+            '[class*="item-title"]'
+        ];
+
+        for (const selector of selectors) {
+            const el = row.querySelector(selector);
+            if (!el) continue;
+            const text = getElTitleOrText(el);
+            if (text && isLikelyDiscountVariantName(text)) return text;
+        }
+
+        if (!allowImageFallback || !row.querySelector('img')) return '';
+        const target = findDiscountVariantTarget(row);
+        return target?.text || '';
+    }
+
+    function findDiscountProductNameFromContext(row) {
+        const modelList = row.closest('.discount-edit-item-model-list');
+        let ancestor = row.parentElement;
+
+        while (ancestor && ancestor !== document.body) {
+            const candidates = Array.from(ancestor.querySelectorAll([
+                '.discount-item-product-name .ellipsis-content',
+                '.discount-item-product-name',
+                '[class*="product-name"] .ellipsis-content',
+                '[class*="product-name"]',
+                '[class*="item-title"] .ellipsis-content',
+                '[class*="item-title"]',
+                '.ellipsis-content.single',
+                '.ellipsis-content',
+                '[title]'
+            ].join(',')));
+
+            for (const candidate of candidates) {
+                if (modelList && modelList.contains(candidate)) continue;
+                if (candidate.closest('.discount-edit-item-model-list, .item-variation, .item-price, .item-stock, .item-promotion-stock, .item-purchase-limit, .item-enable-disable, .item-action')) continue;
+                if (candidate.closest('.eds-select, .ant-select, [class*="dropdown"], button')) continue;
+
+                const text = normalizeDiscountVariantText(getElTitleOrText(candidate));
+                if (text && isLikelyDiscountVariantName(text)) {
+                    return text;
+                }
+            }
+
+            ancestor = ancestor.parentElement;
+        }
+
+        return '';
+    }
+
+    function findDiscountSkuForNames(pName, vName) {
+        const sku = pName ? findSkuInCache(pName, vName) : null;
+        if (sku) return sku;
+
+        const cleanV = cleanStr(vName);
+        if (!discountSkuMappingCache || !cleanV) return null;
+
+        const { rawFilteredRows, rawAllRows, maGian } = discountSkuMappingCache;
+        const rows = maGian ? rawFilteredRows : rawAllRows;
+        const matches = (rows || []).filter(item => {
+            if (!item.vName) return false;
+            return item.vName === cleanV || item.vName.includes(cleanV) || cleanV.includes(item.vName);
+        });
+        const uniqueSkus = Array.from(new Set(matches.map(item => item.targetSku).filter(Boolean)));
+
+        return uniqueSkus.length === 1 ? uniqueSkus[0] : null;
+    }
+
+    function getDiscountTableRows() {
+        const selectors = [
+            '.discount-edit-item-model-component',
+            '.eds-table__row',
+            'tr',
+            '[role="row"]',
+            '.discount-edit-item-model-list > div',
+            '.item-content.item-variation'
+        ];
+        const seen = new Set();
+        const rows = [];
+
+        selectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(row => {
+                if (!row || seen.has(row)) return;
+                seen.add(row);
+                rows.push(row);
+            });
+        });
+
+        return rows;
+    }
+
+    function renderDiscountTableSkuCt() {
+        const rows = getDiscountTableRows();
+        if (!rows.length || !discountSkuMappingCache) return;
+
+        const priceMap = discountSkuMappingCache.priceMap || {};
+        let currentPName = '';
+
+        rows.forEach(row => {
+            const hasEditableInput = row.querySelector('input.eds-input__input, input.ant-input-number-input, input[type="text"], input[type="number"]');
+            const productName = getDiscountProductNameFromRow(row, !hasEditableInput);
+            if (productName) currentPName = productName;
+
+            if (!hasEditableInput) return;
+
+            const target = findDiscountVariantTarget(row);
+            if (!target || !target.text) return;
+
+            const pName = currentPName || productName || findDiscountProductNameFromContext(row);
+
+            const existing = row.querySelector('.injected-sku-ct');
+            const sku = findDiscountSkuForNames(pName, target.text);
+            if (!sku) return;
+
+            const minPrice = priceMap[cleanStr(sku)] || priceMap[sku] || null;
+            if (existing) {
+                const skuSpan = existing.querySelector('.injected-sku-badge-text span');
+                if (skuSpan && skuSpan.textContent !== sku) skuSpan.textContent = sku;
+                updateCopyButtonColor(row, existing);
+                return;
+            }
+
+            const skuDiv = createSkuElement(sku, minPrice, row);
+            if (!skuDiv) return;
+
+            const mountEl = target.el.closest('.item-content.item-variation, .item-variation, td, [role="cell"], .eds-table__cell, [class*="cell"]') || target.el.parentElement || target.el;
+            mountEl.style.setProperty('overflow', 'visible', 'important');
+            mountEl.style.setProperty('height', 'auto', 'important');
+            mountEl.appendChild(skuDiv);
+        });
+    }
+
+    async function renderDiscountSkuCt() {
+        // Module cũ đã được hợp nhất vào autoInjectPromotionSkuBadges
+        document.querySelectorAll('.injected-sku-ct, .injected-sku-info, .injected-sku-price-helper').forEach(el => el.remove());
+        return;
+        const hasDiscountDom = document.querySelector('.discount-edit-item-model-component, .item-content.item-variation, .item-variation, .discount-edit-item-model-list');
+        const isDiscountUrl = window.location.href.includes('discount');
+        if (!hasDiscountDom && !isDiscountUrl) return;
+        
+        // Find all variation containers on page
+        const variations = Array.from(document.querySelectorAll('.item-variation, .item-content.item-variation, [class*="item-variation"]'));
+        
+        // Trigger fetch if not loaded
+        if (!discountSkuMappingCache && !isFetchingDiscountSkuMapping) {
+            fetchDiscountMappings();
+        }
+        
+        const priceMap = discountSkuMappingCache ? (discountSkuMappingCache.priceMap || {}) : {};
+
+        if (!variations.length) {
+            renderDiscountTableSkuCt();
+            return;
+        }
+
+        variations.forEach(v => {
+            const row = v.closest('.discount-edit-item-model-component, tr, .eds-table__row') || v.parentElement;
+            
+            // Fix CSS clipping on all levels
+            if (row) {
+                row.style.setProperty('height', 'auto', 'important');
+                row.style.setProperty('min-height', '60px', 'important');
+                row.style.setProperty('overflow', 'visible', 'important');
+                if (row.parentElement) {
+                    row.parentElement.style.setProperty('height', 'auto', 'important');
+                    row.parentElement.style.setProperty('overflow', 'visible', 'important');
+                }
+            }
+            v.style.setProperty('overflow', 'visible', 'important');
+            v.style.setProperty('height', 'auto', 'important');
+
+            const injected = v.querySelector('.injected-sku-ct');
+            
+            // 1. Get Variation Name from inside v
+            const vNameEl = v.querySelector('.ellipsis-content.single, .ellipsis-content');
+            const vName = vNameEl ? getElTitleOrText(vNameEl) : '';
+            
+            // 2. Get Product Name from ancestor
+            const pName = findDiscountProductNameFromContext(row || v);
+
+            // 3. Find SKU
+            const sku = vName ? findDiscountSkuForNames(pName, vName) : null;
+            const minPrice = sku ? (priceMap[cleanStr(sku)] || priceMap[sku] || null) : null;
+
+            if (injected) {
+                // Update SKU badge if sheet just finished loading
+                if (sku && !injected.querySelector('.injected-sku-badge-text')) {
+                    const badgeRow = injected.querySelector('.badge-row');
+                    if (badgeRow) {
+                        badgeRow.innerHTML = `
+                            <div class="injected-sku-badge-text" style="display: inline-block; color: #1d4ed8; font-weight: 700; font-size: 11px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 3px; padding: 1px 6px; white-space: nowrap;">SKU: <span>${sku}</span></div>
+                        `;
+                    }
+                } else if (sku) {
+                    const skuSpan = injected.querySelector('.injected-sku-badge-text span');
+                    if (skuSpan && skuSpan.textContent !== sku) skuSpan.textContent = sku;
+                }
+                updateCopyButtonColor(v, injected);
+            } else {
+                const skuDiv = createSkuElement(sku, minPrice, v);
+                if (skuDiv) v.appendChild(skuDiv);
+            }
+
+            // 4. Also inject helper into Price Form (Column 3) for quick filling
+            if (row) {
+                const priceForm = row.querySelector('.price-discount-form, .price-and-discount-wrapper, .item-price');
+                if (priceForm && sku && !priceForm.querySelector('.injected-sku-price-helper')) {
+                    priceForm.style.setProperty('overflow', 'visible', 'important');
+                    priceForm.style.setProperty('height', 'auto', 'important');
+                    const priceHelper = document.createElement('div');
+                    priceHelper.className = 'injected-sku-price-helper';
+                    priceHelper.style.cssText = 'display: block !important; margin-top: 3px !important; font-size: 11px !important; line-height: 1.3 !important; clear: both !important; z-index: 9999 !important; position: relative !important;';
+                    
+                    let priceBtnHtml = '';
+                    const priceNum = minPrice ? String(minPrice).replace(/[^\d]/g, '') : '';
+                    if (priceNum) {
+                        priceBtnHtml = `<button type="button" class="btn-fill-price-quick" data-price="${priceNum}" style="background: #dc2626 !important; color: white !important; font-weight: bold !important; font-size: 10px !important; padding: 2px 7px !important; border: none !important; border-radius: 3px !important; cursor: pointer !important; margin-left: 5px !important;">⚡ Điền: ${minPrice}</button>`;
+                    }
+                    
+                    priceHelper.innerHTML = `
+                        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
+                            <span style="color: #1d4ed8; font-weight: 700; font-size: 11px;">SKU: ${sku}</span>
+                            ${priceBtnHtml}
+                        </div>
+                    `;
+
+                    const btn = priceHelper.querySelector('.btn-fill-price-quick');
+                    if (btn) {
+                        btn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const input = row.querySelector('input.eds-input__input, input[type="text"]');
+                            if (input) {
+                                const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                                setter.call(input, priceNum);
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                                input.dispatchEvent(new Event('change', { bubbles: true }));
+                                btn.innerText = 'Đã điền!';
+                                setTimeout(() => { btn.innerText = `⚡ Điền: ${minPrice}`; }, 1200);
+                            }
+                        });
+                    }
+
+                    priceForm.appendChild(priceHelper);
+                }
+            }
+        });
+
+        renderDiscountTableSkuCt();
+    }
+
+    async function renderFlashSaleSkuCt() {
+        if (!window.location.href.includes('banhang.shopee.vn/portal/marketing/shop-flash-sale')) return;
+        
+        const rows = document.querySelectorAll('.ant-table-row');
+        if (!rows.length) return;
+        
+        if (!discountSkuMappingCache) {
+            let needsFetch = false;
+            rows.forEach(row => {
+                if (row.querySelector('.ant-input-number-input') && !row.querySelector('.injected-sku-ct')) {
+                    needsFetch = true;
+                }
+            });
+            if (needsFetch) {
+                await fetchDiscountMappings();
+                return;
+            }
+        }
+        
+        const priceMap = discountSkuMappingCache ? discountSkuMappingCache.priceMap : {};
+        
+        let currentPName = '';
+        rows.forEach(row => {
+            if (row.classList.contains('ant-table-row-level-0')) {
+                const pNameEl = row.querySelector('.product-name');
+                if (pNameEl) currentPName = pNameEl.textContent.trim();
+            }
+            
+            if (!row.querySelector('.ant-input-number-input')) return;
+            
+            let vName = '';
+            if (row.classList.contains('ant-table-row-level-1')) {
+                const vNameEl = row.querySelector('.product-name');
+                if (vNameEl) vName = vNameEl.textContent.trim();
+            }
+            
+            const injected = row.querySelector('.injected-sku-ct, .injected-sku-info');
+            
+            if (injected) {
+                const copyBtn = injected.querySelector('.btn-copy-price');
+                if (copyBtn) {
+                    const minPriceStr = copyBtn.getAttribute('data-min-price');
+                    if (minPriceStr) {
+                        const minPriceVal = parseFloat(minPriceStr);
+                        const inputs = row.querySelectorAll('.ant-input-number-input');
+                        if (inputs.length > 0) {
+                            const priceInput = inputs[0];
+                            const currentVal = parseFloat((priceInput.value || '').replace(/[^\d]/g, ''));
+                            if (!isNaN(currentVal) && !isNaN(minPriceVal)) {
+                                if (currentVal > minPriceVal) {
+                                    priceInput.style.color = '#52c41a';
+                                    priceInput.style.fontWeight = 'bold';
+                                } else if (currentVal < minPriceVal) {
+                                    priceInput.style.color = '#f5222d';
+                                    priceInput.style.fontWeight = 'bold';
+                                } else {
+                                    priceInput.style.color = 'inherit';
+                                    priceInput.style.fontWeight = 'normal';
+                                }
+                            }
+                        }
+                    }
+                }
+                return;
+            }
+            
+            if (!currentPName) return;
+            
+            const sku = findSkuInCache(currentPName, vName);
+            
+            if (sku) {
+                const minPrice = priceMap[cleanStr(sku)] || priceMap[sku] || 'Chưa có';
+                const priceNumberStr = minPrice.replace(/[^\d]/g, '');
+                
+                const skuDiv = document.createElement('div');
+                skuDiv.className = 'injected-sku-ct injected-sku-info';
+                skuDiv.innerHTML = `<span>SKU: <b>${sku}</b></span><br/>
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                    <span style="color:#cf1322">Giá thấp nhất: <b>${minPrice}</b></span>
+                    <button type="button" class="btn-copy-price" data-min-price="${priceNumberStr}" style="background:#cf1322; color:white; border:none; border-radius:3px; padding:2px 6px; font-size:10px; cursor:pointer;">Điền giá</button>
+                </div>`;
+                
+                skuDiv.querySelector('.btn-copy-price').addEventListener('click', (e) => {
+                    const minP = e.target.getAttribute('data-min-price');
+                    if (minP) {
+                        const inputs = row.querySelectorAll('.ant-input-number-input');
+                        if (inputs.length > 0) {
+                            const input = inputs[0];
+                            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                            nativeSetter.call(input, minP);
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            
+                            const btn = e.target;
+                            btn.innerText = 'Đã điền!';
+                            setTimeout(() => { btn.innerText = 'Điền giá'; }, 1000);
+                        }
+                    }
+                });
+                
+                const metaInfo = row.querySelector('.product-meta-info');
+                if (metaInfo) {
+                    metaInfo.appendChild(skuDiv);
+                } else {
+                    const firstTd = row.querySelector('td:nth-child(2)');
+                    if (firstTd) firstTd.appendChild(skuDiv);
+                }
+            }
+        });
+    }
+
+    // Listen for changes in tab Cai dat (maGian)
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+        chrome.storage.onChanged.addListener((changes, area) => {
+            if (area === 'local' && (changes.maGian || changes.dhHoanTextValue)) {
+                discountSkuMappingCache = null;
+                document.querySelectorAll('.injected-sku-ct, .injected-sku-info').forEach(el => el.remove());
+                renderDiscountSkuCt();
+            }
+        });
+    }
+
+    window.setInterval(renderDiscountSkuCt, 1500);
+    window.setInterval(renderFlashSaleSkuCt, 1500);
+})();
+
+ 
+// ===== UD_CT STATUS =====
+(function() {
+let udCtRowsByMdh = null;
+let udCtError = false;
+let udCtErrorMessage = "";
+let isFetchingUdCt = false;
+let lastFetchUdCtTime = 0;
+
+function normalizeUdCtHeader(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0111/g, "d")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizeUdCtOrderKey(value) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function getUdCtCell(row, index) {
+  return String(row?.[index] || "").trim();
+}
+
+function fetchUdCtData(force = false) {
+  const now = Date.now();
+  if (isFetchingUdCt) return;
+  if (!force && udCtRowsByMdh && now - lastFetchUdCtTime < 300000) return;
+
+  isFetchingUdCt = true;
+  chrome.runtime.sendMessage({ type: "FETCH_UD_CT" }, (res) => {
+    isFetchingUdCt = false;
+    lastFetchUdCtTime = Date.now();
+
+    if (!res || !res.ok || !Array.isArray(res.values) || res.values.length === 0) {
+      udCtRowsByMdh = new Map();
+      udCtError = true;
+      udCtErrorMessage = res?.error || "Khong doc duoc UD_CT";
+      updateUdCtDisplay();
+      return;
+    }
+
+    const mdhIdx = 12; // M
+    const ngayIdx = 4; // E
+    const sanIdx = 8; // I
+    const khungHIdx = 9; // J
+    const idSpCtIdx = 16; // Q
+    const trangThaiIdx = 24; // Y
+    const rowsByMdh = new Map();
+
+    for (const row of res.values.slice(1)) {
+      const mdh = getUdCtCell(row, mdhIdx);
+      const mdhKey = normalizeUdCtOrderKey(mdh);
+      if (!mdhKey) continue;
+
+      const entry = {
+        mdh,
+        ngay: getUdCtCell(row, ngayIdx),
+        san: getUdCtCell(row, sanIdx),
+        khungH: getUdCtCell(row, khungHIdx),
+        idSpCt: getUdCtCell(row, idSpCtIdx),
+        trangThai: getUdCtCell(row, trangThaiIdx)
+      };
+
+      if (!rowsByMdh.has(mdhKey)) rowsByMdh.set(mdhKey, []);
+      rowsByMdh.get(mdhKey).push(entry);
+    }
+
+    udCtRowsByMdh = rowsByMdh;
+    udCtError = false;
+    udCtErrorMessage = "";
+    updateUdCtDisplay();
+  });
+}
+
+function getUdCtStatusColor(status) {
+  const normalized = normalizeUdCtHeader(status);
+  if (normalized.includes("huy")) return "#ef4444";
+  if (normalized.includes("xuat") || normalized.includes("in") || normalized.includes("hoan_thanh")) return "#22c55e";
+  if (normalized.includes("cho") || normalized.includes("dang")) return "#f59e0b";
+  return "#3b82f6";
+}
+
+function renderUdCtBadgeRows(badge, rows) {
+  badge.dataset.shopeeQlspUdCtFilled = "1";
+  badge.textContent = "";
+  badge.style.backgroundColor = "transparent";
+  badge.style.color = "initial";
+  badge.style.padding = "0";
+  badge.style.border = "none";
+
+  rows.forEach(row => {
+    const line = document.createElement("span");
+    line.className = "ud-ct-badge-row";
+    line.style.backgroundColor = getUdCtStatusColor(row.trangThai);
+    line.textContent = row.trangThai || "";
+    badge.appendChild(line);
+  });
+}
+
+function renderUdCtFallbackBadge(badge, text, backgroundColor, color = "white") {
+  badge.dataset.shopeeQlspUdCtFilled = "0";
+  badge.innerHTML = text || "";
+  badge.style.backgroundColor = backgroundColor || "transparent";
+  badge.style.color = color;
+  badge.style.padding = text ? "2px 6px" : "0";
+  badge.style.border = "none";
+}
+
+function updateUdCtDisplay() {
+  if (!isOrderListPage()) return;
+
+  if (!udCtRowsByMdh && !isFetchingUdCt) {
+    fetchUdCtData();
+  }
+
+  document.querySelectorAll(".ud-ct-badge").forEach(badge => {
+    const orderSn = badge.dataset.shopeeQlspOrderId;
+    if (!orderSn) return;
+
+    const isPrinted = typeof cachedUdCtMdhIds !== "undefined" && cachedUdCtMdhIds.has(orderSn);
+
+    if (!udCtRowsByMdh) {
+      renderUdCtFallbackBadge(badge, isPrinted ? cachedUdCtMdhIds.get(orderSn) : "UD_CT...", isPrinted ? "#22c55e" : "transparent", isPrinted ? "white" : "#64748b");
+      return;
+    }
+
+    if (udCtError) {
+      renderUdCtFallbackBadge(badge, "ERR: " + (udCtErrorMessage || "API Fail"), "#ef4444", "white");
+      badge.title = udCtErrorMessage;
+      return;
+    }
+
+    const matchingRows = udCtRowsByMdh.get(normalizeUdCtOrderKey(orderSn)) || [];
+    if (matchingRows.length) {
+      badge.title = "UD_CT: " + orderSn;
+      renderUdCtBadgeRows(badge, matchingRows);
+      return;
+    }
+
+    badge.title = "";
+    renderUdCtFallbackBadge(badge, "NO MATCH: " + orderSn, "#f59e0b", "white");
+  });
+}
+window.setInterval(updateUdCtDisplay, 1500);
+})();
+
+
+
+
+
+
+
+
+  // Auto Download Giảm Giá Logic
+  chrome.storage.local.get(["autoDownloadGiamGia"], (res) => {
+  if (res.autoDownloadGiamGia || window.location.href.includes("auto_download_giam_gia=1")) {
+      chrome.storage.local.remove("autoDownloadGiamGia"); // Consume the flag
+
+      const showFloatingStatusGG = (msg, color = '#16a34a') => {
+          console.log("[AutoGiamGia]", msg);
+          let statusDiv = document.getElementById('shopee-auto-giamgia-status');
+          if (!statusDiv) {
+              statusDiv = document.createElement('div');
+              statusDiv.id = 'shopee-auto-giamgia-status';
+              statusDiv.style.position = 'fixed';
+              statusDiv.style.top = '140px';
+              statusDiv.style.right = '20px';
+              statusDiv.style.padding = '15px 20px';
+              statusDiv.style.color = '#fff';
+              statusDiv.style.fontSize = '16px';
+              statusDiv.style.fontWeight = 'bold';
+              statusDiv.style.borderRadius = '8px';
+              statusDiv.style.zIndex = '999999';
+              statusDiv.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
+              statusDiv.style.transition = 'all 0.3s ease';
+              document.body.appendChild(statusDiv);
+          }
+          statusDiv.style.backgroundColor = color;
+          statusDiv.textContent = msg;
+      };
+
+      const simulateMouseClick = (el) => {
+          const rect = el.getBoundingClientRect();
+          const x = rect.left + rect.width / 2;
+          const y = rect.top + rect.height / 2;
+          ['mousedown', 'mouseup', 'click'].forEach(evt => {
+              el.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y }));
+          });
+      };
+
+      const findAllButtonsRobust = (searchText) => {
+          // Fallback to all elements if needed, but start with buttons
+          const buttons = document.querySelectorAll('button, a, .eds-button, .list-header-action, span');
+          
+          // Normalize to NFC to fix Vietnamese composed/decomposed unicode issues
+          const target = searchText.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
+          const results = [];
+          
+          for (const b of buttons) {
+              if (!b.textContent) continue;
+              const text = b.textContent.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
+              if (text.includes(target)) {
+                  // To avoid grabbing a giant parent div, only take elements whose text is reasonably short
+                  if (text.length < target.length + 30) {
+                      results.push(b);
+                  }
+              }
+          }
+          return results;
+      };
+
+      const aggressiveClick = (btns) => {
+          let clicked = false;
+          for (const b of btns) {
+              try {
+                  simulateMouseClick(b);
+                  b.click();
+                  // Click EVERYTHING inside the button to bypass strict event listeners
+                  const children = b.querySelectorAll('*');
+                  for (const child of children) {
+                      try {
+                          simulateMouseClick(child);
+                          child.click();
+                      } catch(e) {}
+                  }
+                  clicked = true;
+              } catch(e) {}
+          }
+          return clicked;
+      };
+      
+      const getTopRowDateGG = () => {
+          const modalBody = document.querySelector('.eds-modal__body');
+          if (!modalBody) return null;
+          const table = modalBody.querySelector('.record-table .eds-table__body');
+          if (!table) return null;
+          const firstRow = table.querySelector('tr');
+          if (!firstRow) return null;
+          const firstCell = firstRow.querySelector('td .eds-table__cell');
+          return firstCell ? firstCell.textContent.trim() : null;
+      };
+
+      const startGiamGiaDownload = () => {
+          showFloatingStatusGG("Bước 1: Chờ 5 giây để click 'Chỉnh sửa giảm giá'...", "#f59e0b");
+          
+          setTimeout(() => {
+              const btnsChinhSua = findAllButtonsRobust("chỉnh sửa giảm giá");
+              
+              if (btnsChinhSua.length > 0) {
+                  aggressiveClick(btnsChinhSua);
+                  showFloatingStatusGG("Bước 2: Đã click. Chờ 5 giây popup hiện lên...", "#3b82f6");
+                  
+                  setTimeout(() => {
+                      const oldRowDate = getTopRowDateGG();
+                      const btnsTaiVe = findAllButtonsRobust("tải về thông tin sản phẩm");
+                      
+                      if (btnsTaiVe.length > 0) {
+                          aggressiveClick(btnsTaiVe);
+                          showFloatingStatusGG("Bước 3: Đã yêu cầu tải. Đang theo dõi tiến trình xử lý...", "#f59e0b");
+                          
+                          let attempts = 0;
+                          const checkDownloadReady = setInterval(() => {
+                              attempts++;
+                              if (attempts > 120) {
+                                  clearInterval(checkDownloadReady);
+                                  showFloatingStatusGG("Lỗi: Quá thời gian chờ xử lý (2 phút).", "#dc2626");
+                                  return;
+                              }
+                              
+                              const newRowDate = getTopRowDateGG();
+                              if (newRowDate && newRowDate !== oldRowDate) {
+                                  const modalBody = document.querySelector('.eds-modal__body');
+                                  if (modalBody) {
+                                      const table = modalBody.querySelector('.record-table .eds-table__body');
+                                      if (table) {
+                                          const firstRow = table.querySelector('tr');
+                                          if (firstRow) {
+                                              const downloadBtn = firstRow.querySelector('button');
+                                              if (downloadBtn && downloadBtn.textContent.toLowerCase().includes("tải về")) {
+                                                  clearInterval(checkDownloadReady);
+                                                  showFloatingStatusGG("Bước 4: Shopee đã xử lý xong! Đang tải file...", "#16a34a");
+                                                  aggressiveClick([downloadBtn]);
+                                              } else {
+                                                  showFloatingStatusGG(`Bước 3: Đang chờ Shopee tạo file... (${attempts}s)`, "#3b82f6");
+                                              }
+                                          }
+                                      }
+                                  }
+                              } else {
+                                  showFloatingStatusGG(`Bước 3: Đang đợi Shopee thêm báo cáo mới... (${attempts}s)`, "#3b82f6");
+                              }
+                          }, 1000);
+                          
+                      } else {
+                          showFloatingStatusGG("Lỗi: Không tìm thấy nút 'Tải về thông tin sản phẩm'", "#dc2626");
+                      }
+                  }, 5000);
+              } else {
+                  showFloatingStatusGG("Lỗi: Không tìm thấy nút 'Chỉnh sửa giảm giá'", "#dc2626");
+              }
+          }, 5000);
+      };
+
+      const waitForRenderGG = setInterval(() => {
+          const btns = findAllButtonsRobust("chỉnh sửa giảm giá");
+          if (btns.length > 0) {
+              clearInterval(waitForRenderGG);
+              startGiamGiaDownload();
+          }
+      }, 1000);
+      
+      setTimeout(() => clearInterval(waitForRenderGG), 30000);
+   }
+});
+
+// THÊM SẢN PHẨM VÀO SHEET
+
+function getTextFromNode(node) {
+  if (!node) return "";
+  let text = "";
+  for (const n of node.childNodes) {
+      if (n.nodeType === Node.TEXT_NODE) text += n.textContent;
+  }
+  return text.trim();
+}
+
+function normalizeSellerSpDisplayText(text) {
+  return String(text || "")
+    .replace(/…|…/g, "...")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeSellerSpText(text) {
+  return normalizeSellerSpDisplayText(text)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function isSellerShopeeImageUrl(url) {
+  try {
+    const parsedUrl = new URL(url, window.location.href);
+    const host = parsedUrl.hostname.toLowerCase();
+    const path = parsedUrl.pathname.toLowerCase();
+
+    if (path.endsWith("_cover")) return false;
+
+    return host.endsWith("susercontent.com")
+      || (host.endsWith("shopee.vn") && path.startsWith("/file/"));
+  } catch (error) {
+    return false;
+  }
+}
+
+function cleanSellerShopeeImageUrl(url) {
+  if (!url) return "";
+
+  let absoluteUrl;
+
+  try {
+    absoluteUrl = new URL(url, window.location.href);
+  } catch (error) {
+    return "";
+  }
+
+  absoluteUrl.pathname = absoluteUrl.pathname
+    .replace(/@resize_[^/]+$/, "")
+    .replace(/_tn$/, "");
+  absoluteUrl.search = "";
+  absoluteUrl.hash = "";
+
+  return absoluteUrl.toString();
+}
+
+function getSellerUrlsFromSrcset(srcset) {
+  return String(srcset || "")
+    .split(",")
+    .map((item) => item.trim().split(/\s+/)[0])
+    .filter(Boolean);
+}
+
+function getSellerUrlsFromInlineStyle(styleValue) {
+  const urls = [];
+  const pattern = /url\(["']?([^"')]+)["']?\)/g;
+  let match;
+
+  while ((match = pattern.exec(String(styleValue || "")))) {
+    if (match[1]) urls.push(match[1]);
+  }
+
+  return urls;
+}
+
+function getSellerImageCandidateUrls(element) {
+  const urls = [];
+  if (!element) return urls;
+
+  for (const attr of ["src", "data-src", "data-original", "data-lazy-src", "lazy-src"]) {
+    const value = element.getAttribute?.(attr);
+    if (value) urls.push(value);
+  }
+
+  if (element.currentSrc) urls.push(element.currentSrc);
+
+  urls.push(...getSellerUrlsFromSrcset(element.getAttribute?.("srcset")));
+  urls.push(...getSellerUrlsFromSrcset(element.getAttribute?.("data-srcset")));
+  urls.push(...getSellerUrlsFromInlineStyle(element.getAttribute?.("style")));
+
+  return urls;
+}
+
+function uniqueSellerImageUrls(urls) {
+  const seen = new Set();
+  const results = [];
+
+  for (const url of urls) {
+    const cleanUrl = cleanSellerShopeeImageUrl(url);
+
+    if (!cleanUrl || seen.has(cleanUrl) || !isSellerShopeeImageUrl(cleanUrl)) continue;
+
+    seen.add(cleanUrl);
+    results.push(cleanUrl);
+  }
+
+  return results;
+}
+
+function collectSellerShopeeImageUrls(root = document) {
+  const urls = [];
+  root.querySelectorAll("img, source, [srcset], [data-src], [data-original], [data-lazy-src], [lazy-src], [style*='url(']")
+    .forEach((element) => {
+      urls.push(...getSellerImageCandidateUrls(element));
+    });
+
+  return uniqueSellerImageUrls(urls);
+}
+
+function getSellerControlValue(control) {
+  if (!control) return "";
+
+  if ("value" in control) {
+    const value = String(control.value || "").trim();
+    if (value) return value;
+    return String(control.getAttribute("modelvalue") || control.getAttribute("value") || "").trim();
+  }
+
+  return String(control.getAttribute?.("modelvalue") || control.textContent || "").trim();
+}
+
+function cleanSellerSkuValue(value) {
+  const sku = String(value || "").trim();
+  return sku === "-" ? "" : sku;
+}
+
+function findSellerFieldRoot(uniqueId) {
+  return document.querySelector(`[data-product-edit-field-unique-id="${uniqueId}"]`);
+}
+
+function getSellerFieldValueByUniqueId(uniqueId) {
+  const root = findSellerFieldRoot(uniqueId);
+  return getSellerFieldValueFromRoot(root);
+}
+
+function getSellerFieldValueFromRoot(root) {
+  if (!root) return "";
+
+  const control = root.querySelector("input, textarea, [contenteditable='true']");
+  return getSellerControlValue(control) || String(root.getAttribute("data") || "").trim() || getSellerControlValue(root);
+}
+
+function cleanSellerVariationName(cell) {
+  if (!cell) return "";
+
+  const clone = cell.cloneNode(true);
+  clone.querySelectorAll("img, svg, button, input, textarea, .image-manager-wrapper, .shopee-image-manager, .eds-modal, .resize-triggers")
+    .forEach((node) => node.remove());
+
+  return normalizeSellerSpDisplayText(clone.textContent || "");
+}
+
+function findSellerFieldControl(labelNeedles) {
+  const needles = labelNeedles.map(normalizeSellerSpText);
+  const labels = Array.from(document.querySelectorAll("label, .edit-label, .eds-form-item__label, .product-edit-form-item-label, .product-basic-info-item-label"));
+
+  for (const label of labels) {
+    const labelText = normalizeSellerSpText(label.textContent || "");
+    if (!needles.some((needle) => labelText.includes(needle))) continue;
+
+    const root = label.closest(".eds-form-item, .edit-row, .product-edit-form-item, .basic-info-item, div") || label.parentElement;
+    const control = root?.querySelector("input, textarea, [contenteditable='true']");
+    if (control) return control;
+  }
+
+  return null;
+}
+
+function findSellerProductNameValue() {
+  return getSellerFieldValueByUniqueId("name") || getSellerControlValue(findSellerFieldControl(["ten san pham", "product name"]));
+}
+
+function findSellerProductSkuValue() {
+  return cleanSellerSkuValue(getSellerFieldValueByUniqueId("parentSku") || getSellerControlValue(findSellerFieldControl(["sku san pham", "product sku"])));
+}
+
+function findSellerProductDescriptionEditor() {
+  const stableRoot = findSellerFieldRoot("description");
+  const stableEditor = stableRoot?.querySelector('.ql-editor[contenteditable="true"], textarea, [contenteditable="true"]:not(.ql-clipboard)');
+  if (stableEditor) return stableEditor;
+
+  const selectors = [
+    '.ql-editor.shopee-qlsp-description-drop-ready',
+    '.editor-container .ql-editor[contenteditable="true"]',
+    '.ql-editor[contenteditable="true"][data-placeholder]',
+    '.product-description-editor .ql-editor[contenteditable="true"]',
+    '.description-wrap .ql-editor[contenteditable="true"]',
+    '.product-description-editor [contenteditable="true"]:not(.ql-clipboard)',
+    '.description-wrap [contenteditable="true"]:not(.ql-clipboard)',
+    'textarea[placeholder*="mo ta" i]'
+  ];
+
+  for (const selector of selectors) {
+    const editor = document.querySelector(selector);
+    if (editor) return editor;
+  }
+
+  return Array.from(document.querySelectorAll('.ql-editor[contenteditable="true"], [contenteditable="true"]:not(.ql-clipboard), textarea'))
+    .find((element) => {
+      if (element.classList?.contains('ql-clipboard')) return false;
+      if (element.classList?.contains('ql-editor') && element.querySelector('p')) return true;
+      const rootText = normalizeSellerSpText(element.closest('.eds-form-item, .edit-row, section, div')?.textContent || '');
+      return rootText.includes('mo ta') || rootText.includes('description');
+    }) || null;
+}
+
+function cleanSellerEditorText(text) {
+  return String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function getSellerEditorText(editor) {
+  if (!editor) return "";
+
+  if (editor.matches?.('textarea, input')) {
+    return getSellerControlValue(editor);
+  }
+
+  const blockTexts = Array.from(editor.querySelectorAll('p, li'))
+    .map((block) => {
+      const clone = block.cloneNode(true);
+      clone.querySelectorAll('img, svg, button, input, textarea, .ql-clipboard').forEach((node) => node.remove());
+      return normalizeSellerSpDisplayText(clone.textContent || "");
+    })
+    .filter(Boolean);
+
+  if (blockTexts.length) {
+    return cleanSellerEditorText(blockTexts.join("\n"));
+  }
+
+  const clone = editor.cloneNode(true);
+  clone.querySelectorAll('img, svg, button, input, textarea, .ql-clipboard, .toolbar, [class*="toolbar"], [class*="upload"], [class*="Upload"], .resize-triggers')
+    .forEach((node) => node.remove());
+
+  return cleanSellerEditorText(clone.innerText || clone.textContent || "");
+}
+function findSellerDescriptionValue() {
+  const editor = findSellerProductDescriptionEditor();
+  const value = getSellerEditorText(editor);
+  if (value) return value;
+
+  const stableRoot = findSellerFieldRoot("description");
+  if (stableRoot) {
+    const clone = stableRoot.cloneNode(true);
+    clone.querySelectorAll('button, svg, img, input, textarea, .toolbar, [class*="toolbar"], [class*="upload"], [class*="Upload"], .resize-triggers')
+      .forEach((node) => node.remove());
+    clone.querySelectorAll('*').forEach((node) => {
+      const text = normalizeSellerSpText(node.textContent || '');
+      const shortText = normalizeSellerSpDisplayText(node.textContent || '');
+      if ((text.includes('tai len hinh anh') || /^\d+\s*\/\s*\d+$/.test(shortText)) && shortText.length < 80) {
+        node.remove();
+      }
+    });
+    const fallback = String(clone.innerText || clone.textContent || "")
+      .replace(/\u00a0/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    if (fallback) return fallback;
+  }
+
+  return getSellerControlValue(findSellerFieldControl(["mo ta san pham", "mo ta", "description"]));
+}
+
+function findSellerCategoryValue() {
+  const categoryRoot = findSellerFieldRoot("category");
+  const categoryText = categoryRoot?.querySelector('.product-category-text span, .product-category-text, [class*="category-text"]');
+  const fromStableField = normalizeSellerSpDisplayText(categoryText?.textContent || categoryRoot?.textContent || "");
+  if (fromStableField) return fromStableField;
+
+  const labelControl = findSellerFieldControl(["nganh hang", "category"]);
+  return normalizeSellerSpDisplayText(labelControl?.textContent || labelControl?.value || "");
+}
+function collectSellerModelFieldMap(prefix) {
+  const map = new Map();
+  document.querySelectorAll(`[data-product-edit-field-unique-id^="${prefix}"]`).forEach((root) => {
+    const id = root.getAttribute("data-product-edit-field-unique-id") || "";
+    const key = id.slice(prefix.length);
+    if (key) map.set(key, root);
+  });
+  return map;
+}
+
+function collectSellerVariationRows(productSku) {
+  const rows = [];
+  const rowWrappers = Array.from(document.querySelectorAll(".variation-model-table-body .table-cell-wrapper"));
+  const leftCells = Array.from(document.querySelectorAll('.variation-model-table-fixed-left .first-variation-cell, .variation-model-table .first-variation-cell'));
+  const skuWrappers = rowWrappers.filter((wrapper) => wrapper.querySelector('[data-product-edit-field-unique-id^="skuModel_"]'));
+
+  if (skuWrappers.length) {
+    skuWrappers.forEach((wrapper, index) => {
+      const cell = wrapper.querySelector(".first-variation-cell") || leftCells[index];
+      const skuRoot = wrapper.querySelector('[data-product-edit-field-unique-id^="skuModel_"]');
+      const priceRoot = wrapper.querySelector('[data-product-edit-field-unique-id^="priceModel_"]');
+      const stockRoot = wrapper.querySelector('[data-product-edit-field-unique-id^="stockModel_"]');
+      const sku = cleanSellerSkuValue(getSellerFieldValueFromRoot(skuRoot));
+      const variationName = cleanSellerVariationName(cell);
+      const priceRaw = getSellerFieldValueFromRoot(priceRoot);
+      const stockRaw = getSellerFieldValueFromRoot(stockRoot);
+      const variationImages = uniqueSellerImageUrls([
+        ...collectSellerShopeeImageUrls(cell || document.createElement("div")),
+        ...collectSellerShopeeImageUrls(wrapper)
+      ]);
+
+      if (sku || variationName || variationImages.length) {
+        rows.push({
+          sku,
+          variationName,
+          price: String(priceRaw || "").replace(/[^0-9]/g, ""),
+          stock: String(stockRaw || "").replace(/[^0-9]/g, ""),
+          variationImages
+        });
+      }
+    });
+
+    return rows;
+  }
+
+  const skuMap = collectSellerModelFieldMap("skuModel_");
+  const priceMap = collectSellerModelFieldMap("priceModel_");
+  const stockMap = collectSellerModelFieldMap("stockModel_");
+  const modelKeys = Array.from(new Set([...skuMap.keys(), ...priceMap.keys(), ...stockMap.keys()]));
+
+  if (!modelKeys.length && !leftCells.length) return rows;
+
+  modelKeys.forEach((key, index) => {
+    const cell = leftCells[index];
+    const sku = cleanSellerSkuValue(getSellerFieldValueByUniqueId(`skuModel_${key}`));
+    const variationName = cleanSellerVariationName(cell);
+    const priceRaw = getSellerFieldValueByUniqueId(`priceModel_${key}`);
+    const stockRaw = getSellerFieldValueByUniqueId(`stockModel_${key}`);
+    const variationImages = uniqueSellerImageUrls(collectSellerShopeeImageUrls(cell || document.createElement("div")));
+
+    if (sku || variationName || variationImages.length) {
+      rows.push({
+        sku,
+        variationName,
+        price: String(priceRaw || "").replace(/[^0-9]/g, ""),
+        stock: String(stockRaw || "").replace(/[^0-9]/g, ""),
+        variationImages
+      });
+    }
+  });
+
+  return rows;
+}
+
+function findSellerDescriptionImageUrls() {
+  const stableRoot = findSellerFieldRoot("description");
+  const editor = findSellerProductDescriptionEditor();
+  const roots = [
+    stableRoot,
+    editor?.closest(".description-wrap, .eds-form-item, .edit-row, section, div"),
+    document.querySelector(".description-wrap"),
+    document.querySelector(".product-description-editor"),
+    document.querySelector("[class*='description']")
+  ].filter(Boolean);
+
+  for (const root of Array.from(new Set(roots))) {
+    const urls = collectSellerShopeeImageUrls(root);
+    if (urls.length) return urls;
+  }
+
+  return [];
+}
+
+function findSellerMainImageUrls(descriptionImages, variationRows) {
+  const imagesRoot = findSellerFieldRoot("images");
+  const stableMainImages = imagesRoot ? collectSellerShopeeImageUrls(imagesRoot) : [];
+
+  if (stableMainImages.length) {
+    return stableMainImages.slice(0, 12);
+  }
+
+  const excluded = new Set([
+    ...descriptionImages,
+    ...variationRows.flatMap((row) => row.variationImages || [])
+  ]);
+
+  const imageElements = Array.from(document.querySelectorAll("img, source, [srcset], [data-src], [data-original], [data-lazy-src], [lazy-src], [style*='url(']")).filter((element) => {
+    if (element.closest('.variation-model-table, .shopee-qlsp-product-list-actions')) return false;
+    if (element.closest('.seller-preview, [class*="preview"], [class*="Preview"]')) return false;
+    const rect = element.getBoundingClientRect?.();
+    return !rect || rect.width >= 24 || rect.height >= 24;
+  });
+
+  const urls = uniqueSellerImageUrls(imageElements.flatMap((element) => getSellerImageCandidateUrls(element)))
+    .filter((url) => !excluded.has(url));
+
+  return urls.slice(0, 12);
+}
+function cleanSellerMediaUrl(url) {
+  if (!url) return "";
+
+  try {
+    const absoluteUrl = new URL(url, window.location.href);
+    absoluteUrl.hash = "";
+    return absoluteUrl.toString();
+  } catch (error) {
+    return "";
+  }
+}
+
+function isSellerVideoUrl(url, fromVideoElement = false) {
+  const cleanUrl = cleanSellerMediaUrl(url);
+  if (!cleanUrl) return false;
+
+  try {
+    const parsedUrl = new URL(cleanUrl);
+    const host = parsedUrl.hostname.toLowerCase();
+    const path = parsedUrl.pathname.toLowerCase();
+
+    if (path.endsWith("_cover") || /\.(jpg|jpeg|png|webp|gif|svg)(?:$|[?#])/i.test(cleanUrl)) {
+      return false;
+    }
+
+    if (fromVideoElement && (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:")) {
+      return true;
+    }
+
+    return /\.(mp4|mov|m4v|webm|m3u8)(?:$|[?#])/.test(cleanUrl.toLowerCase())
+      || host.includes("vod.susercontent")
+      || host.includes("cvf.shopee")
+      || host.includes("mms.shopee")
+      || ((host.includes("susercontent") || host.includes("shopee")) && (path.includes("video") || path.includes("/mms/")));
+  } catch (error) {
+    return false;
+  }
+}
+
+function uniqueSellerVideoUrls(urls, fromVideoElement = false) {
+  const seen = new Set();
+  const results = [];
+
+  for (const url of urls) {
+    const cleanUrl = cleanSellerMediaUrl(url);
+    if (!cleanUrl || seen.has(cleanUrl) || !isSellerVideoUrl(cleanUrl, fromVideoElement)) continue;
+    seen.add(cleanUrl);
+    results.push(cleanUrl);
+  }
+
+  return results;
+}
+
+function getSellerVideoCandidateUrls(element) {
+  const urls = [];
+  if (!element) return urls;
+
+  for (const attr of ["src", "currentSrc", "href", "data-src", "data-url", "data-video", "data-video-url", "video-url", "url"]) {
+    const value = attr === "currentSrc" ? element.currentSrc : element.getAttribute?.(attr);
+    if (value) urls.push(value);
+  }
+
+  const html = element.outerHTML || "";
+  const urlPattern = /https?:\/\/[^\s"'<>]+?(?:\.mp4|\.mov|\.m4v|\.webm)(?:[^\s"'<>]*)?/gi;
+  let match;
+  while ((match = urlPattern.exec(html))) {
+    urls.push(match[0]);
+  }
+
+  return urls;
+}
+
+function findSellerVideoUrls() {
+  // 1. Ưu tiên lấy trực tiếp từ thẻ <video> và <source> (khi mở modal xem trước hoặc có sẵn trên trang)
+  const directVideoCandidates = [];
+  document.querySelectorAll("video, video source").forEach((el) => {
+    if (el.currentSrc) directVideoCandidates.push(el.currentSrc);
+    if (el.src) directVideoCandidates.push(el.src);
+    for (const attr of ["src", "data-src", "data-url", "data-video", "data-video-url"]) {
+      const val = el.getAttribute?.(attr);
+      if (val) directVideoCandidates.push(val);
+    }
+  });
+  const directVideos = uniqueSellerVideoUrls(directVideoCandidates, true);
+  if (directVideos.length) {
+    return directVideos.slice(0, 6);
+  }
+
+  // 2. Quét từ các vùng chứa video trên trang
+  const roots = [
+    findSellerFieldRoot("video"),
+    findSellerFieldRoot("videos"),
+    document.querySelector('[data-product-edit-field-unique-id*="video" i]'),
+    document.querySelector('.product-video'),
+    document.querySelector('[class*="video" i]')
+  ].filter(Boolean);
+
+  const candidates = [];
+  const selectors = 'video, source, a[href*=".mp4"], a[href*="video"], [src*=".mp4"], [data-src*=".mp4"], [data-video], [data-video-url], [class*="video" i]';
+
+  for (const root of Array.from(new Set([...roots, document]))) {
+    root.querySelectorAll(selectors).forEach((element) => {
+      candidates.push(...getSellerVideoCandidateUrls(element));
+    });
+    candidates.push(...getSellerVideoCandidateUrls(root));
+  }
+
+  return uniqueSellerVideoUrls(candidates, false).slice(0, 6);
+}
+
+function sleepSellerSp(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function triggerHoverSellerSp(element, maxDepth = 4) {
+  let curr = element;
+  for (let d = 0; d <= maxDepth && curr && curr !== document.body; d += 1) {
+    const rect = curr.getBoundingClientRect?.() || { left: 10, top: 10, width: 40, height: 40 };
+    const clientX = rect.left + rect.width / 2;
+    const clientY = rect.top + rect.height / 2;
+    for (const type of ["pointerenter", "mouseenter", "pointerover", "mouseover", "mousemove"]) {
+      curr.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window,
+        clientX,
+        clientY
+      }));
+    }
+    curr = curr.parentElement;
+  }
+}
+
+function clickSellerSpElement(element) {
+  if (!element) return false;
+  if (element.matches?.('input[type="file"]') || element.querySelector?.('input[type="file"]')) {
+    return false;
+  }
+
+  const iconWrapper = element.closest?.('button, [role="button"], .eds-icon, i');
+  const safeWrapper = iconWrapper && !iconWrapper.querySelector?.('input[type="file"]') ? iconWrapper : null;
+  const targets = [safeWrapper, element].filter((el, idx, arr) => el && arr.indexOf(el) === idx);
+
+  const blockFilePicker = (e) => {
+    if (e.target && e.target.tagName === "INPUT" && e.target.type === "file") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  };
+  document.addEventListener("click", blockFilePicker, true);
+
+  try {
+    for (const target of targets) {
+      const rect = target.getBoundingClientRect?.() || { left: 10, top: 10, width: 16, height: 16 };
+      const clientX = rect.left + rect.width / 2;
+      const clientY = rect.top + rect.height / 2;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        target.dispatchEvent(new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          view: window,
+          clientX,
+          clientY
+        }));
+      }
+      if (typeof target.click === "function") {
+        try { target.click(); } catch (_) {}
+      }
+    }
+  } finally {
+    setTimeout(() => document.removeEventListener("click", blockFilePicker, true), 100);
+  }
+  return true;
+}
+
+function findSellerVideoSectionRoot() {
+  const byField = findSellerFieldRoot("video")
+    || findSellerFieldRoot("videos")
+    || document.querySelector('[data-product-edit-field-unique-id*="video" i]')
+    || document.querySelector('.product-video');
+  if (byField) return byField;
+
+  const labels = Array.from(document.querySelectorAll("label, .edit-label, .eds-form-item__label, .product-edit-form-item-label, .product-basic-info-item-label, div, span"));
+  for (const lbl of labels) {
+    const txt = normalizeSellerSpText(lbl.textContent || "");
+    if (txt === "video san pham" || txt === "product video") {
+      const row = lbl.closest(".eds-form-item, .edit-row, .product-edit-form-item, .basic-info-item, section")
+        || lbl.parentElement?.parentElement
+        || lbl.parentElement;
+      if (row) return row;
+    }
+  }
+  return null;
+}
+
+function isEyeSvgElement(svg) {
+  if (!svg) return false;
+  const html = svg.innerHTML || svg.outerHTML || "";
+  return html.includes("M512 844")
+    || html.includes("512 704")
+    || html.includes("M74.2 512");
+}
+
+function isCloseXSvgElement(svg) {
+  if (!svg) return false;
+  const html = svg.innerHTML || svg.outerHTML || "";
+  return html.includes("557.3 513")
+    || html.includes("466.7 513")
+    || html.includes("512 467.7");
+}
+
+function closeSellerVideoPreviewModal() {
+  // Dừng phát video trước khi đóng
+  document.querySelectorAll("video").forEach((v) => {
+    try { v.pause?.(); } catch (_) {}
+  });
+
+  // 1. Tìm đúng icon dấu X (<path d="m557.3 513 226.3-226.3...">) đang hiển thị
+  const visibleCloseSvgs = Array.from(document.querySelectorAll("svg")).filter((svg) => {
+    if (!isCloseXSvgElement(svg)) return false;
+    const rect = svg.getBoundingClientRect?.();
+    return rect && rect.width > 0 && rect.height > 0;
+  });
+
+  if (visibleCloseSvgs.length > 0) {
+    // Ưu tiên nút X nằm trong modal/dialog hoặc nút X xuất hiện cuối cùng trên DOM (lớp phủ trên cùng)
+    const modalCloseSvg = visibleCloseSvgs.find((svg) => svg.closest('.eds-modal, .eds-dialog, [role="dialog"], [class*="modal" i], [class*="preview" i]'))
+      || visibleCloseSvgs[visibleCloseSvgs.length - 1];
+    clickSellerSpElement(modalCloseSvg);
+    return true;
+  }
+
+  // 2. Fallback theo class đóng modal
+  const closeSelectors = [
+    '.eds-modal__close',
+    '.eds-dialog__close',
+    '[aria-label="Close"]',
+    '[aria-label="Đóng"]',
+    '.eds-modal [class*="close" i]',
+    '[role="dialog"] [class*="close" i]'
+  ].join(", ");
+  const closeButton = Array.from(document.querySelectorAll(closeSelectors))
+    .find((btn) => btn.offsetParent !== null || btn.getBoundingClientRect?.().width > 0);
+  if (closeButton) {
+    clickSellerSpElement(closeButton);
+    return true;
+  }
+
+  return false;
+}
+
+function getVideoCoverCardRoot(coverImg, sectionRoot) {
+  let curr = coverImg?.parentElement || null;
+  let best = curr;
+  for (let d = 0; d < 4 && curr && curr !== document.body; d += 1) {
+    if (sectionRoot && !sectionRoot.contains(curr)) break;
+    if (curr.querySelector?.('input[type="file"]')) break;
+    best = curr;
+    if (curr.querySelectorAll("svg").length > 0) {
+      return curr;
+    }
+    curr = curr.parentElement;
+  }
+  return best;
+}
+
+async function findSellerVideoUrlsWithPreview() {
+  let videos = findSellerVideoUrls();
+  if (videos.length) {
+    closeSellerVideoPreviewModal();
+    return videos;
+  }
+
+  const videoSectionRoot = findSellerVideoSectionRoot();
+
+  // BƯỚC 1: Chỉ tìm thẻ <img src*="_cover"> của Video sản phẩm đã tải lên (nếu chưa có video thì dừng ngay, tuyệt đối không bấm nhầm nút tải file)
+  const coverImages = [
+    ...(videoSectionRoot ? Array.from(videoSectionRoot.querySelectorAll('img[src*="_cover"]')) : []),
+    ...Array.from(document.querySelectorAll('img[src*="_cover"]'))
+  ].filter((img, idx, arr) => img && arr.indexOf(img) === idx && !img.closest(".seller-preview"));
+
+  if (!coverImages.length) {
+    return videos;
+  }
+
+  const restoredStyles = [];
+  const ensureEyeAncestorsVisible = (eyeSvg, stopRoot) => {
+    let curr = eyeSvg?.parentElement;
+    for (let d = 0; d < 4 && curr && curr !== document.body && curr !== stopRoot; d += 1) {
+      if (curr.querySelector?.('input[type="file"]')) break;
+      const cs = window.getComputedStyle(curr);
+      if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") {
+        restoredStyles.push({
+          el: curr,
+          display: curr.style.display,
+          visibility: curr.style.visibility,
+          opacity: curr.style.opacity
+        });
+        if (cs.display === "none") curr.style.display = "flex";
+        if (cs.visibility === "hidden") curr.style.visibility = "visible";
+        if (cs.opacity === "0") curr.style.opacity = "1";
+      }
+      curr = curr.parentElement;
+    }
+  };
+
+  try {
+    const coverImg = coverImages[0];
+    const cardRoot = getVideoCoverCardRoot(coverImg, videoSectionRoot);
+
+    // BƯỚC 2: Cuộn tới và giả lập di chuyển chuột (hover) vào ảnh cover video
+    coverImg.scrollIntoView?.({ block: "center", inline: "nearest" });
+    triggerHoverSellerSp(coverImg, 3);
+    await sleepSellerSp(180);
+    triggerHoverSellerSp(coverImg, 3);
+
+    // BƯỚC 3: Chỉ tìm đúng icon Con Mắt (<svg viewBox="0 0 1024 1024"><path d="M512 844..."></path></svg>)
+    const searchScope = cardRoot || videoSectionRoot || document;
+    let eyeTarget = Array.from(searchScope.querySelectorAll("svg")).find(isEyeSvgElement) || null;
+
+    if (!eyeTarget && videoSectionRoot) {
+      eyeTarget = Array.from(videoSectionRoot.querySelectorAll("svg")).find(isEyeSvgElement) || null;
+    }
+
+    if (!eyeTarget) {
+      return videos;
+    }
+
+    // Mở hiển thị chuỗi thẻ cha trực tiếp của icon Con Mắt nếu đang bị ẩn bởi CSS :hover
+    ensureEyeAncestorsVisible(eyeTarget, cardRoot);
+
+    // BƯỚC 4: Ấn vào con mắt để mở popup xem trước video
+    clickSellerSpElement(eyeTarget);
+
+    // BƯỚC 5: Chờ thẻ <video> trong popup tải link và trích xuất URL
+    for (let i = 0; i < 16; i += 1) {
+      await sleepSellerSp(250);
+      videos = findSellerVideoUrls();
+      if (videos.length) break;
+    }
+
+    // BƯỚC 6: Ấn vào dấu X (<path d="m557.3 513...">) để đóng popup video ngay sau khi lấy được link
+    await sleepSellerSp(120);
+    closeSellerVideoPreviewModal();
+  } finally {
+    for (const item of restoredStyles) {
+      item.el.style.display = item.display;
+      item.el.style.visibility = item.visibility;
+      item.el.style.opacity = item.opacity;
+    }
+  }
+
+  return videos;
+}
+
+async function extractSellerSpFullData() {
+  const urlMatches = window.location.pathname.match(/\/portal\/product\/(\d+)/);
+  const itemId = urlMatches ? urlMatches[1] : (new URLSearchParams(window.location.search).get("id") || "");
+  const linkShopee = itemId ? `https://banhang.shopee.vn/portal/product/${itemId}` : window.location.href;
+  const productName = findSellerProductNameValue();
+  const productSku = findSellerProductSkuValue();
+  const description = findSellerDescriptionValue();
+  const category = findSellerCategoryValue();
+  const variationRows = collectSellerVariationRows(productSku);
+  const descriptionImages = findSellerDescriptionImageUrls();
+  const mainImages = findSellerMainImageUrls(descriptionImages, variationRows);
+  const videos = await findSellerVideoUrlsWithPreview();
+  const variationRowsWithSku = variationRows.filter((row) => row.sku);
+  const allVariationImages = uniqueSellerImageUrls(variationRows.flatMap((row) => row.variationImages || []));
+  const baseRows = variationRowsWithSku.length
+    ? variationRowsWithSku
+    : [{ sku: productSku, variationName: "", price: "", stock: "", variationImages: allVariationImages }];
+  const rows = baseRows
+    .filter((row) => row.sku || productName || description || mainImages.length || descriptionImages.length || videos.length || (row.variationImages || []).length)
+    .map((row) => ({
+      itemId,
+      linkShopee,
+      sku: row.sku || productSku || "",
+      variationName: row.variationName || "",
+      productName,
+      category,
+      description,
+      price: row.price || "",
+      stock: row.stock || "",
+      mainImageLinks: mainImages.join(" | "),
+      descriptionImageLinks: descriptionImages.join(" | "),
+      variationImageLinks: (row.variationImages || []).join(" | "),
+      videoLinks: videos.join(" | ")
+    }));
+
+  return {
+    ok: rows.length > 0,
+    itemId,
+    linkShopee,
+    productName,
+    productSku,
+    category,
+    description,
+    mainImages,
+    descriptionImages,
+    videos,
+    rows,
+    message: rows.length ? "OK" : "Khong lay duoc du lieu SP tren trang hien tai."
+  };
+}
+async function extractProductData() {
+  const urlMatches = window.location.pathname.match(/\/portal\/product\/(\d+)/);
+  let maSp = urlMatches ? urlMatches[1] : "";
+  if (!maSp) {
+      const searchParams = new URLSearchParams(window.location.search);
+      maSp = searchParams.get('id') || "";
+  }
+  if (!maSp) return []; // Don't throw here, just return empty for interval checking
+
+  let tenSp = "";
+  const nameInput = document.querySelector('input[placeholder*="Tên thương hiệu"], input[placeholder*="tên sản phẩm"]');
+  if (nameInput) {
+    tenSp = nameInput.value || nameInput.getAttribute("modelvalue") || "";
+  }
+
+  const maGian = await new Promise(resolve => {
+    chrome.storage.local.get(["dhHoanTextValue"], (res) => {
+      resolve(res.dhHoanTextValue || "");
+    });
+  });
+
+  const rows = [];
+  
+  const leftCells = Array.from(document.querySelectorAll('.variation-model-table-fixed-left .first-variation-cell'));
+  const mainArea = document.querySelector('.variation-model-table-main');
+  
+  let hasVariations = false;
+  if (mainArea && leftCells.length > 0) {
+    hasVariations = true;
+    
+    const priceElements = Array.from(mainArea.querySelectorAll('input[placeholder*="Giá" i], input[placeholder*="giá" i], input[placeholder="₫"], .basic-price-help-text .help-right'));
+    const skuElements = Array.from(mainArea.querySelectorAll('input[placeholder*="SKU" i], input[placeholder*="sku" i], input[placeholder*="Mã" i], input[placeholder*="mã" i], .sku-textarea textarea'));
+
+    for (let i = 0; i < leftCells.length; i++) {
+        const tenPhanLoai = getTextFromNode(leftCells[i]);
+        
+        let skuPhanLoai = "";
+        if (skuElements[i]) {
+            skuPhanLoai = (skuElements[i].value || skuElements[i].getAttribute("modelvalue") || skuElements[i].textContent || "").trim();
+        }
+        
+        let gia = "";
+        if (priceElements[i]) {
+            let rawGia = priceElements[i].tagName === "INPUT" ? priceElements[i].value : priceElements[i].textContent.split('(')[0];
+            gia = rawGia.replace(/[^\d]/g, '');
+        }
+        
+        rows.push([
+            maSp,
+            tenSp,
+            "",
+            tenPhanLoai,
+            "",
+            skuPhanLoai,
+            gia,
+            "",
+            "",
+            "",
+            "",
+            maGian
+        ]);
+    }
+  }
+
+  if (!hasVariations) {
+    const giaEl = document.querySelector('input[placeholder*="Giá" i], input[placeholder*="giá" i], input[placeholder="₫"], .basic-price-help-text .help-right');
+    const skuEl = document.querySelector('input[placeholder*="SKU" i], input[placeholder*="sku" i], .sku-textarea textarea');
+    
+    let gia = "";
+    if (giaEl) {
+        let rawGia = giaEl.tagName === "INPUT" ? giaEl.value : giaEl.textContent.split('(')[0];
+        gia = rawGia.replace(/[^\d]/g, '');
+    }
+    
+    let sku = "";
+    if (skuEl) {
+        sku = (skuEl.value || skuEl.getAttribute("modelvalue") || skuEl.textContent || "").trim();
+    }
+    
+    // Only push if we actually have some data, otherwise it might be a ghost row
+    if (tenSp || sku || gia) {
+        rows.push([
+            maSp,
+            tenSp,
+            "",
+            "",
+            sku,
+            sku,
+            gia,
+            "",
+            "",
+            "",
+            "",
+            maGian
+        ]);
+    }
+  }
+
+  return rows;
+}
+
+async function extractProductDataAndSave() {
+  const rows = await extractProductData();
+  if (!rows || rows.length === 0) throw new Error("Không lấy được dữ liệu sản phẩm");
+
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ type: "APPEND_SP_SHOPEE", values: rows }, (res) => {
+      if (res && res.ok) resolve();
+      else reject(new Error(res?.error || "Lỗi ghi vào Google Sheets"));
+    });
+  });
+}
+
+// Automatic Stock Update trigger based on URL query parameter
+(async () => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const autoStock = params.get('auto_update_stock');
+    if (autoStock !== null) {
+      const match = window.location.pathname.match(/\/portal\/product\/(\d+)/);
+      const itemId = match ? match[1] : null;
+      const sendStatus = (status, color = '#faad14') => {
+        if (itemId) {
+          chrome.runtime.sendMessage({ type: "UPDATE_AUTOMATION_STATUS", itemId, status, color });
+        }
+      };
+
+      console.log("[Extension] Detected auto_update_stock parameter:", autoStock);
+      sendStatus("Đang chờ tải trang (5s)...");
+      
+      // Wait 5 seconds initially as requested
+      await new Promise(r => setTimeout(r, 5000));
+      
+      sendStatus("Đang tìm ô nhập tồn...");
+      
+      // Poll every 1 second up to 5 more seconds (total 10 seconds max)
+      let input = null;
+      for (let i = 0; i < 5; i++) {
+        input = findStockBatchInput();
+        if (input) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      
+      if (input) {
+        console.log("[Extension] Found stock batch input. Filling stock value...");
+        await fillStockAndApply(autoStock);
+      } else {
+        console.error("[Extension] Could not find stock batch input within 10 seconds.");
+        sendStatus("Lỗi: Không tìm thấy ô nhập", "#ef4444");
+      }
+    }
+  } catch (e) {
+    console.error("[Extension] Error in automatic stock updater:", e);
+  }
+})();
+
+
+// Tính năng thêm nút Viết mô tả bằng AI
+(function() {
+  function injectAiDescriptionButton() {
+    // Chỉ chạy trên trang tạo/sửa sản phẩm Shopee Seller
+    if (!window.location.href.includes('banhang.shopee.vn/portal/product')) return;
+
+    // Tránh inject nhiều lần
+    if (document.getElementById('btn-ai-description')) return;
+
+    // Tìm vùng nhập Mô tả sản phẩm
+    const labels = Array.from(document.querySelectorAll('label, div, span'));
+    const descLabel = labels.find(el => {
+      const t = el.textContent.trim().toLowerCase();
+      return t.includes("mô tả sản phẩm") || t.includes("product description");
+    });
+    
+    let targetContainer = null;
+    let editorElement = null;
+
+    if (descLabel) {
+      // Khung soạn thảo thường nằm kế bên nhãn hoặc cùng container
+      const parentRow = descLabel.closest('.row, .flex, div[class*="product-edit"]') || descLabel.parentElement?.parentElement;
+      if (parentRow) {
+        editorElement = parentRow.querySelector('.ProseMirror, [contenteditable="true"], textarea');
+      }
+    }
+
+    // Dự phòng tìm editor theo class nếu không tìm thấy qua label
+    if (!editorElement) {
+      editorElement = document.querySelector('.ProseMirror, [contenteditable="true"], textarea[placeholder*="Mô tả"]');
+    }
+
+    if (editorElement) {
+      targetContainer = editorElement.closest('div[style*="border"], div[class*="editor"], .edit-content, .field-wrapper') || editorElement.parentElement;
+      if (!targetContainer) targetContainer = editorElement.parentElement;
+      
+      const btnContainer = document.createElement('div');
+      btnContainer.style.marginTop = '10px';
+      btnContainer.style.marginBottom = '10px';
+      btnContainer.style.textAlign = 'right';
+      btnContainer.style.width = '100%';
+
+      const aiBtn = document.createElement('button');
+      aiBtn.id = 'btn-ai-description';
+      aiBtn.type = 'button';
+      aiBtn.innerHTML = '✨ Viết mô tả bằng AI';
+      aiBtn.style.cssText = `
+        background-color: #10b981; 
+        color: white; 
+        border: none; 
+        padding: 8px 16px; 
+        border-radius: 4px; 
+        font-weight: bold; 
+        cursor: pointer;
+        font-size: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      `;
+
+      aiBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        
+        // Tìm tên sản phẩm
+        let productName = "";
+        const nameInput = document.querySelector('input[placeholder*="Tên sản phẩm"], input[maxLength="120"], input[maxLength="255"]');
+        if (nameInput) {
+          productName = nameInput.value.trim();
+        } else {
+          const nameLabel = labels.find(el => el.textContent.trim() === "Tên sản phẩm" || el.textContent.trim() === "Product Name");
+          if (nameLabel) {
+            const row = nameLabel.closest('.row, .flex') || nameLabel.parentElement?.parentElement;
+            if (row) {
+              const input = row.querySelector('input');
+              if (input) productName = input.value.trim();
+            }
+          }
+        }
+
+        if (!productName) {
+          // Fallback lấy document.title
+          productName = document.title.split('|')[0].trim();
+        }
+
+        if (!productName || productName.toLowerCase() === "shopee") {
+          alert("Vui lòng nhập Tên sản phẩm trước khi sử dụng AI.");
+          return;
+        }
+
+        const originalText = aiBtn.innerHTML;
+        aiBtn.innerHTML = '⏳ Đang tạo mô tả...';
+        aiBtn.disabled = true;
+        aiBtn.style.opacity = '0.7';
+
+        chrome.runtime.sendMessage({
+          type: 'GENERATE_AI_DESCRIPTION',
+          productName: productName
+        }, (response) => {
+          aiBtn.innerHTML = originalText;
+          aiBtn.disabled = false;
+          aiBtn.style.opacity = '1';
+
+          if (response && response.ok) {
+            // Điền vào khung soạn thảo
+            editorElement.focus();
+            
+            // Chọn toàn bộ text cũ
+            document.execCommand('selectAll', false, null);
+            
+            // Chèn HTML mới
+            const success = document.execCommand('insertHTML', false, response.result);
+            if (!success) {
+               // Nếu trình duyệt chặn insertHTML, thử insertText
+               document.execCommand('insertText', false, response.result.replace(/<[^>]+>/g, ''));
+            }
+            
+            // Dispatch event để trigger Shopee React validation
+            editorElement.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertHTML', data: response.result }));
+            editorElement.dispatchEvent(new Event('change', { bubbles: true }));
+          } else {
+            alert("Lỗi: " + (response?.error || "Không thể kết nối đến AI."));
+          }
+        });
+      });
+
+      btnContainer.appendChild(aiBtn);
+      
+      // Chèn ngay sau vùng nhập để đảm bảo hiển thị
+      if (targetContainer && targetContainer.parentNode) {
+         targetContainer.parentNode.insertBefore(btnContainer, targetContainer.nextSibling);
+      } else if (targetContainer) {
+         targetContainer.appendChild(btnContainer);
+      }
+    }
+  }
+
+  // =========================================================================
+  // TÍNH NĂNG TỰ ĐỘNG ĐIỀN TỒN KHO 1000 CHO KHO HÀNG ĐA KHO (MULTI-WAREHOUSE)
+  // =========================================================================
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function isVisible(el) {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' && el.offsetParent !== null;
+  }
+
+  function emitRealClick(element) {
+    if (!element) return;
+    element.focus?.();
+    ['mousedown', 'mouseup', 'click'].forEach(evtType => {
+      element.dispatchEvent(new MouseEvent(evtType, { bubbles: true, cancelable: true, view: window }));
+    });
+    element.click?.();
+  }
+
+  function fillInputLikeUser(input, value) {
+    if (!input) return;
+    input.focus();
+    input.value = value;
+    input.setAttribute('modelvalue', value);
+    input.setAttribute('value', value);
+    
+    if (input._value !== undefined) input._value = value;
+    
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    if (nativeInputValueSetter) {
+      nativeInputValueSetter.call(input, value);
+    }
+
+    input.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+  }
+
+  function showTopNotification(message, isError = false) {
+    const noti = document.createElement('div');
+    noti.style.cssText = `position: fixed !important; top: 20px !important; right: 20px !important; z-index: 9999999 !important; padding: 10px 18px !important; border-radius: 6px !important; color: white !important; font-weight: bold !important; font-size: 13px !important; box-shadow: 0 4px 14px rgba(0,0,0,0.25) !important; background: ${isError ? '#dc2626' : '#16a34a'} !important; transition: opacity 0.3s !important; font-family: sans-serif !important;`;
+    noti.textContent = message;
+    document.body.appendChild(noti);
+    setTimeout(() => {
+      noti.style.opacity = '0';
+      setTimeout(() => noti.remove(), 300);
+    }, 2800);
+  }
+
+  function findStockBatchInput() {
+    const inputs = Array.from(document.querySelectorAll("input.eds-input__input, input"));
+    const batchInput = inputs.find((input) => {
+      const placeholder = (input.placeholder || '').toLowerCase();
+      return (placeholder.includes("warehouse") || placeholder.includes("kho hàng(")) && isVisible(input);
+    });
+    if (batchInput) return batchInput;
+
+    return inputs.find((input) => {
+      const placeholder = (input.placeholder || '').toLowerCase();
+      return (placeholder === "kho hàng" || placeholder.includes("kho hàng")) && isVisible(input);
+    });
+  }
+
+  function findApplyToAllButton() {
+    const directButton = document.querySelector("button.batch-apply-button");
+    if (directButton && isVisible(directButton)) return directButton;
+
+    const buttons = Array.from(document.querySelectorAll("button"));
+    return buttons.find((button) => {
+      const txt = (button.textContent || '').toLowerCase();
+      return (txt.includes("áp dụng cho tất cả") || txt.includes("apply to all")) && isVisible(button);
+    });
+  }
+
+  async function fillMultiWarehouseStock(targetValue = '1000', triggerInput = null) {
+    let popup = document.querySelector('.multi-warehouse-stock-edit');
+    
+    // Nếu popup chưa mở, bấm vào triggerInput / popoverRef để mở
+    if (!popup || !isVisible(popup)) {
+      if (triggerInput) {
+        const popoverRef = triggerInput.closest('.eds-popover__ref') || triggerInput.closest('.multi-warehouse-stock-input') || triggerInput.closest('.eds-input') || triggerInput;
+        triggerInput.focus();
+        triggerInput.click();
+        if (popoverRef && popoverRef !== triggerInput) {
+          popoverRef.click();
+          emitRealClick(popoverRef);
+        }
+      }
+      
+      // Chờ popup xuất hiện tối đa 1.5 giây
+      for (let i = 0; i < 25; i++) {
+        await sleep(60);
+        popup = document.querySelector('.multi-warehouse-stock-edit');
+        if (popup && isVisible(popup)) break;
+      }
+    }
+
+    if (!popup) {
+      if (triggerInput && !triggerInput.readOnly && !triggerInput.disabled) {
+        fillInputLikeUser(triggerInput, targetValue);
+        showTopNotification(`Đã điền ${targetValue} vào ô Kho hàng!`);
+        return true;
+      }
+      showTopNotification('Không mở được bảng kho hàng', true);
+      return false;
+    }
+
+    // Tìm tất cả các dòng kho trong bảng popup
+    const rows = Array.from(popup.querySelectorAll('.eds-table__body tr.eds-table__row, .stock-table tr, tr'));
+    let filledCount = 0;
+
+    for (const row of rows) {
+      const isPaused = row.textContent.includes('Chế độ tạm nghỉ') || row.querySelector('.eds-tag');
+      const input = row.querySelector('input.eds-input__input, input');
+      
+      if (input && !input.disabled && !input.readOnly) {
+        if (isPaused) {
+          continue;
+        }
+        fillInputLikeUser(input, targetValue);
+        filledCount++;
+        await sleep(40);
+      }
+    }
+
+    await sleep(150);
+
+    // Tự động bấm nút Xác nhận
+    const confirmBtn = Array.from(popup.querySelectorAll('button')).find(btn => {
+      const txt = (btn.textContent || '').trim();
+      return (txt === 'Xác nhận' || txt.includes('Xác nhận')) && isVisible(btn);
+    }) || popup.querySelector('.stock-edit-fixed-right button.eds-button--primary');
+
+    if (confirmBtn) {
+      emitRealClick(confirmBtn);
+    }
+
+    showTopNotification(`Đã điền ${targetValue} cho ${filledCount} kho thành công!`);
+    return true;
+  }
+
+  let isBatchFilling = false;
+  async function fillAllVariationsStock(targetValue = '1000') {
+    if (isBatchFilling) return;
+    isBatchFilling = true;
+    showTopNotification(`⏳ Đang bắt đầu điền ${targetValue} cho tất cả các kho...`);
+
+    // 1. Thử điền qua ô Sửa hàng loạt trước
+    const batchInput = findStockBatchInput();
+    if (batchInput) {
+      await fillMultiWarehouseStock(targetValue, batchInput);
+      await sleep(250);
+      const applyBtn = findApplyToAllButton();
+      if (applyBtn) {
+        emitRealClick(applyBtn);
+        await sleep(300);
+        showTopNotification(`✅ Đã áp dụng ${targetValue} cho tất cả phân loại thành công!`);
+        isBatchFilling = false;
+        return;
+      }
+    }
+
+    // 2. Nếu không áp dụng được hàng loạt, quét và điền từng dòng trong bảng phân loại
+    const stockInputs = Array.from(document.querySelectorAll('.two-tier-multi-warehouse-stock input, .multi-warehouse-stock-input input, .two-tier-stock input, .product-edit-input input[readonly]')).filter(isVisible);
+    
+    if (stockInputs.length === 0) {
+      showTopNotification('Không tìm thấy ô kho hàng nào trong bảng!', true);
+      isBatchFilling = false;
+      return;
+    }
+
+    let successCount = 0;
+    for (let i = 0; i < stockInputs.length; i++) {
+      const inp = stockInputs[i];
+      showTopNotification(`⏳ Đang điền kho dòng ${i + 1}/${stockInputs.length}...`);
+      const ok = await fillMultiWarehouseStock(targetValue, inp);
+      if (ok) successCount++;
+      await sleep(300);
+    }
+
+    showTopNotification(`🎉 Đã hoàn tất điền ${targetValue} cho ${successCount}/${stockInputs.length} dòng phân loại!`);
+    isBatchFilling = false;
+  }
+
+  // 1. THANH CÔNG CỤ NỔI (Floating Panel)
+  function injectFloatingStockPanel() {
+    if (!window.location.href.includes('banhang.shopee.vn/portal/product')) return;
+    if (document.getElementById('shopee-qlsp-floating-stock-panel')) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'shopee-qlsp-floating-stock-panel';
+    panel.style.cssText = `
+      position: fixed !important;
+      right: 20px !important;
+      bottom: 90px !important;
+      z-index: 999999 !important;
+      background: #ffffff !important;
+      border: 2px solid #ea580c !important;
+      border-radius: 10px !important;
+      padding: 10px 14px !important;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.2) !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 8px !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    `;
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size: 12px !important; font-weight: bold !important; color: #c2410c !important; text-align: center !important; display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 6px !important; border-bottom: 1px solid #e5e7eb !important; padding-bottom: 4px !important;';
+    title.innerHTML = '<span>⚡ Điền Kho Nhanh</span><span style="font-size:10px; color:#6b7280; font-weight:normal;">Shopee</span>';
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display: flex !important; gap: 6px !important;';
+
+    const btn1000 = document.createElement('button');
+    btn1000.type = 'button';
+    btn1000.textContent = '⚡ Điền tất cả 1000';
+    btn1000.title = 'Tự động điền 1000 cho tất cả các kho của toàn bộ phân loại';
+    btn1000.style.cssText = 'padding: 6px 12px !important; font-size: 12px !important; font-weight: bold !important; background: #ea580c !important; color: white !important; border: none !important; border-radius: 6px !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(234,88,12,0.3) !important; white-space: nowrap !important; transition: all 0.2s !important;';
+    btn1000.onmouseover = () => btn1000.style.background = '#c2410c';
+    btn1000.onmouseout = () => btn1000.style.background = '#ea580c';
+    btn1000.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fillAllVariationsStock('1000');
+    };
+
+    const btn0 = document.createElement('button');
+    btn0.type = 'button';
+    btn0.textContent = '⚡ Điền 0';
+    btn0.title = 'Tự động điền 0 cho tất cả các kho của toàn bộ phân loại';
+    btn0.style.cssText = 'padding: 6px 10px !important; font-size: 12px !important; font-weight: bold !important; background: #f97316 !important; color: white !important; border: none !important; border-radius: 6px !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(249,115,22,0.3) !important; white-space: nowrap !important; transition: all 0.2s !important;';
+    btn0.onmouseover = () => btn0.style.background = '#ea580c';
+    btn0.onmouseout = () => btn0.style.background = '#f97316';
+    btn0.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fillAllVariationsStock('0');
+    };
+
+    const btnPreview = document.createElement('button');
+    btnPreview.type = 'button';
+    btnPreview.textContent = '👁️ Xem trước';
+    btnPreview.title = 'Mở xem trước sản phẩm trên Shopee (PDP)';
+    btnPreview.style.cssText = 'padding: 6px 10px !important; font-size: 12px !important; font-weight: bold !important; background: #0284c7 !important; color: white !important; border: none !important; border-radius: 6px !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(2,132,199,0.3) !important; white-space: nowrap !important; transition: all 0.2s !important;';
+    btnPreview.onmouseover = () => btnPreview.style.background = '#0369a1';
+    btnPreview.onmouseout = () => btnPreview.style.background = '#0284c7';
+    btnPreview.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const origText = btnPreview.textContent;
+      btnPreview.textContent = '⏳';
+      btnPreview.disabled = true;
+      try {
+        const path = window.location.pathname;
+        const urlMatches = path.match(/\/portal\/product\/(\d+)/);
+        let productId = urlMatches ? urlMatches[1] : "";
+        if (!productId) {
+          const searchParams = new URLSearchParams(window.location.search);
+          productId = searchParams.get('id') || searchParams.get('itemid') || searchParams.get('itemId') || "";
+        }
+        if (!productId) {
+          alert("Không tìm thấy ID sản phẩm trên đường dẫn trang hiện tại!");
+          return;
+        }
+        const storageRes = await new Promise(resolve => chrome.storage.local.get(["maGian", "dhHoanTextValue"], resolve));
+        const maGian = (storageRes?.maGian || storageRes?.dhHoanTextValue || "").trim();
+        const shopId = await getShopIdByMaGian(maGian);
+        if (!shopId) {
+          alert(`Không tìm thấy ID Shop cho mã gian "${maGian || '(chưa chọn)'}" tại Cột G sheet CAI_DAT.\n\nVui lòng điền ID Shop vào Cột G sheet CAI_DAT tương ứng với Cột B (mã gian)!`);
+          return;
+        }
+        window.open(`https://shopee.vn/product/${shopId}/${productId}/`, '_blank');
+      } catch (err) {
+        alert("Lỗi mở xem trước: " + err.message);
+      } finally {
+        btnPreview.textContent = origText;
+        btnPreview.disabled = false;
+      }
+    };
+
+    const btnPreOrder = document.createElement('button');
+    btnPreOrder.type = 'button';
+    btnPreOrder.textContent = '📦 Đặt trước 15n';
+    btnPreOrder.title = 'Hàng đặt trước: Bật Đồng ý và điền 15 ngày';
+    btnPreOrder.style.cssText = 'padding: 6px 10px !important; font-size: 12px !important; font-weight: bold !important; background: #8b5cf6 !important; color: white !important; border: none !important; border-radius: 6px !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(139,92,246,0.3) !important; white-space: nowrap !important; transition: all 0.2s !important;';
+    btnPreOrder.onmouseover = () => btnPreOrder.style.background = '#7c3aed';
+    btnPreOrder.onmouseout = () => btnPreOrder.style.background = '#8b5cf6';
+    btnPreOrder.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const origText = btnPreOrder.textContent;
+      btnPreOrder.textContent = '⏳';
+      btnPreOrder.disabled = true;
+      try {
+        await handleApplyPreOrder(15);
+      } catch (err) {
+        alert("Lỗi cài đặt hàng đặt trước: " + err.message);
+      } finally {
+        btnPreOrder.textContent = origText;
+        btnPreOrder.disabled = false;
+      }
+    };
+
+    const btnDisablePreOrder = document.createElement('button');
+    btnDisablePreOrder.type = 'button';
+    btnDisablePreOrder.textContent = '🚫 Tắt đặt trước';
+    btnDisablePreOrder.title = 'Hàng đặt trước: Chọn Không (tắt đặt trước)';
+    btnDisablePreOrder.style.cssText = 'padding: 6px 10px !important; font-size: 12px !important; font-weight: bold !important; background: #64748b !important; color: white !important; border: none !important; border-radius: 6px !important; cursor: pointer !important; box-shadow: 0 2px 4px rgba(100,116,139,0.3) !important; white-space: nowrap !important; transition: all 0.2s !important;';
+    btnDisablePreOrder.onmouseover = () => btnDisablePreOrder.style.background = '#475569';
+    btnDisablePreOrder.onmouseout = () => btnDisablePreOrder.style.background = '#64748b';
+    btnDisablePreOrder.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const origText = btnDisablePreOrder.textContent;
+      btnDisablePreOrder.textContent = '⏳';
+      btnDisablePreOrder.disabled = true;
+      try {
+        await handleApplyDisablePreOrder();
+      } catch (err) {
+        alert("Lỗi tắt hàng đặt trước: " + err.message);
+      } finally {
+        btnDisablePreOrder.textContent = origText;
+        btnDisablePreOrder.disabled = false;
+      }
+    };
+
+    btnRow.append(btn1000, btn0, btnPreOrder, btnDisablePreOrder, btnPreview);
+    panel.append(title, btnRow);
+    document.body.appendChild(panel);
+  }
+
+  // 2. NÚT CẠNH "ÁP DỤNG CHO TẤT CẢ PHÂN LOẠI"
+  function injectBatchApplyButtons() {
+    const applyBtn = findApplyToAllButton();
+    if (applyBtn && applyBtn.parentElement && !applyBtn.parentElement.querySelector('.shopee-qlsp-batch-fill-1000-btn')) {
+      const wrap = document.createElement('span');
+      wrap.className = 'shopee-qlsp-batch-fill-1000-btn';
+      wrap.style.cssText = 'display: inline-flex !important; gap: 6px !important; margin-left: 8px !important; vertical-align: middle !important;';
+
+      const btn1000 = document.createElement('button');
+      btn1000.type = 'button';
+      btn1000.textContent = '⚡ Điền 1000';
+      btn1000.title = 'Điền 1000 cho tất cả kho của phân loại hàng loạt';
+      btn1000.style.cssText = 'padding: 6px 14px !important; font-size: 12px !important; font-weight: bold !important; background: #ea580c !important; color: white !important; border: 1px solid #c2410c !important; border-radius: 4px !important; cursor: pointer !important;';
+      btn1000.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fillAllVariationsStock('1000');
+      };
+
+      const btn0 = document.createElement('button');
+      btn0.type = 'button';
+      btn0.textContent = '⚡ Điền 0';
+      btn0.title = 'Điền 0 cho tất cả kho của phân loại hàng loạt';
+      btn0.style.cssText = 'padding: 6px 10px !important; font-size: 12px !important; font-weight: bold !important; background: #f97316 !important; color: white !important; border: 1px solid #ea580c !important; border-radius: 4px !important; cursor: pointer !important;';
+      btn0.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fillAllVariationsStock('0');
+      };
+
+      wrap.append(btn1000, btn0);
+      applyBtn.parentElement.appendChild(wrap);
+    }
+  }
+
+  function processBatchInputs() {
+    const allLabels = Array.from(document.querySelectorAll('div, label, span, h2, h3, h4'));
+    const batchLabel = allLabels.find(el => {
+      const txt = (el.textContent || '').trim();
+      return txt.includes('Danh sách phân loại hàng') && el.children.length <= 4;
+    });
+
+    if (batchLabel) {
+      const existing = document.getElementById('shopee-qlsp-stock-quick-btns-header');
+      if (!existing || !document.contains(existing)) {
+        if (existing) existing.remove();
+
+        const headerBtnWrap = document.createElement('span');
+        headerBtnWrap.id = 'shopee-qlsp-stock-quick-btns-header';
+        headerBtnWrap.style.cssText = 'display: inline-flex !important; gap: 6px !important; margin-left: 10px !important; vertical-align: middle !important; position: relative !important; z-index: 99999 !important;';
+
+        const btn0 = document.createElement('button');
+        btn0.type = 'button';
+        btn0.textContent = '0';
+        btn0.title = 'Điền 0 và bấm Áp dụng cho tất cả';
+        btn0.style.cssText = 'padding: 2px 10px !important; font-size: 11px !important; font-weight: bold !important; background: #f97316 !important; color: white !important; border: 1px solid #ea580c !important; border-radius: 3px !important; cursor: pointer !important; height: 22px !important; line-height: 22px !important; display: inline-block !important;';
+        btn0.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          fillAllVariationsStock('0');
+        };
+
+        const btn1000 = document.createElement('button');
+        btn1000.type = 'button';
+        btn1000.textContent = '1000';
+        btn1000.title = 'Điền 1000 và bấm Áp dụng cho tất cả';
+        btn1000.style.cssText = 'padding: 2px 10px !important; font-size: 11px !important; font-weight: bold !important; background: #ea580c !important; color: white !important; border: 1px solid #c2410c !important; border-radius: 3px !important; cursor: pointer !important; height: 22px !important; line-height: 22px !important; display: inline-block !important;';
+        btn1000.onclick = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          fillAllVariationsStock('1000');
+        };
+
+        headerBtnWrap.append(btn0, btn1000);
+        batchLabel.appendChild(headerBtnWrap);
+      }
+    }
+  }
+
+  function processVariationTables() {
+    const multiContainers = Array.from(document.querySelectorAll('.two-tier-multi-warehouse-stock, .multi-warehouse-stock-input, .two-tier-stock, [class*="multi-warehouse-stock"]'));
+    
+    multiContainers.forEach(container => {
+      if (container.querySelector('.shopee-qlsp-inline-fill-stock-1000')) return;
+
+      const input = container.querySelector('input');
+      if (!input) return;
+
+      const btnWrap = document.createElement('div');
+      btnWrap.className = 'shopee-qlsp-inline-fill-stock-1000';
+      btnWrap.style.cssText = 'display: inline-flex !important; gap: 4px !important; margin-top: 4px !important; align-items: center !important; position: relative !important; z-index: 99999 !important;';
+
+      const btn1000 = document.createElement('button');
+      btn1000.type = 'button';
+      btn1000.textContent = '1000';
+      btn1000.title = 'Bấm để mở popup và điền 1000 cho từng kho';
+      btn1000.style.cssText = 'font-size: 11px !important; font-weight: bold !important; background: #ea580c !important; color: white !important; border: 1px solid #c2410c !important; border-radius: 3px !important; padding: 2px 8px !important; cursor: pointer !important; line-height: 1.2 !important; box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;';
+      btn1000.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fillMultiWarehouseStock('1000', input);
+      };
+
+      const btn0 = document.createElement('button');
+      btn0.type = 'button';
+      btn0.textContent = '0';
+      btn0.title = 'Bấm để mở popup và điền 0 cho từng kho';
+      btn0.style.cssText = 'font-size: 11px !important; font-weight: bold !important; background: #f97316 !important; color: white !important; border: 1px solid #ea580c !important; border-radius: 3px !important; padding: 2px 6px !important; cursor: pointer !important; line-height: 1.2 !important; box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;';
+      btn0.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fillMultiWarehouseStock('0', input);
+      };
+
+      btnWrap.append(btn1000, btn0);
+
+      const helpContainer = container.querySelector('.two-tier-basic-stock-container-help') || container.querySelector('.stock-content') || container;
+      helpContainer.appendChild(btnWrap);
+    });
+
+    const allThs = Array.from(document.querySelectorAll('.eds-table__header th, thead th, th'));
+    let priceColIdx = -1;
+    let skuColIdx = -1;
+
+    allThs.forEach((th, idx) => {
+      const txt = (th.textContent || '').toLowerCase().replace(/\s+/g, ' ');
+      if (txt.includes('giá') || txt.includes('price')) {
+        if (priceColIdx === -1) priceColIdx = idx;
+      } else if (txt.includes('sku')) {
+        if (skuColIdx === -1) skuColIdx = idx;
+      }
+    });
+
+    const rows = Array.from(document.querySelectorAll('.eds-table__body tr, tbody tr, tr.eds-table__row'));
+    
+    rows.forEach(row => {
+      if (row.closest('.multi-warehouse-stock-edit')) return;
+
+      const cells = Array.from(row.querySelectorAll('td, .eds-table__cell'));
+      if (cells.length === 0) return;
+
+      // Cột Giá
+      let priceCell = priceColIdx !== -1 ? cells[priceColIdx] : null;
+      if (!priceCell) {
+        priceCell = cells.find(c => {
+          const inp = c.querySelector('input');
+          if (!inp) return false;
+          const ph = (inp.placeholder || '').toLowerCase();
+          return ph.includes('giá') || ph.includes('price') || c.querySelector('.basic-price, .price-input') || c.textContent.includes('₫');
+        });
+      }
+
+      if (priceCell) {
+        const priceInput = priceCell.querySelector('input');
+        if (priceInput && !priceCell.querySelector('.shopee-qlsp-inline-fill-price')) {
+          priceCell.style.setProperty('overflow', 'visible', 'important');
+          priceCell.style.setProperty('height', 'auto', 'important');
+          priceCell.style.setProperty('min-height', '45px', 'important');
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'shopee-qlsp-inline-fill-price';
+          btn.textContent = '⚡ Điền giá';
+          btn.title = 'Bấm để điền Giá từ Web bán SP';
+          btn.style.cssText = 'display: inline-block !important; margin-top: 4px !important; font-size: 10px !important; font-weight: bold !important; background: #ee4d2d !important; color: white !important; border: 1px solid #c2410c !important; border-radius: 3px !important; padding: 2px 6px !important; cursor: pointer !important; z-index: 9999 !important; position: relative !important; line-height: 1.2 !important; box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;';
+          btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            chrome.storage.local.get(['webSpLastPrice'], (res) => {
+              const val = res.webSpLastPrice || '306250';
+              fillInputLikeUser(priceInput, val);
+              showTopNotification(`Đã điền giá: ${val}`);
+            });
+          };
+
+          const inputWrapper = priceInput.closest('.eds-input, .product-edit-input') || priceInput.parentElement || priceCell;
+          if (inputWrapper && inputWrapper.parentElement) {
+            inputWrapper.parentElement.appendChild(btn);
+          } else {
+            priceCell.appendChild(btn);
+          }
+        }
+      }
+
+      // Cột SKU
+      let skuCell = skuColIdx !== -1 ? cells[skuColIdx] : null;
+      if (!skuCell) {
+        skuCell = cells.find(c => {
+          const inp = c.querySelector('input, textarea');
+          if (!inp) return false;
+          const ph = (inp.placeholder || '').toLowerCase();
+          return ph.includes('sku') || ph.includes('nhập vào') || c.querySelector('.sku-textarea');
+        });
+      }
+
+      if (skuCell) {
+        const skuInput = skuCell.querySelector('input, textarea');
+        if (skuInput && !skuCell.querySelector('.shopee-qlsp-inline-fill-sku')) {
+          skuCell.style.setProperty('overflow', 'visible', 'important');
+          skuCell.style.setProperty('height', 'auto', 'important');
+          skuCell.style.setProperty('min-height', '45px', 'important');
+
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'shopee-qlsp-inline-fill-sku';
+          btn.textContent = '⚡ Điền SKU';
+          btn.title = 'Bấm để điền SKU từ Web bán SP';
+          btn.style.cssText = 'display: inline-block !important; margin-top: 4px !important; font-size: 10px !important; font-weight: bold !important; background: #2563eb !important; color: white !important; border: 1px solid #1d4ed8 !important; border-radius: 3px !important; padding: 2px 6px !important; cursor: pointer !important; z-index: 9999 !important; position: relative !important; line-height: 1.2 !important; box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important;';
+          btn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            chrome.storage.local.get(['webSpLastSku'], (res) => {
+              const val = res.webSpLastSku || '';
+              if (val) {
+                fillInputLikeUser(skuInput, val);
+                showTopNotification(`Đã điền SKU: ${val}`);
+              } else {
+                showTopNotification('Hãy chọn 1 sản phẩm ở tab Web bán SP trước', true);
+              }
+            });
+          };
+
+          const inputWrapper = skuInput.closest('.eds-input, .sku-textarea, .product-edit-input') || skuInput.parentElement || skuCell;
+          if (inputWrapper && inputWrapper.parentElement) {
+            inputWrapper.parentElement.appendChild(btn);
+          } else {
+            skuCell.appendChild(btn);
+          }
+        }
+      }
+    });
+  }
+
+  function processPopupInputs() {
+    const popupTitle = document.querySelector('.multi-warehouse-stock-edit .stock-edit-title');
+    if (popupTitle && !popupTitle.querySelector('.shopee-qlsp-popup-fill-1000')) {
+      const popupBtnWrap = document.createElement('span');
+      popupBtnWrap.className = 'shopee-qlsp-popup-fill-1000';
+      popupBtnWrap.style.cssText = 'display: inline-flex !important; gap: 6px !important; margin-left: 12px !important; vertical-align: middle !important; font-size: 11px !important;';
+      
+      const pBtn1000 = document.createElement('button');
+      pBtn1000.type = 'button';
+      pBtn1000.textContent = '⚡ Điền 1000';
+      pBtn1000.title = 'Điền 1000 cho tất cả các kho đang hoạt động';
+      pBtn1000.style.cssText = 'padding: 2px 8px !important; font-size: 11px !important; font-weight: bold !important; background: #ea580c !important; color: white !important; border: 1px solid #c2410c !important; border-radius: 3px !important; cursor: pointer !important;';
+      pBtn1000.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fillMultiWarehouseStock('1000');
+      };
+
+      const pBtn0 = document.createElement('button');
+      pBtn0.type = 'button';
+      pBtn0.textContent = '⚡ Điền 0';
+      pBtn0.title = 'Điền 0 cho tất cả các kho đang hoạt động';
+      pBtn0.style.cssText = 'padding: 2px 8px !important; font-size: 11px !important; font-weight: bold !important; background: #f97316 !important; color: white !important; border: 1px solid #ea580c !important; border-radius: 3px !important; cursor: pointer !important;';
+      pBtn0.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        fillMultiWarehouseStock('0');
+      };
+
+      popupBtnWrap.append(pBtn1000, pBtn0);
+      popupTitle.appendChild(popupBtnWrap);
+    }
+  }
+
+  function injectStockQuickButtons() {
+    if (!window.location.href.includes('banhang.shopee.vn/portal/product')) return;
+    injectFloatingStockPanel();
+    injectBatchApplyButtons();
+    processBatchInputs();
+    processVariationTables();
+    processPopupInputs();
+    injectPreOrderInlineButton();
+  }
+
+    // =========================================================================
+  // AUTO-INJECT SKU BADGES & PRICING RULES ON SHOPEE MARKETING / PROMOTION PAGES
+  // =========================================================================
+  let autoShopeeSpCache = null;   // null = chưa load; [] = đã load nhưng rỗng
+  let autoShopeeDsCache = null;   // cache DS_SP
+  let autoShopeeMaGian = "";
+  let autoShopeeLoadingData = false; // tránh gọi API song song
+
+  function findMinPriceForSku(sku, dsRows) {
+    if (!sku || !dsRows || !Array.isArray(dsRows) || dsRows.length === 0) return null;
+    
+    let dsIdSpIdx = 1; // Mặc định cột B (id_sp_ct / id_sp)
+    let dsGiaThapNhatIdx = 6; // Mặc định cột G (gia_thap_nhat)
+    
+    if (Array.isArray(dsRows[0])) {
+      const dsHeaders = dsRows[0].map(h => String(h || "").normalize("NFC").trim().toLowerCase());
+      const idCol = dsHeaders.findIndex(h => h === "id_sp_ct" || h === "id_sp" || h === "id sp" || h === "sku" || h === "ma_sku");
+      if (idCol !== -1) dsIdSpIdx = idCol;
+      
+      const giaCol = dsHeaders.findIndex(h => h === "gia_thap_nhat" || h === "gia thap nhat" || h.includes("thấp nhất") || h.includes("giá min") || h.includes("gia_min") || h.includes("thap nhat"));
+      if (giaCol !== -1) dsGiaThapNhatIdx = giaCol;
+    }
+
+    const cleanSku = String(sku).trim().toUpperCase();
+    const sku14 = cleanSku.substring(0, 14);
+    const sku10 = cleanSku.substring(0, 10);
+    const skuPrefix4 = cleanSku.substring(0, 4);
+
+    let minPrice = null;
+
+    for (let idx = 0; idx < dsRows.length; idx++) {
+      if (idx === 0 && Array.isArray(dsRows[0]) && typeof dsRows[0][0] === 'string' && dsRows[0][0].toLowerCase().includes('ngay')) {
+        continue;
+      }
+
+      const r = dsRows[idx];
+      if (!r) continue;
+
+      let rowId = "";
+      let rawVal = "";
+
+      if (Array.isArray(r)) {
+        rowId = String(r[dsIdSpIdx] || r[1] || "").trim().toUpperCase();
+        rawVal = r[dsGiaThapNhatIdx] || r[6] || r[5];
+      } else if (typeof r === "object") {
+        rowId = String(r.id_sp || r.id_sp_ct || r.sku || r.id || "").trim().toUpperCase();
+        rawVal = r.gia_thap_nhat || r.gia_min || r.giaThapNhat || r.lowestPrice;
+      }
+
+      if (!rowId) continue;
+
+      const isMatch = (
+        rowId === cleanSku || 
+        rowId === sku14 || 
+        rowId === sku10 || 
+        cleanSku.startsWith(rowId) || 
+        rowId.startsWith(sku10) || 
+        rowId.startsWith(skuPrefix4) ||
+        cleanSku.startsWith(rowId.substring(0, 4))
+      );
+
+      if (isMatch && rawVal) {
+        const numericMatch = parseInt(String(rawVal).replace(/[^\d]/g, ''), 10);
+        if (!isNaN(numericMatch) && numericMatch > 0) {
+          if (minPrice === null || numericMatch < minPrice) {
+            minPrice = numericMatch;
+          }
+        }
+      }
+    }
+
+    return minPrice;
+  }
+
+  function findSkuForShopeeVariation(pName, vName, spRows, currentMaGian) {
+    if (!spRows || spRows.length <= 1) return "";
+    
+    const cleanP = cleanString(pName);
+    const cleanV = cleanString(vName);
+    if (!cleanV && !cleanP) return "";
+
+    const headers = spRows[0].map(v => cleanString(v));
+    let pIdx = headers.findIndex(col => col.includes('tên sản phẩm') || col === 'ten sp' || col === 'name');
+    if (pIdx === -1) pIdx = 1;
+    let vIdx = headers.findIndex(col => (col.includes('phân loại') || col.includes('variation')) && !col.includes('mã') && !col.includes('ma'));
+    if (vIdx === -1) vIdx = 3;
+    let sIdx = headers.findIndex(col => (col === 'sku' || col === 'mã sku' || col === 'sku phân loại') && !col.includes('chi tiết'));
+    if (sIdx === -1) sIdx = 5;
+    let gIdx = headers.findIndex(col => col === 'gian' || col === 'mã gian' || col === 'ma gian');
+    if (gIdx === -1) gIdx = 11;
+
+    let candidateRows = [];
+    const targetGian = cleanString(currentMaGian);
+
+    if (targetGian) {
+      for (let i = 1; i < spRows.length; i++) {
+        const row = spRows[i];
+        const sG = cleanString(row[gIdx]);
+        if (sG === targetGian || sG.includes(targetGian) || targetGian.includes(sG)) {
+          candidateRows.push(row);
+        }
+      }
+    }
+
+    if (candidateRows.length === 0) {
+      candidateRows = spRows.slice(1);
+    }
+
+    const getWordOverlap = (s1, s2) => {
+      if (!s1 || !s2) return 0;
+      const w1 = s1.split(' ').filter(w => w.length > 1);
+      const w2 = s2.split(' ').filter(w => w.length > 1);
+      let count = 0;
+      for (const w of w1) {
+        if (w2.includes(w)) count++;
+      }
+      return count;
+    };
+
+    const extractCodes = (str) => {
+      const matches = str.match(/[a-z0-9]+[0-9]+[a-z0-9]*/gi) || [];
+      return matches.map(m => m.toLowerCase());
+    };
+
+    const pCodes = extractCodes(cleanP);
+    let bestParentScore = -1;
+    let bestParentRows = [];
+    
+    const productGroups = new Map();
+    for (const row of candidateRows) {
+      const sP = cleanString(row[pIdx]);
+      if (!sP) continue;
+      if (!productGroups.has(sP)) {
+        productGroups.set(sP, []);
+      }
+      productGroups.get(sP).push(row);
+    }
+
+    for (const [sheetParentName, rows] of productGroups.entries()) {
+      let pScore = 0;
+
+      if (sheetParentName === cleanP) {
+        pScore += 10000;
+      } else if (sheetParentName.startsWith(cleanP) || cleanP.startsWith(sheetParentName)) {
+        pScore += 5000;
+      } else if (sheetParentName.includes(cleanP) || cleanP.includes(sheetParentName)) {
+        pScore += 3000;
+      } else {
+        const sheetCodes = extractCodes(sheetParentName);
+        let codeMatch = false;
+        for (const c of pCodes) {
+          if (c.length >= 3 && sheetCodes.includes(c)) {
+            pScore += 2000;
+            codeMatch = true;
+          }
+        }
+
+        const overlap = getWordOverlap(cleanP, sheetParentName);
+        if (overlap >= 2 || codeMatch) {
+          pScore += overlap * 100;
+        }
+      }
+
+      if (pScore > bestParentScore && pScore > 0) {
+        bestParentScore = pScore;
+        bestParentRows = rows;
+      }
+    }
+
+    if (bestParentRows.length === 0) {
+      bestParentRows = candidateRows;
+    }
+
+    let bestVarScore = -1;
+    let bestSku = "";
+
+    for (const row of bestParentRows) {
+      const sV = cleanString(row[vIdx]);
+      const sku = String(row[sIdx] || "").trim();
+      if (!sku) continue;
+
+      let vScore = 0;
+      if (cleanV) {
+        if (sV === cleanV) {
+          vScore += 1000;
+        } else if (sV.startsWith(cleanV) || cleanV.startsWith(sV)) {
+          vScore += 500;
+        } else if (sV.includes(cleanV) || cleanV.includes(sV)) {
+          vScore += 300;
+        } else {
+          const overlap = getWordOverlap(cleanV, sV);
+          if (overlap > 0) vScore += overlap * 50;
+        }
+      } else {
+        if (!sV || sV === "-") vScore += 100;
+      }
+
+      if (vScore > bestVarScore) {
+        bestVarScore = vScore;
+        bestSku = sku;
+      }
+    }
+
+    if (!bestSku && bestParentRows.length > 0) {
+      bestSku = String(bestParentRows[0][sIdx] || "").trim();
+    }
+
+    return bestSku;
+  }
+
+  function doInjectBadges() {
+    // Dọn dẹp triệt để các badge thừa
+    document.querySelectorAll('.injected-sku-ct, .injected-sku-info, .injected-sku-price-helper, .shopee-qlsp-sku-display').forEach(el => el.remove());
+
+    const models = Array.from(document.querySelectorAll('.discount-view-item-model-component, .discount-item-model-component, .discount-edit-item-model-component, tr.ant-table-row'));
+    models.forEach((mEl) => {
+      mEl.querySelectorAll('.injected-sku-ct, .injected-sku-info, .injected-sku-price-helper, .shopee-qlsp-sku-display').forEach(el => el.remove());
+
+      const varCell = mEl.querySelector('.item-content.item-variation, .item-variation, td:nth-child(2), .product-name') || mEl;
+      if (!varCell) return;
+
+      let varName = "";
+      const singleEl = varCell.querySelector('.ellipsis-content.single');
+      if (singleEl) {
+        varName = (singleEl.innerText || singleEl.textContent || "").replace(/\s+/g,' ').trim();
+      }
+      if (!varName) {
+        const tipEl = varCell.querySelector('.eds-popover__content');
+        if (tipEl) varName = (tipEl.innerText || "").replace(/\s+/g,' ').trim();
+      }
+      if (!varName) {
+        const clone = varCell.cloneNode(true);
+        clone.querySelectorAll('.eds-popper,.eds-popover__popper,.eds-tooltip__popper,[class*="popper"],[class*="tooltip"],.ext-km-injected-sku').forEach(p=>p.remove());
+        varName = (clone.innerText || clone.textContent || "").replace(/\s+/g,' ').trim();
+      }
+      if (!varName) return;
+
+      const parentCard = mEl.closest('.discount-view-item-component, .discount-item-component, .discount-edit-item-component') || mEl.parentElement?.parentElement;
+      let parentName = "";
+      if (parentCard) {
+        const pEl = parentCard.querySelector('a[href*="/portal/product/"]');
+        if (pEl) parentName = (pEl.getAttribute('title') || pEl.innerText || "").replace(/\s+/g,' ').trim();
+        if (!parentName) {
+            const titleCandidates = Array.from(parentCard.querySelectorAll('.discount-view-item-header .ellipsis-content.single, .discount-edit-item-header .ellipsis-content.single, .item-header .ellipsis-content, .ellipsis-content.single'));
+            for (const hEl of titleCandidates) {
+              if (!hEl.closest('.discount-view-item-model-component, .discount-edit-item-model-component, .discount-item-model-component')) {
+                const text = (hEl.getAttribute('title') || hEl.innerText || "").replace(/\s+/g, ' ').trim();
+                if (text && text.toLowerCase() !== "sản phẩm" && text.toLowerCase() !== "product" && text !== varName) {
+                  parentName = text;
+                  break;
+                }
+              }
+            }
+          }
+      }
+
+      // ƯU TIÊN SỐ 1: Bóc tách trực tiếp mã SKU từ DOM của dòng phân loại trên Shopee
+      let directSkuFromDom = "";
+      const modelText = (mEl.innerText || mEl.textContent || "");
+      const mSku = modelText.match(/(?:sku|mã\s*(?:phân\s*loại|sản\s*phẩm))\s*:\s*([A-Z0-9_-]{3,35})/i);
+      if (mSku && !/^(copy|sku|sp)$/i.test(mSku[1])) {
+        directSkuFromDom = mSku[1].trim();
+      }
+
+      const sku = directSkuFromDom || findSkuForShopeeVariation(parentName, varName, autoShopeeSpCache, autoShopeeMaGian);
+      if (!sku) return;
+
+      varCell.querySelectorAll('.ext-km-injected-sku, .injected-sku-ct, .injected-sku-info, .injected-sku-price-helper, .shopee-qlsp-sku-display').forEach(el => el.remove());
+      mEl.querySelectorAll('.injected-sku-price-helper').forEach(el => el.remove());
+
+      mEl.style.setProperty('height', 'auto', 'important');
+      mEl.style.setProperty('min-height', '56px', 'important');
+      mEl.style.setProperty('overflow', 'visible', 'important');
+      varCell.style.setProperty('height', 'auto', 'important');
+      varCell.style.setProperty('display', 'flex', 'important');
+      varCell.style.setProperty('flex-direction', 'column', 'important');
+      varCell.style.setProperty('align-items', 'flex-start', 'important');
+      varCell.style.setProperty('justify-content', 'center', 'important');
+      varCell.style.setProperty('overflow', 'visible', 'important');
+
+      const minPrice = findMinPriceForSku(sku, autoShopeeDsCache);
+      const shortSku = String(sku || '').trim().substring(0, 14);
+
+      const badge = document.createElement('div');
+      badge.className = 'ext-km-injected-sku';
+      badge.setAttribute('data-sku', shortSku);
+      badge.setAttribute('data-min-price', minPrice || '');
+      badge.style.cssText = 'display: inline-flex !important; align-items: center !important; flex-wrap: wrap !important; gap: 4px !important; margin-top: 4px !important; font-family: monospace, Consolas, sans-serif !important; font-size: 11px !important; width: max-content !important; z-index: 10 !important;';
+
+      const skuSpan = document.createElement('span');
+      skuSpan.style.cssText = 'background: #e0f2fe !important; border: 1px solid #7dd3fc !important; border-radius: 4px !important; padding: 2px 6px !important; font-weight: bold !important; color: #0284c7 !important; cursor: pointer !important;';
+      skuSpan.title = 'Bấm để copy: ' + shortSku;
+      skuSpan.innerText = shortSku;
+      skuSpan.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        navigator.clipboard.writeText(shortSku).then(() => {
+          skuSpan.innerHTML = `<span style="color:#15803d;font-weight:bold;">✓ Đã copy!</span>`;
+          setTimeout(() => {
+            skuSpan.innerText = shortSku;
+          }, 1200);
+        });
+      };
+      badge.appendChild(skuSpan);
+
+      // 2. TÌM Ô NHẬP GIÁ SAU GIẢM (LUÔN LÀ Ô NHẬP ĐẦU TIÊN TRONG DÒNG BIẾN THỂ)
+      const inputsInRow = Array.from(mEl.querySelectorAll('input:not([type="checkbox"]):not([type="radio"])'));
+      const discInput = mEl.querySelector('.item-discounted-price input, .item-price input, .discount-price input') || inputsInRow[0];
+
+      const updateInputColor = () => {
+        if (!discInput) return;
+        const rawVal = discInput.value;
+        const curVal = parseSellerOrderMoneyNumber(rawVal);
+        const minVal = parseSellerOrderMoneyNumber(minPrice);
+        const wrapper = discInput.closest('.eds-input, .eds-input-wrapper') || discInput.parentElement || discInput;
+
+        if (minVal > 0 && curVal > 0) {
+          if (curVal === minVal) {
+            // 1. BẰNG GIÁ MIN -> MÀU XANH LÁ
+            discInput.style.setProperty('background-color', '#f0fdf4', 'important');
+            discInput.style.setProperty('color', '#15803d', 'important');
+            discInput.style.setProperty('font-weight', 'bold', 'important');
+            if (wrapper) {
+              wrapper.style.setProperty('background-color', '#f0fdf4', 'important');
+              wrapper.style.setProperty('border', '2px solid #16a34a', 'important');
+              wrapper.style.setProperty('border-color', '#16a34a', 'important');
+            }
+          } else if (curVal > minVal) {
+            // 2. LỚN HƠN GIÁ MIN -> MÀU ĐỎ
+            discInput.style.setProperty('background-color', '#fef2f2', 'important');
+            discInput.style.setProperty('color', '#dc2626', 'important');
+            discInput.style.setProperty('font-weight', 'bold', 'important');
+            if (wrapper) {
+              wrapper.style.setProperty('background-color', '#fef2f2', 'important');
+              wrapper.style.setProperty('border', '2px solid #ef4444', 'important');
+              wrapper.style.setProperty('border-color', '#ef4444', 'important');
+            }
+          } else {
+            // 3. NHỎ HƠN GIÁ MIN -> MÀU TRẮNG + CHỮ ĐEN
+            discInput.style.setProperty('background-color', '#ffffff', 'important');
+            discInput.style.setProperty('color', '#000000', 'important');
+            discInput.style.setProperty('font-weight', 'normal', 'important');
+            if (wrapper) {
+              wrapper.style.setProperty('background-color', '#ffffff', 'important');
+              wrapper.style.setProperty('border', '1px solid #d1d5db', 'important');
+              wrapper.style.setProperty('border-color', '#d1d5db', 'important');
+            }
+          }
+        } else {
+          discInput.style.setProperty('background-color', '#ffffff', 'important');
+          discInput.style.setProperty('color', '#000000', 'important');
+          discInput.style.setProperty('font-weight', 'normal', 'important');
+          if (wrapper) {
+            wrapper.style.setProperty('background-color', '#ffffff', 'important');
+            wrapper.style.setProperty('border', '1px solid #d1d5db', 'important');
+            wrapper.style.setProperty('border-color', '#d1d5db', 'important');
+          }
+        }
+      };
+
+      if (discInput) {
+        updateInputColor();
+        if (!discInput.dataset.shopeeExtColorBound) {
+          discInput.dataset.shopeeExtColorBound = "1";
+          discInput.addEventListener('input', updateInputColor);
+          discInput.addEventListener('change', updateInputColor);
+          discInput.addEventListener('blur', updateInputColor);
+        }
+      }
+
+      if (minPrice) {
+        const formattedPriceStr = Number(minPrice).toLocaleString('vi-VN');
+        const minSpan = document.createElement('span');
+        minSpan.style.cssText = 'background: #16a34a !important; border: 1px solid #15803d !important; color: #ffffff !important; border-radius: 4px !important; padding: 2px 6px !important; font-weight: bold !important; font-size: 11px !important;';
+        minSpan.title = 'Giá Min từ Sheet DS_SP: ' + formattedPriceStr;
+        minSpan.innerText = formattedPriceStr;
+        badge.appendChild(minSpan);
+
+        const fillBtn = document.createElement('button');
+        fillBtn.type = 'button';
+        fillBtn.style.cssText = 'background: #f97316 !important; border: 1px solid #ea580c !important; color: #ffffff !important; border-radius: 4px !important; padding: 2px 8px !important; font-weight: bold !important; font-size: 11px !important; cursor: pointer !important; display: inline-flex !important; align-items: center !important; gap: 2px !important; box-shadow: 0 1px 2px rgba(0,0,0,0.12) !important; user-select: none !important;';
+        fillBtn.title = `Điền Giá Min (${formattedPriceStr}) vào ô Giá sau giảm của dòng này`;
+        fillBtn.innerHTML = `⚡ Điền`;
+
+        fillBtn.onclick = (e) => {
+          e.preventDefault(); e.stopPropagation();
+          if (discInput && !discInput.disabled) {
+            discInput.focus();
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+            if (nativeSetter) nativeSetter.call(discInput, String(minPrice));
+            else discInput.value = String(minPrice);
+            discInput.dispatchEvent(new Event('input', { bubbles: true }));
+            discInput.dispatchEvent(new Event('change', { bubbles: true }));
+            discInput.dispatchEvent(new Event('blur', { bubbles: true }));
+
+            fillBtn.innerHTML = `✓ Đã điền`;
+            fillBtn.style.background = '#059669';
+            fillBtn.style.borderColor = '#047857';
+
+            updateInputColor();
+            setTimeout(() => {
+              fillBtn.innerHTML = `⚡ Điền`;
+              fillBtn.style.background = '#f97316';
+              fillBtn.style.borderColor = '#ea580c';
+            }, 1500);
+          }
+        };
+        badge.appendChild(fillBtn);
+      }
+
+      varCell.appendChild(badge);
+    });
+  }
+
+  function autoInjectPromotionSkuBadges() {
+    if (!window.location.href.includes('/portal/marketing/')) return;
+
+    if (autoShopeeSpCache && autoShopeeSpCache.length > 1 && autoShopeeDsCache && autoShopeeDsCache.length > 1) {
+      doInjectBadges();
+      return;
+    }
+
+    if (autoShopeeLoadingData) return;
+    autoShopeeLoadingData = true;
+
+    chrome.storage.local.get(['sp_shopee_cache_data', 'ds_sp_cache_data', 'maGian', 'dhHoanTextValue'], async (res) => {
+      if (res?.ds_sp_cache_data && res.ds_sp_cache_data.length > 1) autoShopeeDsCache = res.ds_sp_cache_data;
+      if (res?.sp_shopee_cache_data && res.sp_shopee_cache_data.length > 1) autoShopeeSpCache = res.sp_shopee_cache_data;
+      autoShopeeMaGian = (res?.maGian || res?.dhHoanTextValue || "").trim().toLowerCase();
+
+      try {
+        if (!autoShopeeSpCache || autoShopeeSpCache.length <= 1) {
+          const fRes = await new Promise(resolve => chrome.runtime.sendMessage({ type: "FETCH_SP_SHOPEE" }, resolve));
+          if (fRes && fRes.ok && fRes.values && fRes.values.length > 1) {
+            autoShopeeSpCache = fRes.values;
+            chrome.storage.local.set({ sp_shopee_cache_data: fRes.values });
+          }
+        }
+
+        if (!autoShopeeDsCache || autoShopeeDsCache.length <= 1) {
+          const dsRes = await new Promise(resolve => chrome.runtime.sendMessage({ type: "FETCH_DS_SP" }, resolve));
+          if (dsRes && dsRes.ok && dsRes.values && dsRes.values.length > 1) {
+            autoShopeeDsCache = dsRes.values;
+            chrome.storage.local.set({ ds_sp_cache_data: dsRes.values });
+          }
+        }
+
+        autoShopeeLoadingData = false;
+        doInjectBadges();
+      } catch(e) {
+        autoShopeeLoadingData = false;
+        console.error("Lỗi nạp cache khuyến mãi:", e);
+      }
+    });
+  }
+
+// Khởi động lần đầu
+  autoInjectPromotionSkuBadges();
+
+  // Chạy định kỳ 800ms — inject tiếp khi Shopee Vue re-render thêm dòng mới
+  
+  // =========================================================================
+  // NÚT "SỬA SẢN PHẨM" VÀ "COPY TÊN SP" TRÊN TRANG SHOPEE NGƯỜI MUA (shopee.vn)
+  // =========================================================================
+  function extractShopeeBuyerItemId() {
+    const href = window.location.href;
+    const path = window.location.pathname;
+
+    const m1 = path.match(/\/product\/\d+\/(\d+)/i) || href.match(/\/product\/\d+\/(\d+)/i);
+    if (m1) return m1[1];
+
+    const m2 = path.match(/-i\.\d+\.(\d+)/i) || href.match(/-i\.\d+\.(\d+)/i);
+    if (m2) return m2[1];
+
+    const m3 = path.match(/\/universal-link\/product\/\d+\/(\d+)/i);
+    if (m3) return m3[1];
+
+    const m4 = href.match(/[?&](?:item_id|itemId|itemid)=(\d+)/i);
+    if (m4) return m4[1];
+
+    return "";
+  }
+
+  function extractShopeeBuyerProductName() {
+    const selectors = [
+      '.WBVL_7',
+      '._44qnta',
+      '.qaNIZv',
+      '.vR6Z3Z',
+      '.page-product__name',
+      '[class*="product-name"]',
+      '[class*="productTitle"]',
+      'h1'
+    ];
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        const txt = (el.innerText || el.textContent || "").replace(/\s+/g, ' ').trim();
+        if (txt && txt.length > 3 && !/shopee|đăng nhập|tìm kiếm/i.test(txt)) {
+          return txt;
+        }
+      }
+    }
+
+    const metaTitle = document.querySelector('meta[property="og:title"]')?.content;
+    if (metaTitle && metaTitle.length > 3) {
+      return metaTitle.replace(/\|\s*Shopee.*$/i, '').trim();
+    }
+
+    if (document.title) {
+      return document.title.replace(/\|\s*Shopee.*$/i, '').replace(/Shopee\s*Việt\s*Nam.*$/i, '').trim();
+    }
+
+    return "";
+  }
+
+  function injectBuyerProductActionButtons() {
+    if (!window.location.host.includes("shopee.vn") || window.location.host.includes("banhang")) {
+      return;
+    }
+
+    const itemId = extractShopeeBuyerItemId();
+    if (!itemId) return;
+
+    const editUrl = `https://banhang.shopee.vn/portal/product/${itemId}`;
+
+    // 1. Gắn nút Inline ngay bên cạnh / dưới tiêu đề sản phẩm
+    const titleEl = document.querySelector('.WBVL_7, ._44qnta, .qaNIZv, .vR6Z3Z, .page-product__name, [class*="product-name"], [class*="productTitle"], h1');
+    if (titleEl && !document.getElementById('shopee-ext-buyer-actions')) {
+      const actionsDiv = document.createElement('div');
+      actionsDiv.id = 'shopee-ext-buyer-actions';
+      actionsDiv.style.cssText = 'margin: 12px 0 14px 0 !important; display: flex !important; align-items: center !important; gap: 10px !important; flex-wrap: wrap !important; z-index: 99 !important;';
+
+      const editBtn = document.createElement('a');
+      editBtn.href = editUrl;
+      editBtn.target = '_blank';
+      editBtn.className = 'ext-buyer-btn-edit';
+      editBtn.style.cssText = 'display: inline-flex !important; align-items: center !important; gap: 6px !important; padding: 6px 14px !important; background: #ee4d2d !important; color: #ffffff !important; font-size: 13px !important; font-weight: bold !important; border-radius: 6px !important; text-decoration: none !important; border: 1px solid #d03b1f !important; box-shadow: 0 2px 5px rgba(238, 77, 45, 0.25) !important; cursor: pointer !important; transition: all 0.2s !important;';
+      editBtn.innerHTML = `🛠️ Sửa sản phẩm (${itemId}) ↗`;
+
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'ext-buyer-btn-copy-name';
+      copyBtn.style.cssText = 'display: inline-flex !important; align-items: center !important; gap: 6px !important; padding: 6px 14px !important; background: #0284c7 !important; color: #ffffff !important; font-size: 13px !important; font-weight: bold !important; border-radius: 6px !important; border: 1px solid #0369a1 !important; box-shadow: 0 2px 5px rgba(2, 132, 199, 0.25) !important; cursor: pointer !important; transition: all 0.2s !important;';
+      copyBtn.innerHTML = `📋 Copy tên sản phẩm`;
+
+      copyBtn.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const pName = extractShopeeBuyerProductName();
+        if (pName) {
+          navigator.clipboard.writeText(pName).then(() => {
+            copyBtn.innerHTML = '✓ Đã copy tên!';
+            copyBtn.style.backgroundColor = '#16a34a';
+            copyBtn.style.borderColor = '#15803d';
+            setTimeout(() => {
+              copyBtn.innerHTML = `📋 Copy tên sản phẩm`;
+              copyBtn.style.backgroundColor = '#0284c7';
+              copyBtn.style.borderColor = '#0369a1';
+            }, 1500);
+          });
+        }
+      };
+
+      actionsDiv.appendChild(editBtn);
+      actionsDiv.appendChild(copyBtn);
+
+      if (titleEl.parentElement) {
+        titleEl.parentElement.insertBefore(actionsDiv, titleEl.nextSibling);
+      }
+    }
+
+    // 2. Gắn thanh nổi Floating Bar ở góc phải màn hình
+    if (!document.getElementById('shopee-ext-buyer-floating-bar')) {
+      const floatDiv = document.createElement('div');
+      floatDiv.id = 'shopee-ext-buyer-floating-bar';
+      floatDiv.style.cssText = 'position: fixed !important; top: 120px !important; right: 20px !important; z-index: 999999 !important; display: flex !important; flex-direction: column !important; gap: 8px !important; background: rgba(255, 255, 255, 0.96) !important; padding: 10px 12px !important; border-radius: 8px !important; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important; border: 1px solid #cbd5e1 !important; backdrop-filter: blur(4px) !important;';
+
+      const floatHeader = document.createElement('div');
+      floatHeader.style.cssText = 'font-size: 11px !important; font-weight: bold !important; color: #475569 !important; margin-bottom: 2px !important; display: flex !important; align-items: center !important; justify-content: space-between !important;';
+      floatHeader.innerHTML = `<span>⚡ Shopee Ext (${itemId})</span>`;
+      floatDiv.appendChild(floatHeader);
+
+      const fEditBtn = document.createElement('a');
+      fEditBtn.href = editUrl;
+      fEditBtn.target = '_blank';
+      fEditBtn.style.cssText = 'display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 4px !important; padding: 5px 12px !important; background: #ee4d2d !important; color: #ffffff !important; font-size: 12px !important; font-weight: bold !important; border-radius: 4px !important; text-decoration: none !important; box-shadow: 0 1px 3px rgba(238, 77, 45, 0.25) !important; text-align: center !important;';
+      fEditBtn.innerHTML = `🛠️ Về sửa sản phẩm ↗`;
+
+      const fCopyBtn = document.createElement('button');
+      fCopyBtn.type = 'button';
+      fCopyBtn.style.cssText = 'display: inline-flex !important; align-items: center !important; justify-content: center !important; gap: 4px !important; padding: 5px 12px !important; background: #0284c7 !important; color: #ffffff !important; font-size: 12px !important; font-weight: bold !important; border-radius: 4px !important; border: 1px solid #0369a1 !important; cursor: pointer !important;';
+      fCopyBtn.innerHTML = `📋 Copy tên SP`;
+
+      fCopyBtn.onclick = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        const pName = extractShopeeBuyerProductName();
+        if (pName) {
+          navigator.clipboard.writeText(pName).then(() => {
+            fCopyBtn.innerHTML = '✓ Đã copy!';
+            fCopyBtn.style.backgroundColor = '#16a34a';
+            fCopyBtn.style.borderColor = '#15803d';
+            setTimeout(() => {
+              fCopyBtn.innerHTML = `📋 Copy tên SP`;
+              fCopyBtn.style.backgroundColor = '#0284c7';
+              fCopyBtn.style.borderColor = '#0369a1';
+            }, 1500);
+          });
+        }
+      };
+
+      floatDiv.appendChild(fEditBtn);
+      floatDiv.appendChild(fCopyBtn);
+      document.body.appendChild(floatDiv);
+    }
+  }
+
+  injectBuyerProductActionButtons();
+
+  
+  // Tự động xóa snapshot sau 30 giây để luôn đối chiếu lại dữ liệu mới nhất với Sheet DH
+  if (isSellerOrderDetailPage()) {
+    setInterval(() => {
+      const curOrderId = extractSellerOrderIdFromPage();
+      if (curOrderId) {
+        syncedOrderSnapshots.delete(curOrderId);
+      }
+    }, 30000);
+  }
+
+
+  // =========================================================================
+  // ĐỔI MÀU ĐỎ NHẠT CHO SẢN PHẨM CÓ KHO HÀNG = 0 TRÊN PORTAL/PRODUCT/LIST
+  // =========================================================================
+  function highlightZeroStockProducts() {
+    if (!window.location.href.includes('/portal/product/list')) return;
+
+    // 1. Quét trực tiếp các phần tử chứa nhãn Kho hàng
+    document.querySelectorAll('.product-stock-label, span.product-stock-label, [class*="product-stock-label"]').forEach(labelEl => {
+      const container = labelEl.closest('.text-overflow') || labelEl.parentElement;
+      if (!container) return;
+
+      const fullText = (container.textContent || "").replace(/\s+/g, ' ').trim();
+      // Bắt trường hợp "Kho hàng 0" hoặc "Kho hàng: 0" hoặc "Kho hàng0"
+      if (/kho\s*hàng\s*:?\s*0\b/i.test(fullText) || /tồn\s*kho\s*:?\s*0\b/i.test(fullText) || fullText === "Kho hàng0" || fullText === "Kho hàng 0" || fullText.endsWith(" 0") || fullText.endsWith("0")) {
+        container.style.setProperty('background-color', '#fee2e2', 'important'); // màu đỏ nhạt
+        container.style.setProperty('border', '1px solid #f87171', 'important');
+        container.style.setProperty('border-radius', '4px', 'important');
+        container.style.setProperty('padding', '2px 8px', 'important');
+        container.style.setProperty('color', '#dc2626', 'important');
+        container.style.setProperty('font-weight', 'bold', 'important');
+        container.style.setProperty('display', 'inline-block', 'important');
+        container.style.setProperty('box-shadow', '0 1px 2px rgba(220, 38, 38, 0.1)', 'important');
+
+        container.querySelectorAll('span').forEach(sp => {
+          sp.style.setProperty('color', '#dc2626', 'important');
+          sp.style.setProperty('font-weight', 'bold', 'important');
+        });
+      }
+    });
+
+    // 2. Quét các thẻ .text-overflow trên trang danh sách sản phẩm
+    document.querySelectorAll('.text-overflow').forEach(el => {
+      const txt = (el.textContent || "").replace(/\s+/g, ' ').trim();
+      if (txt === "Kho hàng0" || txt === "Kho hàng 0" || /^kho\s*hàng\s*:?\s*0$/i.test(txt) || /^tồn\s*kho\s*:?\s*0$/i.test(txt)) {
+        el.style.setProperty('background-color', '#fee2e2', 'important');
+        el.style.setProperty('border', '1px solid #f87171', 'important');
+        el.style.setProperty('border-radius', '4px', 'important');
+        el.style.setProperty('padding', '2px 8px', 'important');
+        el.style.setProperty('color', '#dc2626', 'important');
+        el.style.setProperty('font-weight', 'bold', 'important');
+        el.style.setProperty('display', 'inline-block', 'important');
+        el.style.setProperty('box-shadow', '0 1px 2px rgba(220, 38, 38, 0.1)', 'important');
+        el.querySelectorAll('span').forEach(sp => {
+          sp.style.setProperty('color', '#dc2626', 'important');
+          sp.style.setProperty('font-weight', 'bold', 'important');
+        });
+      }
+    });
+  }
+
+  // =========================================================================
+  // NÚT NỔI AI TƯ VẤN TRỰC TIẾP TRÊN SHOPEE WEBCHAT
+  // =========================================================================
+  function injectWebchatAiAssistantButton() {
+    if (!window.location.href.includes("webchat")) return;
+
+    const toolbar = document.querySelector('._nG2qVRbhQ, .YQjdmDEqcP, .V9jE_0UxIx, [data-cy="webchat-conversation-detail-input"] .RLLbjiTnxP');
+    if (!toolbar) return;
+
+    if (document.getElementById("ext-shopee-ai-chat-btn")) return;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "ext-shopee-ai-chat-btn";
+    btn.style.cssText = "display: inline-flex !important; align-items: center !important; gap: 4px !important; background: linear-gradient(135deg, #10b981, #059669) !important; color: white !important; border: none !important; border-radius: 4px !important; padding: 3px 8px !important; font-size: 11px !important; font-weight: bold !important; cursor: pointer !important; margin-left: 8px !important; box-shadow: 0 1px 2px rgba(0,0,0,0.15) !important; z-index: 10 !important;";
+    btn.innerHTML = `🤖 AI Tư Vấn`;
+    btn.title = "Bấm để AI tự động tạo câu trả lời tư vấn theo câu hỏi và sản phẩm của khách";
+
+    btn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      btn.innerHTML = `⏳ Đang nghĩ...`;
+      btn.disabled = true;
+
+      try {
+        const detailChat = document.querySelector('._3h5To4QZew, [data-cy="webchat-conversation-detail-chat"], ._2WZcuAW5Qo') || document.body;
+        let pName = "";
+        let pPrice = "";
+        const pinned = detailChat.querySelector('.Wy5_SjKidw, ._ki3uOms2o, [class*="pinned-product"]');
+        if (pinned) {
+          const nEl = pinned.querySelector('.rFHc1_XxbI, .CFm21BsdMu, [class*="title"]');
+          if (nEl) pName = nEl.textContent.trim();
+          const prEl = pinned.querySelector('.izywe_mFbr, [class*="price"]');
+          if (prEl) pPrice = prEl.textContent.trim();
+        }
+        if (!pName) {
+          const cardName = detailChat.querySelector('.Qp7M6nTYF_, .xIrlSYpAIZ, [title]');
+          if (cardName) pName = cardName.getAttribute('title') || cardName.textContent.trim();
+        }
+
+        // Lấy câu hỏi gần nhất của khách
+        let lastQ = "";
+        const rcvMsgs = detailChat.querySelectorAll('[data-cy="webchat-message-receive"] .w2C67vtnXi, .x_vjYCA89K .w2C67vtnXi');
+        if (rcvMsgs.length > 0) {
+          const lastEl = rcvMsgs[rcvMsgs.length - 1];
+          const clone = lastEl.cloneNode(true);
+          clone.querySelectorAll('.sSIhmxFOh6, .pE0ax8leZo, svg').forEach(x => x.remove());
+          lastQ = clone.textContent.trim();
+        }
+
+        const resStore = await new Promise(res => chrome.storage.local.get(["geminiApiKey", "geminiModel"], res));
+        const apiKey = resStore?.geminiApiKey ? resStore.geminiApiKey.trim() : "";
+        const model = resStore?.geminiModel || "gemini-2.5-flash";
+
+        if (!apiKey) {
+          alert("Chưa có API Key Gemini! Vui lòng mở tiện ích vào Tab Cài đặt để lưu API Key trước.");
+          btn.innerHTML = `🤖 AI Tư Vấn`;
+          btn.disabled = false;
+          return;
+        }
+
+        const prompt = `Bạn là nhân viên hỗ trợ khách hàng của Shop trên Shopee. Hãy trả lời tin nhắn của khách hàng.
+
+THÔNG TIN SẢN PHẨM:
+- Tên: ${pName || 'Sản phẩm của Shop'}
+- Giá: ${pPrice || ''}
+
+CÂU HỎI / TIN NHẮN CỦA KHÁCH:
+"${lastQ || (pName ? `Sản phẩm ${pName} này dùng thế nào shop?` : 'Shop tư vấn giúp mình')}"
+
+QUY TẮC BẮT BUỘC TRẢ LỜI:
+1. ĐƠN GIẢN, NGẮN GỌN (chỉ từ 1 đến 3 câu).
+2. TẬP TRUNG THẲNG VÀO CÂU HỎI VÀ NGỮ CẢNH CỦA KHÁCH, giải đáp trực tiếp, không nói vòng vo, không văn mẫu dài dòng.
+3. Xưng hô lịch sự, thân thiện tự nhiên (Dạ vâng ạ / Dạ anh/chị...).
+4. Tuyệt đối KHÔNG dùng ký tự markdown như **, *, #, không để ngoặc kép. Chỉ trả về nội dung tin nhắn.`;
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+          })
+        });
+
+        const data = await response.json();
+        let reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (reply) {
+          reply = reply.replace(/\*\*/g, '').replace(/\*/g, '').replace(/^["']|["']$/g, '').trim();
+          
+          const textarea = document.querySelector('textarea.E2MWg3w8y6, [data-cy="webchat-conversation-detail-input"] textarea, #inputField textarea, textarea');
+          if (textarea) {
+            textarea.focus();
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+            if (nativeSetter) nativeSetter.call(textarea, reply);
+            else textarea.value = reply;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
+          btn.innerHTML = `✓ Đã điền`;
+          btn.style.background = "#2563eb";
+          setTimeout(() => {
+            btn.innerHTML = `🤖 AI Tư Vấn`;
+            btn.style.background = "linear-gradient(135deg, #10b981, #059669)";
+            btn.disabled = false;
+          }, 2000);
+        } else {
+          throw new Error("Không nhận được câu trả lời từ AI");
+        }
+      } catch (err) {
+        console.error("Lỗi AI Chat Button:", err);
+        alert(`Lỗi AI: ${err.message}`);
+        btn.innerHTML = `🤖 AI Tư Vấn`;
+        btn.disabled = false;
+      }
+    };
+
+    toolbar.appendChild(btn);
+  }
+
+  // ==========================================
+  // HỖ TRỢ PASTE (CTRL+V) ẢNH VÀ NÚT COPY LINK ẢNH SHOPEE
+  // ==========================================
+
+  let lastHoveredImageManager = null;
+  document.addEventListener("mouseover", (e) => {
+    const mgr = e.target.closest?.(
+      ".image-manager-wrapper, .shopee-image-manager, .shopee-image-manager__itembox, .eds-upload, [data-product-edit-field-unique-id='images']"
+    );
+    if (mgr) {
+      lastHoveredImageManager = mgr;
+    }
+  }, { passive: true });
+
+  async function copyTextToClipboard(text) {
+    if (!text) return false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (e) {}
+
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      ta.style.top = "-9999px";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const res = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return res;
+    } catch (e2) {
+      console.warn("Lỗi copy clipboard:", e2);
+      return false;
+    }
+  }
+
+  function cleanShopeeImageUrl(url) {
+    if (!url) return "";
+    return url.replace(/_tn(\?|$)/, "$1").replace(/_zoom(\?|$)/, "$1");
+  }
+
+  function getImageUrlFromItembox(itembox) {
+    const img = itembox.querySelector("img");
+    if (img && img.src && !img.src.startsWith("data:image/svg")) {
+      return cleanShopeeImageUrl(img.src);
+    }
+
+    const allEls = itembox.querySelectorAll("*");
+    for (const el of allEls) {
+      const bg = el.style?.backgroundImage || window.getComputedStyle(el).backgroundImage;
+      if (bg && bg.includes("http")) {
+        const match = bg.match(/url\(["']?(https?:\/\/[^"')]+)["']?\)/i);
+        if (match && match[1]) {
+          return cleanShopeeImageUrl(match[1]);
+        }
+      }
+    }
+
+    const dataEl = itembox.querySelector("[data-src], [data-url]");
+    if (dataEl) {
+      const url = dataEl.getAttribute("data-src") || dataEl.getAttribute("data-url");
+      if (url) return cleanShopeeImageUrl(url);
+    }
+
+    return "";
+  }
+
+  function findShopeeProductImageInput(targetEl) {
+    if (targetEl) {
+      const manager = targetEl.closest?.(
+        ".image-manager-wrapper, .shopee-image-manager, .tier-image-manager, .size-chart-manager, .eds-upload"
+      );
+      if (manager) {
+        const input = manager.querySelector("input[type='file'][accept*='image'], input[type='file']");
+        if (input) return input;
+      }
+    }
+
+    const mainManager = document.querySelector(
+      "[data-product-edit-field-unique-id='images'], .image-manager-wrapper, .shopee-image-manager"
+    );
+    if (mainManager) {
+      const input = mainManager.querySelector("input[type='file'][accept*='image'], input[type='file']");
+      if (input) return input;
+    }
+
+    if (typeof findImageInput === "function") {
+      const input = findImageInput();
+      if (input) return input;
+    }
+
+    return document.querySelector("input.eds-upload__input[type='file'], input[type='file'][accept*='image']");
+  }
+
+  function uploadFilesToShopeeImageInput(input, files) {
+    if (!input || !files || files.length === 0) return;
+
+    const dt = new DataTransfer();
+    for (const f of files) {
+      dt.items.add(f);
+    }
+
+    try {
+      input.files = dt.files;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+    } catch (err) {
+      console.warn("Lỗi gán input.files:", err);
+    }
+
+    const dragger = input.closest(".eds-upload-wrapper") || input.closest(".eds-upload-dragger") || input.parentElement;
+    if (dragger) {
+      try {
+        const dropEvent = new DragEvent("drop", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          dataTransfer: dt
+        });
+        dragger.dispatchEvent(dropEvent);
+      } catch (de) {}
+    }
+
+    showTopNotification(`✅ Đã dán ${files.length} ảnh vào sản phẩm Shopee!`, false);
+  }
+
+  // Khởi tạo tính năng lắng nghe Ctrl + V để dán ảnh trực tiếp vào Shopee
+  function initShopeeProductImagePasteHandler() {
+    window.addEventListener("paste", async (e) => {
+      if (!window.location.href.includes("banhang.shopee.vn/portal/product/")) return;
+
+      const activeEl = document.activeElement;
+      const isTypingText = activeEl && (
+        (activeEl.tagName === "INPUT" && activeEl.type !== "file") ||
+        activeEl.tagName === "TEXTAREA" ||
+        activeEl.isContentEditable ||
+        activeEl.closest?.(".ProseMirror, .ql-editor, [contenteditable='true']")
+      );
+
+      const clipboardData = e.clipboardData;
+      if (!clipboardData) return;
+
+      const imageFiles = [];
+
+      // 1. Kiểm tra nếu trong clipboard có file ảnh thực sự (Copy image, chụp màn hình Win+Shift+S...)
+      if (clipboardData.files && clipboardData.files.length > 0) {
+        for (let i = 0; i < clipboardData.files.length; i++) {
+          const file = clipboardData.files[i];
+          if (file && file.type && file.type.startsWith("image/")) {
+            imageFiles.push(file);
+          }
+        }
+      }
+
+      if (imageFiles.length === 0 && clipboardData.items && clipboardData.items.length > 0) {
+        for (let i = 0; i < clipboardData.items.length; i++) {
+          const item = clipboardData.items[i];
+          if (item && item.type && item.type.startsWith("image/")) {
+            const file = item.getAsFile();
+            if (file) imageFiles.push(file);
+          }
+        }
+      }
+
+      // 2. Kiểm tra text URL nếu không có file ảnh
+      let isImageUrlText = false;
+      let pastedText = "";
+      if (imageFiles.length === 0) {
+        pastedText = (clipboardData.getData("text/plain") || "").trim();
+        if (pastedText && /^https?:\/\/.*(\.(png|jpg|jpeg|webp|gif|bmp)|susercontent\.com\/file\/|catbox\.moe\/|postimg\.cc\/)/i.test(pastedText)) {
+          isImageUrlText = true;
+        }
+      }
+
+      // Nếu đang gõ text vào ô nhập thông tin và không có ảnh trong clipboard -> để mặc định
+      if (isTypingText && imageFiles.length === 0 && !isImageUrlText) {
+        return;
+      }
+
+      // Nếu có file ảnh hoặc URL ảnh -> Xử lý dán vào Shopee
+      if (imageFiles.length > 0 || isImageUrlText) {
+        const targetInput = findShopeeProductImageInput(lastHoveredImageManager || activeEl);
+        if (!targetInput) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (imageFiles.length > 0) {
+          uploadFilesToShopeeImageInput(targetInput, imageFiles);
+        } else if (isImageUrlText) {
+          showTopNotification("⏳ Đang tải ảnh từ đường dẫn vừa dán...", false);
+          try {
+            const res = await fetch(pastedText);
+            const blob = await res.blob();
+            const ext = blob.type.includes("png") ? "png" : "jpg";
+            const file = new File([blob], `pasted_image_${Date.now()}.${ext}`, { type: blob.type || "image/jpeg" });
+            uploadFilesToShopeeImageInput(targetInput, [file]);
+          } catch (err) {
+            showTopNotification("❌ Không thể tải ảnh từ link vừa dán: " + err.message, true);
+          }
+        }
+      }
+    }, true);
+  }
+
+  // Tự động thêm nút "📋 Copy link" bên dưới mỗi ảnh sản phẩm trên Shopee
+  function injectShopeeImageCopyLinkButtons() {
+    if (!window.location.href.includes("banhang.shopee.vn/portal/product/")) return;
+
+    const itemboxes = document.querySelectorAll(
+      ".shopee-image-manager__itembox, .image-manager-wrapper .container > div, .shopee-image-manager .container > div"
+    );
+
+    itemboxes.forEach((itembox) => {
+      // Bỏ qua nếu đã gắn nút
+      if (itembox.querySelector(".shopee-ext-img-actions")) return;
+
+      // Bỏ qua ô upload trống
+      if (itembox.querySelector(".shopee-image-manager__upload, .eds-upload")) {
+        const hasRealImg = itembox.querySelector("img:not([src*='data:image/svg'])") || itembox.querySelector("[style*='background-image']");
+        if (!hasRealImg) return;
+      }
+
+      const imgUrl = getImageUrlFromItembox(itembox);
+      if (!imgUrl) return;
+
+      if (window.getComputedStyle(itembox).position === "static") {
+        itembox.style.position = "relative";
+      }
+
+      const actionsWrap = document.createElement("div");
+      actionsWrap.className = "shopee-ext-img-actions";
+      actionsWrap.style.cssText = [
+        "position: absolute",
+        "bottom: 0",
+        "left: 0",
+        "right: 0",
+        "height: 20px",
+        "background: rgba(15, 23, 42, 0.88)",
+        "backdrop-filter: blur(2px)",
+        "display: flex",
+        "align-items: center",
+        "justify-content: space-between",
+        "gap: 1px",
+        "padding: 1px 2px",
+        "z-index: 100",
+        "border-radius: 0 0 4px 4px",
+        "box-sizing: border-box"
+      ].join("; ");
+
+      const btnCopy = document.createElement("button");
+      btnCopy.type = "button";
+      btnCopy.className = "shopee-ext-copy-link-btn";
+      btnCopy.innerHTML = "📋 Copy link";
+      btnCopy.title = "Sao chép link ảnh này vào Clipboard";
+      btnCopy.style.cssText = [
+        "flex: 1",
+        "min-width: 0",
+        "height: 18px",
+        "border: none",
+        "border-radius: 2px",
+        "background: #2563eb",
+        "color: #ffffff",
+        "font-size: 8.5px",
+        "font-weight: 700",
+        "cursor: pointer",
+        "display: flex",
+        "align-items: center",
+        "justify-content: center",
+        "padding: 0 2px",
+        "white-space: nowrap",
+        "overflow: hidden",
+        "line-height: 18px"
+      ].join("; ");
+
+      const btnOpen = document.createElement("button");
+      btnOpen.type = "button";
+      btnOpen.className = "shopee-ext-open-link-btn";
+      btnOpen.innerHTML = "🔍";
+      btnOpen.title = "Mở ảnh gốc trong tab mới";
+      btnOpen.style.cssText = [
+        "width: 18px",
+        "height: 18px",
+        "flex-shrink: 0",
+        "border: none",
+        "border-radius: 2px",
+        "background: #475569",
+        "color: #ffffff",
+        "font-size: 8.5px",
+        "cursor: pointer",
+        "display: flex",
+        "align-items: center",
+        "justify-content: center",
+        "padding: 0",
+        "line-height: 18px"
+      ].join("; ");
+
+      btnCopy.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const latestUrl = getImageUrlFromItembox(itembox);
+        if (!latestUrl) {
+          showTopNotification("⚠️ Chưa tìm thấy link ảnh, vui lòng thử lại!", true);
+          return;
+        }
+
+        if (latestUrl.startsWith("blob:")) {
+          showTopNotification("⏳ Ảnh đang tải lên Shopee, vui lòng đợi 1 giây rồi bấm lại!", false);
+          return;
+        }
+
+        const success = await copyTextToClipboard(latestUrl);
+        if (success) {
+          btnCopy.innerHTML = "✓ Đã copy";
+          btnCopy.style.background = "#16a34a";
+          showTopNotification("✅ Đã copy link ảnh: " + latestUrl, false);
+          setTimeout(() => {
+            btnCopy.innerHTML = "📋 Copy link";
+            btnCopy.style.background = "#2563eb";
+          }, 1500);
+        } else {
+          showTopNotification("❌ Lỗi copy link ảnh vào clipboard!", true);
+        }
+      });
+
+      btnOpen.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const latestUrl = getImageUrlFromItembox(itembox);
+        if (latestUrl) {
+          window.open(latestUrl, "_blank");
+        }
+      });
+
+      actionsWrap.appendChild(btnCopy);
+      actionsWrap.appendChild(btnOpen);
+      itembox.appendChild(actionsWrap);
+    });
+  }
+
+  initShopeeProductImagePasteHandler();
+
+  setInterval(() => {
+    injectAiDescriptionButton();
+    injectStockQuickButtons();
+    autoInjectPromotionSkuBadges();
+    injectBuyerProductActionButtons();
+    highlightZeroStockProducts();
+    injectWebchatAiAssistantButton();
+    injectShopeeImageCopyLinkButtons();
+    if (isOrderListPage()) {
+      updateCopyAllButtonColors();
+    }
+    if (typeof autoBroadcastSellerOrderDetail === "function") {
+      autoBroadcastSellerOrderDetail();
+    }
+  }, 500);
+})();
+
+window.addEventListener('message', (e) => { if (e.data && e.data.action === 'RELOAD_PAGE') { window.location.reload(); } });

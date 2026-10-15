@@ -4,10 +4,10 @@
   "version": "0.2.0",
   "description": "Ho tro thao tac tren Shopee Kenh Nguoi Ban.",
   "icons": {
-    "16": "icon-16.png",
-    "32": "icon-32.png",
-    "48": "icon-48.png",
-    "128": "icon-128.png"
+    "16": "extension/icons/icon-16.png",
+    "32": "extension/icons/icon-32.png",
+    "48": "extension/icons/icon-48.png",
+    "128": "extension/icons/icon-128.png"
   },
   "permissions": [
     "activeTab",
@@ -33,17 +33,17 @@
   "action": {
     "default_title": "Shopee Quản Lý SP",
     "default_icon": {
-      "16": "icon-16.png",
-      "32": "icon-32.png",
-      "48": "icon-48.png",
-      "128": "icon-128.png"
+      "16": "extension/icons/icon-16.png",
+      "32": "extension/icons/icon-32.png",
+      "48": "extension/icons/icon-48.png",
+      "128": "extension/icons/icon-128.png"
     }
   },
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "extension/background.js"
   },
   "side_panel": {
-    "default_path": "popup.html"
+    "default_path": "extension/popup/popup.html"
   },
   "content_scripts": [
     {
@@ -52,7 +52,7 @@
         "https://banhang.shopee.vn/*"
       ],
       "js": [
-        "shopee-fetch-interceptor.js"
+        "extension/content/shopee-fetch-interceptor.js"
       ],
       "run_at": "document_start",
       "world": "MAIN"
@@ -62,7 +62,7 @@
         "https://shopee.vn/*"
       ],
       "js": [
-        "content-start.js"
+        "extension/content/content-start.js"
       ],
       "run_at": "document_start"
     },
@@ -72,10 +72,10 @@
         "https://shopee.vn/*"
       ],
       "js": [
-        "xlsx.full.min.js",
-        "html2pdf.bundle.min.js",
-        "pdf-lib.min.js",
-        "content.js"
+        "extension/lib/xlsx.full.min.js",
+        "extension/lib/html2pdf.bundle.min.js",
+        "extension/lib/pdf-lib.min.js",
+        "extension/content/content.js"
       ],
       "run_at": "document_idle",
       "all_frames": true
@@ -85,7 +85,7 @@
         "https://gemini.google.com/*"
       ],
       "js": [
-        "gemini-content.js"
+        "extension/content/gemini-content.js"
       ],
       "run_at": "document_idle"
     },
@@ -94,7 +94,7 @@
         "https://chatgpt.com/*"
       ],
       "js": [
-        "chatgpt-content.js"
+        "extension/content/chatgpt-content.js"
       ],
       "run_at": "document_idle"
     },
@@ -103,7 +103,7 @@
         "*://phanmem.wameli.vn/*"
       ],
       "js": [
-        "wameli.js"
+        "extension/content/wameli.js"
       ],
       "run_at": "document_idle"
     },
@@ -124,8 +124,8 @@
         "*://shopee.pl/*"
       ],
       "js": [
-        "TẢI ẢNH SHOPEE/js/jquery.min.js",
-        "TẢI ẢNH SHOPEE/js/load.js"
+        "extension/tai-anh-shopee/js/jquery.min.js",
+        "extension/tai-anh-shopee/js/load.js"
       ],
       "run_at": "document_start"
     },
@@ -135,7 +135,7 @@
         "*://gemini.google.com/*"
       ],
       "js": [
-        "TẢI ẢNH SHOPEE/js/aiAutoPaste.js"
+        "extension/tai-anh-shopee/js/aiAutoPaste.js"
       ],
       "run_at": "document_idle"
     },
@@ -144,7 +144,7 @@
         "<all_urls>"
       ],
       "js": [
-        "universal-image-hover.js"
+        "extension/content/universal-image-hover.js"
       ],
       "run_at": "document_idle"
     }
@@ -152,20 +152,15 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "index.html",
-        "bce-standalone.html",
-        "bce.html",
-        "bce-redirect.js",
         "dist/*",
         "dist/assets/*",
-        "ioy.png",
-        "bce.png",
-        "shopee-fetch-interceptor.js",
-        "TẢI ẢNH SHOPEE/js/contentScript.js",
-        "TẢI ẢNH SHOPEE/index.html",
-        "TẢI ẢNH SHOPEE/assets/*",
-        "TẢI ẢNH SHOPEE/_locales/*",
-        "TẢI ẢNH SHOPEE/icons/*"
+        "extension/popup/images/*",
+        "extension/content/shopee-fetch-interceptor.js",
+        "extension/tai-anh-shopee/js/contentScript.js",
+        "extension/tai-anh-shopee/index.html",
+        "extension/tai-anh-shopee/assets/*",
+        "extension/tai-anh-shopee/_locales/*",
+        "extension/tai-anh-shopee/icons/*"
       ],
       "matches": [
         "<all_urls>"

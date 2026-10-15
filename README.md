@@ -1,26 +1,51 @@
-# Shopee Seller Helper
+# Shopee Quản Lý SP
 
-Extension Chrome nho de bam menu `Them San Pham` tren Shopee Kenh Nguoi Ban.
+Một dự án gồm **Chrome Extension** hỗ trợ Shopee Kênh Người Bán và **Web BCE** (React) quản lý đơn hàng / sản phẩm / tính giá. Dữ liệu dùng chung qua Google Sheets.
 
-## Cai dat
+## Cấu trúc
 
-1. Mo Chrome va vao `chrome://extensions`.
-2. Bat `Developer mode`.
-3. Chon `Load unpacked`.
-4. Chon thu muc nay: `D:\tải xuống 2\exten in đơn shopee`.
+```
+exten them sp12/              ← thư mục "Load unpacked" trong Chrome (giữ nguyên để không đổi ID extension)
+├─ manifest.json              ← manifest của extension
+├─ package.json, vite.config.js
+├─ shared/
+│  └─ google-config.js        ← cấu hình Google Service Account DUY NHẤT (extension + web cùng dùng)
+├─ extension/
+│  ├─ background.js           ← service worker (Google Sheets, upload ảnh, alarm)
+│  ├─ popup/                  ← side panel: popup.html, popup.js, popup.css
+│  │  ├─ tabs/                ← mỗi tab một file *_tab.js
+│  │  └─ images/
+│  ├─ content/                ← content script: Shopee, ChatGPT, Gemini, Wameli...
+│  ├─ lib/                    ← xlsx, pdf-lib, html2pdf, jsrsasign
+│  ├─ pages/camera.html
+│  ├─ tai-anh-shopee/         ← module tải ảnh Shopee
+│  └─ icons/
+├─ web/                       ← nguồn Web BCE (React + Vite)
+│  ├─ index.html
+│  └─ src/
+├─ dist/                      ← bản build của web (extension mở dist/index.html)
+├─ tools/server.py            ← server chạy web độc lập + proxy tìm ảnh Bing
+└─ archive/                  ← code cũ không còn dùng (giữ lại để tham khảo)
+```
 
-## Su dung
+## Cài extension
 
-1. Dang nhap va mo `https://banhang.shopee.vn`.
-2. Bam icon extension `Shopee Seller Helper`.
-3. Bam `Mo Them San Pham`.
-4. Bam `Chon Thu Muc Anh` va chon thu muc anh san pham tren may.
-5. Popup se luu thu muc va hien thi danh sach anh trong thu muc.
-6. Khi them/xoa anh trong thu muc, bam `Load Lai Thu Muc`.
-7. Tren trang them san pham, bam `Tai Anh Len`.
+1. `chrome://extensions` → bật **Developer mode** → **Load unpacked** → chọn thư mục gốc dự án.
+2. Sau khi sửa code extension: bấm **Reload** trên thẻ extension.
 
-Extension se tim text `Thêm Sản Phẩm` tren menu ben trai va bam vao do. Neu khong tim thay menu, extension se thu mo truc tiep `https://banhang.shopee.vn/portal/product/new`.
+## Web BCE
 
-Tinh nang tai anh se tim o `Them hinh anh (0/9)` va dua toi da 9 anh dau tien vao input upload cua Shopee. Chrome yeu cau ban phai chon thu muc trong popup lan dau; cac lan sau extension se nho thu muc da chon, nhung Chrome co the hoi cap quyen lai khi bam `Load Lai Thu Muc`.
+```bash
+npm install
+npm run dev               # chạy dev tại http://localhost:5173
+npm run build             # build ra dist/ (extension dùng bản này)
+npm run build:standalone  # build 1 file HTML duy nhất ra dist-standalone/index.html
+npm run serve             # chạy dist/ bằng tools/server.py (cổng 8000)
+```
 
-# exten_them_sp
+Trong extension, web mở tại `chrome-extension://<id>/dist/index.html`.
+
+## Cấu hình Google
+
+Mọi thông tin service account và Spreadsheet ID mặc định nằm ở `shared/google-config.js`.
+Có thể đổi Spreadsheet ID lúc chạy bằng tab Cài đặt (`customSpreadsheetId`).

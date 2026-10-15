@@ -1,0 +1,1921 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shopee Quản Lý SP</title>
+<link rel="stylesheet" href="popup.css">
+<script src="../lib/jsrsasign-all-min.js"></script>
+<script src="../../shared/google-config.js"></script>
+</head>
+
+<body>
+<main class="panel">
+<div class="tab-header">
+<button class="tab-btn" data-tab="tab-tools">Tiện Ích</button>
+<button class="tab-btn active" data-tab="tab-web-sp" >Web bán SP</button>
+<button class="tab-btn" data-tab="tab-api-images">Ảnh AI & API</button>
+<button class="tab-btn" data-tab="tab-images">Ảnh</button>
+<button class="tab-btn" data-tab="tab-flash-sale" style="display: none;">Flash Sale</button>
+<button class="tab-btn" data-tab="tab-print">In</button>
+<button class="tab-btn" data-tab="tab-tao-phieu">Tạo Phiếu</button>
+<button class="tab-btn" data-tab="tab-in-tu-dong">⚡ In Tự Động</button>
+<button class="tab-btn" data-tab="tab-chat-ai">💬 Chat AI</button>
+<button class="tab-btn" data-tab="tab-nhieu-don-hang">Nhiều đơn hàng</button>
+<button class="tab-btn" data-tab="tab-ds-sp">DS SP</button>
+<button class="tab-btn" data-tab="tab-hieu-qua-sp">Hiệu quả SP</button>
+<button class="tab-btn" data-tab="tab-day-sp">Đẩy SP</button>
+<button class="tab-btn" data-tab="tab-sheet-sp-shopee">SP Shopee</button>
+<button class="tab-btn" data-tab="tab-sp-giam-gia">SP Giảm Giá</button>
+<button class="tab-btn" data-tab="tab-km">KM</button>
+<button class="tab-btn" data-tab="tab-hang-hoan">Hàng Hoàn</button>
+<button class="tab-btn" data-tab="tab-doanh-thu">Doanh Thu</button>
+<button class="tab-btn" data-tab="tab-test">Test</button>
+<button class="tab-btn" data-tab="tab-settings">Cài đặt</button>
+</div>
+
+
+
+<div id="tab-tools" class="tab-content" hidden>
+<header class="panel-header">
+<h1>Shopee Quản Lý SP</h1>
+<button id="open-add-product" type="button" class="primary-action">Mo Them San Pham</button>
+</header>
+
+
+<section class="tool-section" id="shared-folder-section">
+<div class="section-head">
+<h2>Thư mục ảnh</h2>
+<p id="folder-name" class="folder-name">Chưa chọn thư mục</p>
+</div>
+<div class="folder-tools" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+<button id="choose-folder" type="button" class="secondary" style="background-color: white; color: #1e293b; border: 1px solid #d8dee8;">Chọn Thư Mục</button>
+<button id="reload-folder" type="button" class="ghost" style="background-color: white; color: #1e293b; border: 1px solid #d8dee8;">Load Lại</button>
+<button id="load-sheet-images" type="button" class="source-tab active" style="background-color: #22c55e; color: white; border-color: #16a34a;">SHEET</button>
+</div>
+<details class="compact-panel">
+<summary>Thư mục đã ghim</summary>
+<input id="folder-description" class="folder-description" placeholder="Mô tả thư mục để ghim nhanh">
+<div class="folder-pin-tools">
+<select id="pinned-folders" aria-label="Thư mục đã ghim"></select>
+<button id="pin-folder" type="button" class="secondary">Ghim</button>
+</div>
+<button id="open-pinned-folder" type="button" class="ghost">Mở Thư Mục Đã Ghim</button>
+</details>
+</section>
+
+<section class="tool-section" id="name-desc-section">
+<div class="section-head">
+<h2>Tên và mô tả</h2>
+</div>
+<div class="product-data-tools">
+<button id="btn-lay-anh" type="button" class="ghost" style="display: none;">Lấy ảnh</button>
+<button id="btn-lay-text" type="button" class="ghost">Lấy Text</button>
+<button id="btn-lay-text-co-anh" type="button" class="ghost" style="display: none;">Lấy Text Có ảnh</button>
+<button id="btn-lay-anh-mo-ta" type="button" class="ghost" style="display: none;">Lấy ảnh Mô Tả</button>
+<button id="fill-stock-0" type="button" class="ghost" style="background-color: #fef08a; color: #854d0e; border-color: #fde047;">Kho 0</button>
+<button id="fill-stock-300" type="button" class="ghost" style="background-color: #fef08a; color: #854d0e; border-color: #fde047;">Kho 300</button>
+<button id="btn-preorder-popup" type="button" class="ghost" style="background-color: #ede9fe; color: #6d28d9; border-color: #c4b5fd;" title="Bật hàng đặt trước (Đồng ý & điền 15 ngày)">Đặt trước 15n</button>
+<button id="btn-disable-preorder-popup" type="button" class="ghost" style="background-color: #f1f5f9; color: #475569; border-color: #cbd5e1;" title="Tắt hàng đặt trước (Chọn Không)">Tắt đặt trước</button>
+</div>
+<button id="fill-all-auto" type="button" class="secondary" style="width: 100%; margin-bottom: 8px; background-color: #ef4444; color: white; border-color: #dc2626; font-weight: bold;">Điền Liên Hoàn (Full)</button>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+<button id="fill-product-name" type="button" class="secondary" style="background-color: #3b82f6; color: white; border-color: #2563eb; margin: 0; padding: 6px 0; font-weight: bold;">Điền Tên</button>
+<button id="fill-product-text" type="button" class="secondary" style="background-color: #3b82f6; color: white; border-color: #2563eb; margin: 0; padding: 6px 0; font-weight: bold;">Điền Mô Tả</button>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+<button id="rewrite-name" type="button" class="secondary" style="background-color: #10b981; color: white; border-color: #059669; margin: 0; padding: 6px 0; font-weight: bold; font-size: 11px;" title="Viết lại tên sản phẩm bằng Gemini">Viết Lại Tên AI</button>
+<button id="rewrite-desc" type="button" class="secondary" style="background-color: #10b981; color: white; border-color: #059669; margin: 0; padding: 6px 0; font-weight: bold; font-size: 11px;" title="Viết lại mô tả sản phẩm bằng Gemini">Viết Lại Mô Tả AI</button>
+<button id="rewrite-both" type="button" class="secondary" style="background-color: #10b981; color: white; border-color: #059669; margin: 0; padding: 6px 0; font-weight: bold; font-size: 11px;" title="Viết lại tên và mô tả bằng Gemini">Viết Lại Cả 2 AI</button>
+</div>
+<button id="auto-fill-empty" type="button" class="secondary" style="display: none;">Auto Điền Nếu Trống</button>
+<textarea id="product-text" placeholder="Tên sản phẩm | Mô tả sản phẩm"></textarea>
+<div class="brand-row">
+<div class="id-autocomplete-wrap">
+<input id="product-id" class="brand-input" placeholder="ID" autocomplete="off">
+<div id="id-suggest-dropdown" class="id-suggest-dropdown"></div>
+</div>
+<input id="product-brand" class="brand-input" placeholder="Thương hiệu">
+<button id="fill-product-brand" type="button" class="secondary">Điền Brand</button>
+</div>
+<details class="compact-panel" style="margin-top: 8px;" open>
+<summary style="font-weight: bold; font-size: 12px; color: #1e293b; cursor: pointer; margin-bottom: 6px;">Chi tiết sản phẩm</summary>
+<div class="attribute-grid" style="display: grid; gap: 6px;">
+<!-- Hạn bảo hành -->
+<div style="display: grid; grid-template-columns: 65px minmax(0, 1fr) 50px 50px; gap: 6px; align-items: center;">
+<span style="font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap;">Hạn BH:</span>
+<input id="product-han-bh" class="brand-input" placeholder="Hạn bảo hành" style="margin: 0; padding: 4px 6px; font-size: 11px; height: 26px;">
+<button id="fill-han-bh" type="button" class="secondary" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100%;">Điền</button>
+<button id="add-han-bh" type="button" class="ghost" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100; border-color: #cbd5e1; color: #475569;">Thêm</button>
+</div>
+<!-- Loại bảo hành -->
+<div style="display: grid; grid-template-columns: 65px minmax(0, 1fr) 50px 50px; gap: 6px; align-items: center;">
+<span style="font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap;">Loại BH:</span>
+<input id="product-loai-bh" class="brand-input" placeholder="Loại bảo hành" style="margin: 0; padding: 4px 6px; font-size: 11px; height: 26px;">
+<button id="fill-loai-bh" type="button" class="secondary" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100%;">Điền</button>
+<button id="add-loai-bh" type="button" class="ghost" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100; border-color: #cbd5e1; color: #475569;">Thêm</button>
+</div>
+<!-- Dung tích -->
+<div style="display: grid; grid-template-columns: 65px minmax(0, 1fr) 50px 50px; gap: 6px; align-items: center;">
+<span style="font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap;">Dung tích:</span>
+<input id="product-dung-tich" class="brand-input" placeholder="Dung tích" style="margin: 0; padding: 4px 6px; font-size: 11px; height: 26px;">
+<button id="fill-dung-tich" type="button" class="secondary" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100%;">Điền</button>
+<button id="add-dung-tich" type="button" class="ghost" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100; border-color: #cbd5e1; color: #475569;">Thêm</button>
+</div>
+<!-- Điện áp đầu vào -->
+<div style="display: grid; grid-template-columns: 65px minmax(0, 1fr) 50px 50px; gap: 6px; align-items: center;">
+<span style="font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap;">Điện áp:</span>
+<input id="product-dien-ap" class="brand-input" placeholder="Điện áp đầu vào" style="margin: 0; padding: 4px 6px; font-size: 11px; height: 26px;">
+<button id="fill-dien-ap" type="button" class="secondary" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100%;">Điền</button>
+<button id="add-dien-ap" type="button" class="ghost" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100; border-color: #cbd5e1; color: #475569;">Thêm</button>
+</div>
+<!-- Tiêu thụ điện năng -->
+<div style="display: grid; grid-template-columns: 65px minmax(0, 1fr) 50px 50px; gap: 6px; align-items: center;">
+<span style="font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap;">Công suất:</span>
+<input id="product-cong-suat" class="brand-input" placeholder="Tiêu thụ điện năng" style="margin: 0; padding: 4px 6px; font-size: 11px; height: 26px;">
+<button id="fill-cong-suat" type="button" class="secondary" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100%;">Điền</button>
+<button id="add-cong-suat" type="button" class="ghost" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100; border-color: #cbd5e1; color: #475569;">Thêm</button>
+</div>
+<!-- Số người -->
+<div style="display: grid; grid-template-columns: 65px minmax(0, 1fr) 50px 50px; gap: 6px; align-items: center;">
+<span style="font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap;">Số người:</span>
+<input id="product-so-nguoi" class="brand-input" placeholder="Số người" style="margin: 0; padding: 4px 6px; font-size: 11px; height: 26px;">
+<button id="fill-so-nguoi" type="button" class="secondary" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100%;">Điền</button>
+<button id="add-so-nguoi" type="button" class="ghost" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100; border-color: #cbd5e1; color: #475569;">Thêm</button>
+</div>
+<!-- Tính năng -->
+<div style="display: grid; grid-template-columns: 65px minmax(0, 1fr) 50px 50px; gap: 6px; align-items: center;">
+<span style="font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap;">Tính năng:</span>
+<input id="product-tinh-nang" class="brand-input" placeholder="Tính năng sản phẩm" style="margin: 0; padding: 4px 6px; font-size: 11px; height: 26px;">
+<button id="fill-tinh-nang" type="button" class="secondary" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100%;">Điền</button>
+<button id="add-tinh-nang" type="button" class="ghost" style="padding: 0; font-size: 11px; margin: 0; height: 26px; line-height: 26px; text-align: center; width: 100; border-color: #cbd5e1; color: #475569;">Thêm</button>
+</div>
+</div>
+</details>
+<div id="sku-bce-list"
+style="margin-top: 8px; background: #f8fafc; border: 1px solid #d8dee8; border-radius: 4px; padding: 6px 10px; min-height: 32px; font-size: 12px; color: #1e293b; max-height: 100px; overflow-y: auto; white-space: pre-wrap;">
+SKU sẽ hiện ở đây</div>
+<div class="sheet-price-row">
+<div>
+<input id="sheet-gia-ban" class="brand-input" placeholder="Giá Bán" readonly
+style="background: #f8fafc; width: 100%;">
+</div>
+<div>
+<input id="sheet-gia-thap-nhat" class="brand-input" placeholder="Giá Thấp Nhất" readonly
+style="background: #f8fafc; width: 100%;">
+</div>
+<div>
+<input id="sheet-gia-tinh" class="brand-input" placeholder="Gia / 0.8" readonly
+style="background: #f8fafc; width: 100%;">
+</div>
+<button id="copy-gia-tinh" type="button" class="secondary">Copy</button>
+</div>
+<div id="sheet-price-list" class="sheet-price-list"></div>
+<button id="save-to-sheet-test" type="button" class="primary-action"
+style="background: #22c55e; border-color: #16a34a; margin-bottom: 8px;">Lưu Vào Sheet Test</button>
+<details class="compact-panel" open>
+<summary>Tìm dữ liệu từ Google Sheet</summary>
+<div class="search-container">
+<input id="sheet-search-query" class="brand-input" placeholder="Tìm tên hoặc ID trong Sheet..."
+style="padding-right: 30px;">
+<button id="clear-search" type="button"
+style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: none; color: #999; cursor: pointer; font-size: 16px; padding: 0; line-height: 1;">&times;</button>
+</div>
+<div id="sheet-search-results" class="search-results-overlay"></div>
+</details>
+
+</section>
+
+
+
+<p id="status" aria-live="polite"></p>
+
+</div>
+
+</div>
+
+<div id="tab-api-images" class="tab-content" hidden>
+<section class="tool-section" style="padding: 8px 10px; margin-bottom: 8px;">
+  <div class="section-head" style="margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+    <h2 style="font-size: 12px; margin: 0; display: flex; align-items: center; gap: 5px;">
+      <span>🎨</span> 1. Tạo ảnh AI (Ảnh mẫu &amp; Prompt)
+    </h2>
+    <button id="ai-section-toggle-btn" type="button" style="width: auto !important; min-height: unset !important; padding: 2px 8px; font-size: 10px; font-weight: 500; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer;">
+      Thu gọn ▲
+    </button>
+  </div>
+
+  <div id="ai-section-body">
+    <!-- Hàng ảnh mẫu thu gọn -->
+    <div style="margin-bottom: 6px;">
+      <div id="ai-template-images-container" style="display: flex; gap: 6px; overflow-x: auto; padding: 4px; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; min-height: 65px;">
+        <span style="font-size: 10px; color: #94a3b8; align-self: center;">Đang tải ảnh mẫu...</span>
+      </div>
+    </div>
+
+    <!-- Khung cấu hình Prompt siêu gọn -->
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; font-size: 11px;">
+      <!-- Hàng 1: Nguồn tên SP + Nút lấy text + Ô nhập text -->
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap;">
+        <span style="font-size: 10px; font-weight: bold; color: #475569;">Tên SP:</span>
+        <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; color: #2563eb; cursor: pointer;">
+          <input type="checkbox" id="ai-chk-tich1" checked style="width: auto !important; min-height: unset !important; margin: 0; cursor: pointer;"> Web bán SP
+        </label>
+        <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; color: #059669; cursor: pointer;">
+          <input type="checkbox" id="ai-chk-tich2" style="width: auto !important; min-height: unset !important; margin: 0; cursor: pointer;"> Shopee
+        </label>
+        <button type="button" id="ai-btn-lay-text" style="width: auto !important; min-height: unset !important; padding: 2px 7px; font-size: 10px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 3px; cursor: pointer;">📥 Lấy từ Shopee</button>
+        <input type="text" id="ai-input-shopee-text" placeholder="Tên SP Shopee..." style="flex: 1; min-width: 90px; padding: 2px 6px; font-size: 10px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; height: 22px; box-sizing: border-box;">
+      </div>
+
+      <!-- Hàng 2: Prompt kết quả + Nút Copy đặt gọn góc phải -->
+      <div style="position: relative;">
+        <textarea id="ai-final-prompt" rows="2" style="width: 100%; padding: 4px 60px 4px 6px; font-size: 10px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; background: #fff; resize: none; color: #334155; line-height: 1.3;" readonly placeholder="Prompt kết quả..."></textarea>
+        <button type="button" id="ai-btn-copy-full-prompt" style="position: absolute; top: 4px; right: 4px; width: auto !important; min-height: unset !important; padding: 3px 8px; font-size: 10px; font-weight: bold; background: #2563eb; color: white; border: none; border-radius: 3px; cursor: pointer;" title="Copy Prompt kết quả">📋 Copy</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="tool-section" style="margin-top: 8px;">
+<div class="section-head" style="margin-bottom: 6px;">
+<h2>2. Tải Ảnh Lên API Catbox (Lưu Sheet LUU_ANH_API)</h2>
+</div>
+
+<!-- Cấu hình Catbox Userhash tùy chọn -->
+<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 6px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px;">
+  <span style="font-weight: 600; color: #334155; white-space: nowrap;">🔑 Catbox Userhash:</span>
+  <input type="text" id="catbox-userhash-input" placeholder="Tùy chọn: Nhập userhash từ catbox.moe/user/manage.php..." style="flex: 1; padding: 3px 8px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; background: #fff;">
+  <a href="https://catbox.moe/user/manage.php" target="_blank" rel="noreferrer" style="color: #2563eb; text-decoration: underline; font-size: 10px; white-space: nowrap;" title="Mở trang lấy Userhash của tài khoản Catbox">Lấy mã</a>
+</div>
+
+<!-- Dropzone Kéo Thả & Paste (Ctrl + V) Ảnh dạng thanh ngang gọn nhẹ -->
+<div id="api-img-dropzone" tabindex="0" style="border: 2px dashed #3b82f6; border-radius: 8px; padding: 10px 12px; text-align: center; background: #f0f7ff; cursor: pointer; transition: all 0.2s ease; margin-bottom: 8px; outline: none; display: flex; align-items: center; justify-content: center; gap: 10px;">
+  <div style="font-size: 22px;">📥</div>
+  <div style="text-align: left;">
+    <div style="font-size: 11px; font-weight: bold; color: #1e40af;">Kéo thả, Click chọn hoặc bấm Ctrl + V để Dán ảnh</div>
+    <div style="font-size: 10px; color: #64748b;">Tự động upload qua API Catbox (files.catbox.moe) &amp; lưu vào Sheet LUU_ANH_API (id, link, ten_anh, link_cu)</div>
+  </div>
+  <input type="file" id="api-img-file-input" accept="image/*" multiple style="display: none;">
+</div>
+
+<div id="api-img-status" style="font-size: 11px; font-weight: bold; margin-bottom: 6px; min-height: 16px;"></div>
+
+<!-- Thanh công cụ chuyển đổi chế độ xem & thao tác xóa -->
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+  <div style="display: flex; align-items: center; gap: 6px;">
+    <div style="font-size: 11px; font-weight: bold; color: #334155;">Danh sách ảnh đã tải:</div>
+    <button type="button" id="api-btn-reload-sheet" style="padding: 2px 7px; font-size: 10px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 3px; cursor: pointer;" title="Tải lại từ Sheet LUU_ANH_API">🔄 Tải lại</button>
+  </div>
+  <div style="display: flex; align-items: center; gap: 4px;">
+    <button type="button" id="api-btn-delete-selected" style="padding: 2px 8px; font-size: 10px; font-weight: bold; background: #ef4444; color: white; border: none; border-radius: 3px; cursor: pointer; display: none;" title="Xóa các ảnh đã chọn khỏi Sheet">🗑️ Xóa đã chọn (0)</button>
+    <button type="button" id="api-view-btn-table" style="padding: 2px 8px; font-size: 10px; font-weight: bold; background: #2563eb; color: white; border: none; border-radius: 3px; cursor: pointer;">Bảng</button>
+    <button type="button" id="api-view-btn-grid3" style="padding: 2px 8px; font-size: 10px; font-weight: bold; background: #64748b; color: white; border: none; border-radius: 3px; cursor: pointer;">Lưới 3 cột</button>
+    <button type="button" id="api-view-btn-grid4" style="padding: 2px 8px; font-size: 10px; font-weight: bold; background: #64748b; color: white; border: none; border-radius: 3px; cursor: pointer;">Lưới 4 cột</button>
+  </div>
+</div>
+
+<!-- Danh sách Ảnh Đã Tải Lên - Chế độ Bảng -->
+<div id="api-img-table-container" style="max-height: 350px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff;">
+  <table style="width: 100%; border-collapse: collapse; font-size: 11px;" id="api-img-table">
+    <thead>
+      <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0; color: #334155; text-align: left;">
+        <th style="padding: 6px 8px; width: 25px; text-align: center;">
+          <input type="checkbox" id="api-chk-select-all" style="margin: 0; cursor: pointer; transform: scale(1.1);" title="Chọn tất cả trên trang này">
+        </th>
+        <th style="padding: 6px 8px; width: 35px;">STT</th>
+        <th style="padding: 6px 8px; width: 45px;">Ảnh</th>
+        <th style="padding: 6px 8px;">Tên file</th>
+        <th style="padding: 6px 8px;">Link ảnh (Catbox / Host)</th>
+        <th style="padding: 6px 8px;">Link cũ (link_cu)</th>
+        <th style="padding: 6px 8px; width: 150px; text-align: center;">Thao tác</th>
+        <th style="padding: 6px 8px; width: 35px; text-align: center;">Xóa</th>
+      </tr>
+    </thead>
+    <tbody id="api-img-tbody">
+      <tr>
+        <td colspan="11" style="text-align: center; padding: 15px; color: #94a3b8;">Chưa có ảnh nào được tải lên trong phiên này.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Danh sách Ảnh Đã Tải Lên - Chế độ Lưới (chỉ hiển thị ảnh) -->
+<div id="api-img-grid-container" style="display: none; max-height: 350px; overflow-y: auto; padding: 4px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff;">
+</div>
+
+<!-- Phân trang Ảnh API (48 ảnh / trang) -->
+<div id="api-img-pagination" style="display: none; align-items: center; justify-content: space-between; margin-top: 8px; padding: 6px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px;">
+  <div style="color: #475569; font-weight: 500;" id="api-img-pagination-info">
+    Tổng: <b id="api-img-total-count" style="color: #1e293b;">0</b> ảnh (48 ảnh/trang)
+  </div>
+  <div style="display: flex; align-items: center; gap: 4px;">
+    <button type="button" id="api-img-btn-first" title="Trang đầu" style="padding: 3px 6px; font-size: 10px; font-weight: bold; background: white; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; color: #334155;">«</button>
+    <button type="button" id="api-img-btn-prev" title="Trang trước" style="padding: 3px 8px; font-size: 10px; font-weight: bold; background: white; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; color: #334155;">‹ Trước</button>
+    <span style="padding: 0 4px; font-weight: bold; color: #1e293b;">
+      Trang <span id="api-img-current-page" style="color: #2563eb;">1</span> / <span id="api-img-total-pages">1</span>
+    </span>
+    <button type="button" id="api-img-btn-next" title="Trang sau" style="padding: 3px 8px; font-size: 10px; font-weight: bold; background: white; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; color: #334155;">Sau ›</button>
+    <button type="button" id="api-img-btn-last" title="Trang cuối" style="padding: 3px 6px; font-size: 10px; font-weight: bold; background: white; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; color: #334155;">»</button>
+  </div>
+</div>
+
+</section>
+</div>
+
+<div id="tab-images" class="tab-content" hidden>
+<section class="tool-section">
+<div class="section-head">
+<h2>Ảnh mẫu &amp; Text</h2>
+</div>
+<div id="template-images-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+<div style="position: relative; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px;">
+<img src="images/bce.png" draggable="true" style="width: 100%; height: auto; display: block; cursor: grab;" id="template-img-1" alt="bce.png">
+<button class="open-gpt-img-btn" data-target="template-img-1" style="position: absolute; top: 8px; right: 72px; width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: white; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #333;" title="Mở ảnh này trên ChatGPT">🤖</button>
+<button class="open-gemini-img-btn" data-target="template-img-1" style="position: absolute; top: 8px; right: 40px; width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: white; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #333;" title="Mở ảnh này trên Gemini">✨</button>
+<button class="copy-img-btn" data-target="template-img-1" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: white; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #333;" title="Copy ảnh">📋</button>
+</div>
+<div style="position: relative; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px;">
+<img src="images/ioy.png" draggable="true" style="width: 100%; height: auto; display: block; cursor: grab;" id="template-img-2" alt="ioy.png">
+<button class="open-gpt-img-btn" data-target="template-img-2" style="position: absolute; top: 8px; right: 72px; width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: white; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #333;" title="Mở ảnh này trên ChatGPT">🤖</button>
+<button class="open-gemini-img-btn" data-target="template-img-2" style="position: absolute; top: 8px; right: 40px; width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: white; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #333;" title="Mở ảnh này trên Gemini">✨</button>
+<button class="copy-img-btn" data-target="template-img-2" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; min-height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: white; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); color: #333;" title="Copy ảnh">📋</button>
+</div>
+</div>
+<div style="display: flex; align-items: flex-start; gap: 8px; border: 1px solid #e2e8f0; border-radius: 4px; padding: 8px; background: #f8fafc;">
+<div id="template-text" style="flex: 1; font-size: 12px; color: #334155; line-height: 1.5; min-width: 0;">
+thay ảnh 2 vào ảnh 1 . thay thế tên sản phẩm + model+ đặc điểm + ảnh minh họa bên dưới phù hợp với sản phẩm + slogan . 
+</div>
+<button id="copy-template-text" style="flex-shrink: 0; width: auto; min-height: 28px; padding: 4px 10px; background: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; white-space: nowrap;">Copy</button>
+</div>
+</section>
+
+
+
+<section class="tool-section" id="shared-image-section">
+<div class="section-head">
+<h2>Ảnh sản phẩm <span id="image-count" class="image-count">0 ảnh</span></h2>
+<div class="image-head-actions">
+<p class="drop-hint">Kéo ảnh vào khung để lưu.</p>
+<button id="toggle-image-list-size" type="button" class="tiny-ghost">Mở rộng</button>
+</div>
+</div>
+<div id="image-size-filters" class="image-size-filters" aria-label="Lọc ảnh theo kích thước"></div>
+<div id="image-list" class="image-list" aria-live="polite"></div>
+<div class="upload-tools" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+<button id="upload-images" type="button" class="secondary">Tải Ảnh Lên</button>
+<button id="upload-description-images" type="button" class="secondary">Tải Ảnh Mô Tả</button>
+<button id="upload-images-imgbb" type="button" class="secondary" style="background-color: #22c55e; color: white; border: none;" title="Tải ảnh lên Catbox (files.catbox.moe) và lưu link vào Sheet">Tải Catbox</button>
+</div>
+</section>
+</div>
+
+
+
+<div id="tab-flash-sale" class="tab-content" hidden>
+<section class="tool-section">
+<div class="section-head">
+<h2>Xuất sản phẩm Flash Sale</h2>
+</div>
+<p style="display: none !important; font-size: 13px; color: #64748b; margin-bottom: 12px; line-height: 1.4;">
+Vui lòng mở trang Kênh Người Bán và mở Popup thêm sản phẩm Flash Sale trước khi bấm nút này.
+</p>
+<button id="btn-export-flash-sale" style="display:none !important;" type="button" class="primary-action" style="background-color: #ee4d2d; border-color: #ee4d2d; color: white; padding: 12px; font-weight: bold; width: 100%;">📦 Xuất danh sách Flash Sale</button>
+<div id="flash-sale-result-list" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;"></div>
+
+</section>
+</div>
+
+<div id="tab-print" class="tab-content" hidden>
+  <section class="tool-section">
+    <div class="section-head">
+      <h2>Quy trình in đơn</h2>
+    </div>
+    <div style="margin-bottom: 10px;">
+      <button id="open-print-flow" type="button" class="primary-action" style="width: 100%; padding: 8px 12px; font-size: 12px; font-weight: bold; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 3px rgba(37,99,235,0.25);">
+        🖨️ Mở link in
+      </button>
+    </div>
+    <div class="print-flow-result">
+      <div class="print-flow-label">Kho xử lý</div>
+      <div id="print-warehouse-buttons" class="print-warehouse-buttons" aria-live="polite">
+        <button id="select-warehouse-hanoi" type="button" class="secondary">Kho Hà Nội</button>
+        <button id="select-warehouse-hcm" type="button" class="primary-action">Kho Hồ Chí Minh</button>
+      </div>
+    </div>
+    <div class="print-flow-result" style="margin-top: 8px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+        <div class="print-flow-label" style="margin: 0;">Lọc ĐVVC & Đặt trước</div>
+        <button id="btn-refresh-mass-filters" type="button" style="border: 1px solid #cbd5e1; background: #f8fafc; color: #475569; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; cursor: pointer;" title="Tải lại số đơn từ Shopee">🔄 Làm mới</button>
+      </div>
+
+      <!-- BẢNG CÓ ĐƠN HÀNG -->
+      <div style="margin-bottom: 8px; border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 6px; padding: 6px 8px;">
+        <div style="font-size: 11px; font-weight: 700; color: #166534; margin-bottom: 5px; display: flex; align-items: center; justify-content: space-between;">
+          <span style="display: flex; align-items: center; gap: 4px;">🔥 Có đơn hàng</span>
+          <span id="badge-count-with-orders" style="background: #22c55e; color: white; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 700;">0</span>
+        </div>
+        <div id="container-with-orders">
+          <div style="font-size: 11px; color: #64748b; font-style: italic; text-align: center; padding: 6px 0;">Đang quét đơn hàng từ Shopee...</div>
+        </div>
+      </div>
+
+      <!-- BẢNG KHÔNG CÓ ĐƠN HÀNG (0 ĐƠN) -->
+      <div style="margin-bottom: 4px; border: 1px solid #e2e8f0; background: #f8fafc; border-radius: 6px; padding: 4px 8px;">
+        <details id="details-zero-orders">
+          <summary style="font-size: 11px; font-weight: 600; color: #64748b; cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: space-between;">
+            <span style="display: flex; align-items: center; gap: 4px;">⚪ Không có đơn (0 đơn)</span>
+            <span id="badge-count-zero-orders" style="background: #e2e8f0; color: #475569; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 700;">0</span>
+          </summary>
+          <div id="container-zero-orders" style="margin-top: 6px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; max-height: 120px; overflow-y: auto; padding-right: 2px;">
+            <div style="font-size: 10px; color: #94a3b8; font-style: italic; grid-column: span 2; text-align: center;">Chưa có dữ liệu</div>
+          </div>
+        </details>
+      </div>
+
+      <div id="print-flow-filter-status" style="font-size: 11px; color: #4338ca; min-height: 16px; margin-top: 2px; margin-bottom: 4px; text-align: center; word-break: break-word;" aria-live="polite"></div>
+    </div>
+    <div class="print-flow-tools">
+      <button id="print-flow-select-checkbox" type="button" class="secondary">1. Chọn Hộp Kiểm</button>
+    </div>
+    <div class="print-flow-result">
+      <div class="print-flow-label">Địa chỉ lấy hàng</div>
+      <div id="print-address-buttons" class="print-address-buttons" aria-live="polite">
+        <button id="select-address-hanoi" type="button" class="primary-action">Địa chỉ Hà Nội</button>
+        <button id="select-address-hcm" type="button" class="secondary">Địa chỉ Hồ Chí Minh</button>
+      </div>
+    </div>
+    <div class="print-flow-tools">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <label style="display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 8px; min-height: 36px; height: 100%; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; white-space: nowrap; font-size: 11px; font-weight: 700; color: #1e293b; flex-shrink: 0; box-sizing: border-box;" title="Khi tích vào: Chỉ cho phép ấn Yêu Cầu VC Tới Lấy Hàng khi địa chỉ kho/lấy hàng ở Hà Nội. Không tích thì ấn bình thường.">
+          <input type="checkbox" id="chk-pickup-only-hanoi" checked style="width: 15px; height: 15px; min-height: 15px; margin: 0; cursor: pointer;">
+          <span>Chỉ HN</span>
+        </label>
+        <button id="arrange-pickup-confirm" type="button" class="primary-action" style="flex: 1;">Yêu Cầu VC Tới Lấy Hàng</button>
+      </div>
+      <button id="generate-print-doc" type="button" class="primary-action">Tạo Phiếu</button>
+      <button id="export-waiting-orders" type="button" class="secondary">Xuất</button>
+      <button id="auto-run-print-flow" type="button" class="secondary">Chạy Tự Động</button>
+      <button id="stop-print-flow" type="button" class="secondary" style="display: none; background: #dc3545; color: white;">Dừng Lại</button>
+    </div>
+    <!-- NÚT TỰ ĐỘNG YÊU CẦU LẤY HÀNG 2 KHO (KHÔNG CẦN TẠO/TẢI PDF) -->
+    <div style="margin-top: 10px; margin-bottom: 8px;">
+      <button id="btn-auto-pickup-all-warehouses" type="button" style="width: 100%; padding: 10px 12px; font-size: 13px; font-weight: 800; background: linear-gradient(135deg, #16a34a, #15803d); color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35); transition: all 0.2s;" title="Tự động lọc tất cả đơn ở Kho Hà Nội -> Yêu cầu lấy hàng, sau đó chuyển sang Kho HCM -> Đổi Địa chỉ Hà Nội -> Yêu cầu lấy hàng (Không tạo/tải PDF)">
+        ⚡ Tự Động Yêu Cầu Lấy Hàng (Kho HN -&gt; Kho HCM)
+      </button>
+      <button id="btn-stop-auto-pickup-all" type="button" style="display: none; width: 100%; padding: 10px 12px; font-size: 13px; font-weight: 800; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 6px rgba(220, 38, 38, 0.35); margin-top: 4px;">
+        🛑 Dừng Lại
+      </button>
+      <div id="auto-pickup-all-status" style="font-size: 11px; color: #15803d; font-weight: 600; min-height: 18px; margin-top: 4px; text-align: center; word-break: break-word; line-height: 1.4;" aria-live="polite"></div>
+    </div>
+    <div class="auto-run-panel">
+      <div class="auto-run-save">
+        <label>
+          Tên cấu hình
+          <input id="auto-config-name" type="text" value="mac-dinh" placeholder="Nhập tên cấu hình">
+        </label>
+        <button id="save-auto-config" type="button" class="secondary">Lưu</button>
+        <button id="load-auto-config" type="button" class="ghost">Tải</button>
+      </div>
+      <div id="saved-auto-configs-table" class="saved-configs-table" aria-live="polite">
+        <div class="print-flow-empty">Chưa có cấu hình đã lưu</div>
+      </div>
+      <div class="auto-run-options" aria-label="Chọn các bước tự động">
+        <label><input type="checkbox" class="auto-step" value="warehouse" checked> 1. Chọn kho</label>
+        <label><input type="checkbox" class="auto-step" value="filter" checked> 2. Lọc ĐVVC & Đặt trước</label>
+        <label><input type="checkbox" class="auto-step" value="checkbox" checked> 3. Chọn hộp kiểm</label>
+        <label><input type="checkbox" class="auto-step" value="address" checked> 4. Chọn địa chỉ</label>
+        <label><input type="checkbox" class="auto-step" value="pickup" checked> 5. Yêu cầu lấy hàng</label>
+        <label><input type="checkbox" class="auto-step" value="doc" checked> 6. Tạo phiếu</label>
+        <label><input type="checkbox" class="auto-step" value="export" checked> 7. Xuất đơn</label>
+      </div>
+      <div class="auto-run-settings">
+        <label>
+          Kho
+          <select id="auto-warehouse-location">
+            <option value="Hồ Chí Minh" selected>Hồ Chí Minh</option>
+            <option value="Hà Nội">Hà Nội</option>
+          </select>
+        </label>
+        <label>
+          ĐVVC
+          <select id="auto-carrier-select">
+            <option value="auto" selected>Tự động (có đơn)</option>
+            <option value="all">Tất cả</option>
+            <option value="SPX Express">SPX Express</option>
+            <option value="Giao Hàng Nhanh">Giao Hàng Nhanh</option>
+            <option value="Ninja Van">Ninja Van</option>
+            <option value="VNPost Nhanh">VNPost Nhanh</option>
+            <option value="J&T Express">J&T Express</option>
+            <option value="BEST Express">BEST Express</option>
+            <option value="Viettel Post">Viettel Post</option>
+          </select>
+        </label>
+        <label>
+          Đặt trước
+          <select id="auto-preorder-select">
+            <option value="none" selected>Không đặt trước</option>
+            <option value="preorder">Hàng đặt trước</option>
+            <option value="all">Tất cả đơn hàng</option>
+          </select>
+        </label>
+        <label>
+          Địa chỉ
+          <select id="auto-address-location">
+            <option value="Hồ Chí Minh">Hồ Chí Minh</option>
+            <option value="Hà Nội" selected>Hà Nội</option>
+          </select>
+        </label>
+        <label>
+          Cách nhau (s)
+          <input id="auto-step-delay" type="number" min="1" max="60" step="1" value="3">
+        </label>
+        <label>
+          Mã gian (tên file)
+          <input id="auto-shop-code" type="text" placeholder="VD: bce" style="width: 80px;">
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <section class="tool-section" style="margin-top: 10px;">
+    <div class="section-head">
+      <h2>File in đơn</h2>
+      <span id="print-file-count" class="file-count">0 file</span>
+    </div>
+    <div class="print-file-actions">
+      <button id="choose-print-folder" type="button" class="secondary">Chọn Thư Mục</button>
+      <button id="reload-print-folder" type="button" class="ghost">Load Lại Thư Mục</button>
+    </div>
+    <div class="print-file-grid">
+      <div class="print-file-panel">
+        <div class="print-flow-label">PDF hôm nay</div>
+        <div id="print-pdf-table" class="print-file-table">
+          <div class="print-flow-empty">Chưa chọn file PDF</div>
+        </div>
+      </div>
+      <div class="print-file-panel">
+        <div class="print-flow-label">Excel hôm nay</div>
+        <div id="print-excel-table" class="print-file-table">
+          <div class="print-flow-empty">Chưa chọn file Excel</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="tab-tao-phieu" class="tab-content" hidden>
+  <section class="tool-section" style="border-left: 4px solid #0284c7; padding: 10px;">
+    <!-- HEADER -->
+    <div class="section-head" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+      <h2 style="color: #0369a1; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0;">
+        <span>📑</span> Tạo Phiếu (Tab 301 Shopee)
+      </h2>
+      <div style="display: flex; gap: 5px; align-items: center;">
+        <button id="btn-tab301-open-shopee" type="button" class="secondary" style="padding: 3px 8px; font-size: 10.5px;" title="Mở trang Tạo phiếu hàng loạt trên Shopee (mass_shipment_tab=301)">
+          🌐 Mở Tab 301
+        </button>
+      </div>
+    </div>
+
+    <!-- ACTION BUTTONS -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+      <button id="btn-tab301-filter-hanoi" type="button" style="padding: 8px 10px; font-size: 11.5px; font-weight: 700; background: linear-gradient(135deg, #0284c7, #0369a1); color: white; border: none; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 3px rgba(2,132,199,0.25);" title="Lọc Kho Hà Nội + Tất cả trạng thái + Đọc danh sách đơn">
+        🔍 Lọc Đơn (Kho HN - Tất Cả)
+      </button>
+
+      <button id="btn-tab301-generate-doc" type="button" style="padding: 8px 10px; font-size: 11.5px; font-weight: 700; background: linear-gradient(135deg, #16a34a, #15803d); color: white; border: none; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 3px rgba(22,163,74,0.25);" title="Tích chọn các đơn đã đánh dấu trên web Shopee và bấm nút 'Tạo phiếu đã chọn'">
+        📑 Tạo Phiếu Đã Chọn
+      </button>
+    </div>
+
+    <!-- STATUS TEXT -->
+    <div id="tab301-status" style="font-size: 11px; color: #0284c7; font-weight: 600; min-height: 18px; margin-bottom: 6px; text-align: center; word-break: break-word; line-height: 1.4;">
+      Sẵn sàng. Nhấn 'Lọc Đơn' để lọc kho Hà Nội & tải danh sách đơn hàng.
+    </div>
+
+    <!-- SEARCH & STATS BAR -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 6px; background: #f8fafc; padding: 5px 8px; border-radius: 5px; border: 1px solid #e2e8f0;">
+      <div style="display: flex; gap: 6px; align-items: center; flex: 1;">
+        <input type="text" id="tab301-search-input" placeholder="🔍 Tìm MDH, MVD, người mua..." style="flex: 1; min-width: 120px; padding: 4px 7px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px;">
+        <button id="btn-tab301-refresh-table" type="button" class="ghost" style="padding: 3px 6px; font-size: 10px;" title="Đọc lại bảng đơn hiện tại trên Shopee">
+          🔄 Đọc lại
+        </button>
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center; font-size: 11px; white-space: nowrap;">
+        <span id="tab301-count-badge" style="color: #475569; font-weight: 600;">Tổng: <b>0</b> đơn</span>
+        <span style="color: #cbd5e1;">|</span>
+        <span id="tab301-selected-badge" style="color: #16a34a; font-weight: 700;">Đã chọn: <b>0</b></span>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="table-responsive" style="max-height: calc(100vh - 270px); min-height: 180px; overflow: auto; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+      <table id="table-tab301-orders" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+        <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2; border-bottom: 1px solid #cbd5e1;">
+          <tr>
+            <th style="padding: 6px; width: 34px; text-align: center;">
+              <input type="checkbox" id="tab301-checkbox-all" style="cursor: pointer; width: 14px; height: 14px;">
+            </th>
+            <th style="padding: 6px 4px; width: 52px; text-align: center;">Ảnh</th>
+            <th style="padding: 6px 8px; width: 140px;">Mã đơn hàng (MDH)</th>
+            <th style="padding: 6px 8px; width: 150px;">Mã vận đơn (MVD)</th>
+            <th style="padding: 6px 8px; width: 110px;">Vận chuyển</th>
+            <th style="padding: 6px 8px;">Người mua / Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody id="tab301-orders-tbody">
+          <tr>
+            <td colspan="6" style="padding: 20px 10px; text-align: center; color: #94a3b8; font-style: italic;">
+              Chưa có dữ liệu. Mở trang Tạo phiếu Shopee (tab 301) và bấm "Lọc Đơn".
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div id="tab-in-tu-dong" class="tab-content" hidden>
+  <section class="tool-section" style="border-left: 4px solid #16a34a; padding: 10px;">
+    <!-- HEADER -->
+    <div class="section-head" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+      <h2 style="color: #15803d; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0;">
+        <span>⚡</span> In Tự Động & Xử Lý Đơn Toàn Trình
+      </h2>
+      <div style="display: flex; gap: 5px; align-items: center;">
+        <button id="btn-autoin-open-order-page" type="button" class="secondary" style="padding: 3px 8px; font-size: 10.5px;" title="Mở trang Quản lý đơn hàng (Chờ lấy hàng - Đã xử lý)">
+          🌐 Mở Đơn Đã Xử Lý
+        </button>
+      </div>
+    </div>
+
+    <!-- WORKFLOW 4 BUTTONS -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
+      <button id="btn-autoin-step1-confirm" type="button" style="padding: 7px 8px; font-size: 11px; font-weight: 700; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; border: none; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;" title="Bước 1: Chuyển tab Giao hàng loạt 201 -> Tự động xác nhận yêu cầu lấy hàng 2 kho (HN & HCM)">
+        ⚡ 1. Xác Nhận Đơn (2 Kho)
+      </button>
+
+      <button id="btn-autoin-step2-read" type="button" style="padding: 7px 8px; font-size: 11px; font-weight: 700; background: linear-gradient(135deg, #0284c7, #0369a1); color: white; border: none; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;" title="Bước 2: Mở trang Đơn đã xử lý & đọc danh sách đơn (Tên, SKU, MDH, MVD, Đã in chưa)">
+        📥 2. Đọc Đơn Chờ Lấy
+      </button>
+
+      <button id="btn-autoin-step3-export-excel" type="button" style="padding: 7px 8px; font-size: 11px; font-weight: 700; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;" title="Bước 3: Tải ngay file Excel cho các đơn đã tích chọn & đồng bộ chọn trên web">
+        📊 3. Tải Excel Đơn Đã Chọn
+      </button>
+
+      <button id="btn-autoin-step4-print-pdf" type="button" style="padding: 7px 8px; font-size: 11px; font-weight: 700; background: linear-gradient(135deg, #8b5cf6, #7c3aed); color: white; border: none; border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;" title="Bước 4: Chuyển trang Tạo phiếu (tab 301), tích chọn các đơn này & bấm Tạo phiếu đã chọn để in PDF">
+        📑 4. Chuyển Tạo Phiếu & In
+      </button>
+    </div>
+
+    <!-- FULL FLOW BUTTON -->
+    <div style="margin-bottom: 6px;">
+      <button id="btn-autoin-full-flow" type="button" style="width: 100%; padding: 8px 10px; font-size: 12px; font-weight: 800; background: linear-gradient(135deg, #16a34a, #15803d); color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 4px rgba(22,163,74,0.3);" title="Chạy tự động liên tục toàn quy trình: Xác nhận đơn -> Đọc đơn -> Xuất Excel -> Tạo phiếu in PDF">
+        🚀 Chạy Tự Động (Bước 3 ➔ 4)
+      </button>
+      <button id="btn-autoin-stop" type="button" style="display: none; width: 100%; padding: 8px 10px; font-size: 12px; font-weight: 800; background: #dc2626; color: white; border: none; border-radius: 6px; cursor: pointer; align-items: center; justify-content: center; gap: 6px;">
+        🛑 Dừng Lại
+      </button>
+    </div>
+
+    <!-- STATUS TEXT -->
+    <div id="autoin-status" style="font-size: 11px; color: #15803d; font-weight: 600; min-height: 18px; margin-bottom: 6px; text-align: center; word-break: break-word; line-height: 1.4;">
+      Sẵn sàng. Nhấn '2. Đọc Đơn Chờ Lấy', tích đơn rồi nhấn 'Chạy Tự Động (Bước 3 ➔ 4)'.
+    </div>
+
+    <!-- FILTER & SEARCH BAR -->
+    <div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 6px; background: #f8fafc; padding: 6px 8px; border-radius: 5px; border: 1px solid #e2e8f0;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+        <input type="text" id="autoin-search-input" placeholder="🔍 Tìm MDH, SKU, MVD, Tên SP..." style="flex: 1; min-width: 130px; padding: 4px 7px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px;">
+        <div style="display: flex; gap: 3px;">
+          <button type="button" class="autoin-filter-btn active" data-filter="all" style="padding: 3px 7px; font-size: 10px; font-weight: bold; border-radius: 4px; border: 1px solid #0284c7; background: #0284c7; color: white; cursor: pointer;">Tất cả</button>
+          <button type="button" class="autoin-filter-btn" data-filter="unprinted" style="padding: 3px 7px; font-size: 10px; font-weight: bold; border-radius: 4px; border: 1px solid #cbd5e1; background: white; color: #ea580c; cursor: pointer;">Chưa in</button>
+          <button type="button" class="autoin-filter-btn" data-filter="printed" style="padding: 3px 7px; font-size: 10px; font-weight: bold; border-radius: 4px; border: 1px solid #cbd5e1; background: white; color: #15803d; cursor: pointer;">Đã in</button>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; color: #64748b; padding-top: 2px; border-top: 1px dashed #e2e8f0;">
+        <span id="autoin-count-badge">Tổng: <b>0</b></span>
+        <span id="autoin-unprinted-badge" style="color: #ea580c;">Chưa in: <b>0</b></span>
+        <span id="autoin-selected-badge" style="color: #16a34a; font-weight: bold;">Đã chọn: <b>0</b></span>
+      </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="table-responsive" style="max-height: calc(100vh - 290px); min-height: 180px; overflow: auto; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+      <table id="table-autoin-orders" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+        <thead style="position: sticky; top: 0; background: #f1f5f9; z-index: 2; border-bottom: 1px solid #cbd5e1;">
+          <tr>
+            <th style="padding: 6px; width: 34px; text-align: center;">
+              <input type="checkbox" id="autoin-checkbox-all" style="cursor: pointer; width: 14px; height: 14px;">
+            </th>
+            <th style="padding: 6px 4px; width: 50px; text-align: center;">Ảnh</th>
+            <th style="padding: 6px 8px; width: 135px;">Mã đơn (MDH)</th>
+            <th style="padding: 6px 8px; width: 140px;">Mã vận đơn (MVD)</th>
+            <th style="padding: 6px 8px;">Sản phẩm & SKU</th>
+            <th style="padding: 6px 8px; width: 105px;">Trạng thái in</th>
+          </tr>
+        </thead>
+        <tbody id="autoin-orders-tbody">
+          <tr>
+            <td colspan="6" style="padding: 20px 10px; text-align: center; color: #94a3b8; font-style: italic;">
+              Chưa có dữ liệu. Bấm "2. Đọc Đơn Chờ Lấy" để tải danh sách đơn từ Shopee.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+
+<div id="tab-nhieu-don-hang" class="tab-content" hidden>
+  <section class="tool-section" style="border-left: 4px solid #10b981; padding: 10px;">
+    <div class="section-head" style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+      <h2 style="color: #047857; display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0;">
+        <span>📦</span> Danh Sách Đơn Hàng (Sheet DH)
+      </h2>
+      <button id="btn-open-wameli-upload-nhieu-don" type="button" style="padding: 3px 8px; font-size: 10px; background: #0284c7; color: white; border: 1px solid #0369a1; border-radius: 4px; cursor: pointer; font-weight: bold; display: inline-flex; align-items: center; gap: 4px;" title="Mở trang Thêm mới Đơn hàng trên phần mềm Wameli (phanmem.wameli.vn/admin/order/upload)">
+        🌐 Wameli Upload
+      </button>
+    </div>
+
+    <!-- THANH CÔNG CỤ XỬ LÝ HÀNG LOẠT (2 DÒNG GỌN GÀNG, ĐẸP MẮT) -->
+    <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; background: #f0fdf4; padding: 6px 8px; border-radius: 6px; border: 1px solid #bbf7d0;">
+      <!-- Dòng 1: 4 nút Đọc DS Đơn, Next trang, Đọc đơn, Điền đơn thiếu trên cùng 1 dòng -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px;">
+        <button id="btn-read-order-list-page" type="button" style="padding: 5px 3px; font-size: 11px; background: #0284c7; color: white; border: 1px solid #0369a1; font-weight: bold; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Đọc tất cả đơn hàng trên trang danh sách Shopee (Lấy Mã ĐH, Mã Vận Đơn, Link Đơn, mỗi đơn 1 dòng, tự động bỏ qua đơn trùng)">
+          📑 Đọc DS Đơn
+        </button>
+        <button id="btn-auto-paginate-order-list" type="button" style="padding: 5px 3px; font-size: 11px; background: #8b5cf6; color: white; border: 1px solid #7c3aed; font-weight: bold; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Tự động bấm Sang Trang (Next) và đọc toàn bộ đơn hàng trên Shopee (chống trùng lặp 100%)">
+          🔄 Next trang
+        </button>
+        <button id="btn-read-order-to-nhieu-don-hang" type="button" style="padding: 5px 3px; font-size: 11px; background: #059669; color: white; border: 1px solid #047857; font-weight: bold; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Đọc chi tiết đơn hàng (đầy đủ phân loại, sản phẩm, doanh thu, lợi nhuận) từ tab Shopee chi tiết đơn đang mở">
+          🕹️ Đọc đơn
+        </button>
+        <button id="btn-auto-fill-missing-detail" type="button" style="padding: 5px 3px; font-size: 11px; background: #e11d48; color: white; border: 1px solid #be123c; font-weight: bold; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Quét các đơn trong Sheet DH chưa có thông tin chi tiết (tổng tiền, phí, doanh thu, SKU sản phẩm), tự động mở link từng đơn, đọc và cập nhật hoàn tất vào Sheet rồi chuyển sang đơn tiếp theo">
+          ⚡ Điền đơn thiếu
+        </button>
+      </div>
+
+      <!-- Dòng 2: Xử lý đơn hàng trang Trả hàng / Hoàn tiền (returnrefundcancel) - 3 nút Trả, Hủy, Hoàn + Ô nhập Max trang -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 5px; align-items: center;">
+        <button id="btn-batch-return-tra" type="button" style="padding: 5px 3px; font-size: 11px; background: #3b82f6; color: white; border: 1px solid #2563eb; font-weight: bold; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Cập nhật cột tình trạng TRẢ (tinh_trang='TRẢ', trang_thai='', vốn=0) cho tất cả đơn có mã ở trang Trả hàng / Hoàn tiền hiện tại vào Sheet DH (tự động Next trang nếu Max trang > 1)">
+          🟣 TRẢ
+        </button>
+        <button id="btn-batch-return-huy" type="button" style="padding: 5px 3px; font-size: 11px; background: #ef4444; color: white; border: 1px solid #dc2626; font-weight: bold; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Cập nhật cột tình trạng HỦY (tinh_trang='HỦY', trang_thai='', doanh_thu=0, vốn=0, lợi_nhuận=0) cho tất cả đơn có mã ở trang Trả hàng / Hoàn tiền hiện tại vào Sheet DH (tự động Next trang nếu Max trang > 1)">
+          🔴 HỦY
+        </button>
+        <button id="btn-batch-return-hoan" type="button" style="padding: 5px 3px; font-size: 11px; background: #f59e0b; color: white; border: 1px solid #d97706; font-weight: bold; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05);" title="Cập nhật cột tình trạng HOÀN (tinh_trang='HOÀN', trang_thai='', vốn=0) cho tất cả đơn có mã ở trang Trả hàng / Hoàn tiền hiện tại vào Sheet DH (tự động Next trang nếu Max trang > 1)">
+          🟠 HOÀN
+        </button>
+        <div style="display: flex; align-items: center; gap: 3px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 5px; height: 100%; box-sizing: border-box;" title="Số trang Next tối đa khi bấm TRẢ, HỦY, HOÀN (1 = chỉ quét trang hiện tại, ví dụ 5 = tự động Next tối đa 5 trang)">
+          <span style="font-size: 10px; font-weight: bold; color: #475569; white-space: nowrap;">Max trang:</span>
+          <input type="number" id="input-batch-return-max-pages" min="1" max="100" value="1" style="width: 36px; height: 20px; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #94a3b8; border-radius: 3px; padding: 0 2px; color: #0f172a;" title="Nhập số trang tối đa muốn quét và cập nhật khi bấm TRẢ, HỦY, HOÀN">
+        </div>
+      </div>
+
+      <!-- Dòng 3: Tự động đọc, Tự động lưu và Tải lại (1 dòng) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: center;">
+        <label style="display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 600; color: #1d4ed8; cursor: pointer; background: #eff6ff; padding: 4px 6px; border-radius: 4px; border: 1px solid #bfdbfe; white-space: nowrap; box-sizing: border-box;" title="Tự động đọc đơn hàng khi mở tab Shopee chi tiết đơn">
+          <input type="checkbox" id="nhieu-don-hang-autoread-toggle" checked style="cursor: pointer; margin: 0;">
+          <span>⚡ Tự động đọc</span>
+        </label>
+        <label style="display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 11px; font-weight: 600; color: #047857; cursor: pointer; background: #ffffff; padding: 4px 6px; border-radius: 4px; border: 1px solid #a7f3d0; white-space: nowrap; box-sizing: border-box;" title="Tự động lưu vào Sheet DH khi đọc đơn mới thành công">
+          <input type="checkbox" id="nhieu-don-hang-autosave-toggle" style="cursor: pointer; margin: 0;">
+          <span>💾 Tự động lưu</span>
+        </label>
+        <button id="btn-reload-nhieu-don-hang" type="button" style="padding: 4px 10px; font-size: 11px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 3px; font-weight: bold; color: #334155; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.05); height: 100%; box-sizing: border-box;" title="Tải lại ngay lập tức dữ liệu từ Sheet DH">
+          🔄 Tải lại
+        </button>
+      </div>
+    </div>
+    <!-- KHỐI TIẾN TRÌNH ĐỌC DANH SÁCH ĐƠN HÀNG (ẨN/HIỆN) -->
+    <div id="nhieu-don-list-scan-status-box" style="display: none; background: #f0f9ff; border: 1.5px solid #0284c7; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <span id="nhieu-don-list-scan-text" style="font-size: 11px; font-weight: bold; color: #0369a1; display: flex; align-items: center; gap: 4px;">
+          <span>⏳</span> Đang đọc danh sách đơn hàng...
+        </span>
+        <button id="btn-stop-list-scan" type="button" class="secondary" style="padding: 2px 8px; font-size: 10px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; border-radius: 3px; cursor: pointer; font-weight: bold;">
+          ⏹ Dừng
+        </button>
+      </div>
+      <div style="width: 100%; height: 5px; background: #e0f2fe; border-radius: 3px; overflow: hidden; margin-top: 4px;">
+        <div id="nhieu-don-list-scan-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #0284c7, #10b981); transition: width 0.2s ease;"></div>
+      </div>
+    </div>
+
+    <!-- KHỐI QUÉT ĐƠN HÀNG TỰ ĐỘNG TỪ SHOPEE API (ẨN/HIỆN) -->
+    <div id="nhieu-don-api-scan-panel" style="display: none; background: #fff7ed; border: 1.5px solid #ea580c; border-radius: 6px; padding: 10px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <h3 style="margin: 0; font-size: 12px; color: #c2410c; display: flex; align-items: center; gap: 4px;">
+          <span>⚡</span> Quét Đơn Hàng Shopee API (Tự Động Điền Chi Tiết)
+        </h3>
+        <button id="btn-close-api-scanner" type="button" class="secondary" style="padding: 1px 6px; font-size: 10px; background: #ffedd5; color: #c2410c; border: 1px solid #fdba74; border-radius: 3px; cursor: pointer;">
+          ✕
+        </button>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 6px;">
+        <label style="font-size: 11px; font-weight: 600; color: #7c2d12;">Thời gian:</label>
+        <select id="nhieu-don-scan-date-preset" style="font-size: 11px; padding: 3px 6px; border: 1px solid #fdba74; border-radius: 4px; background: white;">
+          <option value="today">Hôm nay</option>
+          <option value="yesterday">Hôm qua</option>
+          <option value="7days" selected>7 ngày qua</option>
+          <option value="30days">30 ngày qua</option>
+          <option value="custom">Tùy chọn khoảng ngày</option>
+        </select>
+
+        <div id="nhieu-don-scan-custom-date-container" style="display: none; gap: 4px; align-items: center;">
+          <input type="date" id="nhieu-don-scan-from-date" style="font-size: 11px; padding: 2px 4px; border: 1px solid #fdba74; border-radius: 4px;">
+          <span>-</span>
+          <input type="date" id="nhieu-don-scan-to-date" style="font-size: 11px; padding: 2px 4px; border: 1px solid #fdba74; border-radius: 4px;">
+        </div>
+
+        <label style="font-size: 11px; font-weight: 600; color: #7c2d12; margin-left: 4px;">Trạng thái:</label>
+        <select id="nhieu-don-scan-status-filter" style="font-size: 11px; padding: 3px 6px; border: 1px solid #fdba74; border-radius: 4px; background: white;">
+          <option value="ALL">Tất cả đơn</option>
+          <option value="READY_TO_SHIP">Chờ lấy hàng</option>
+          <option value="PROCESSED">Đã xử lý</option>
+          <option value="SHIPPED">Đang giao</option>
+          <option value="COMPLETED">Đã giao</option>
+          <option value="IN_CANCEL">Đang hủy</option>
+          <option value="CANCELLED">Đã hủy</option>
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button id="btn-start-api-scan" type="button" class="secondary" style="padding: 4px 10px; font-size: 11px; background: #ea580c; color: white; border: 1px solid #c2410c; font-weight: bold; border-radius: 4px; cursor: pointer;">
+          🚀 Bắt đầu Quét & Tự Lưu
+        </button>
+        <button id="btn-stop-api-scan" type="button" class="secondary" style="display: none; padding: 4px 10px; font-size: 11px; background: #fee2e2; color: #dc2626; border: 1px solid #fca5a5; font-weight: bold; border-radius: 4px; cursor: pointer;">
+          ⏹ Dừng quét
+        </button>
+      </div>
+
+      <!-- Tiến trình quét API -->
+      <div id="nhieu-don-scan-progress-box" style="display: none; margin-top: 6px;">
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #9a3412; margin-bottom: 2px;">
+          <span id="nhieu-don-scan-status-text">Đang lấy danh sách đơn...</span>
+          <span id="nhieu-don-scan-percent-text">0%</span>
+        </div>
+        <div style="width: 100%; height: 5px; background: #fed7aa; border-radius: 3px; overflow: hidden;">
+          <div id="nhieu-don-scan-progress-bar" style="width: 0%; height: 100%; background: #ea580c; transition: width 0.2s ease;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HÀNG BỘ LỌC TÌM KIẾM, MÃ GIAN, SẮP XẾP VÀ CHẾ ĐỘ ĐỒNG BỘ REALTIME -->
+    <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px; flex-wrap: wrap;">
+      <div style="position: relative; flex: 2; min-width: 140px; display: flex; align-items: center;">
+        <input type="text" id="nhieu-don-hang-search" placeholder="🔍 Tìm MDH, MVD, SKU (nhiều mã cách nhau dấu phẩy)..." title="Hỗ trợ tìm nhiều mã đơn cách nhau bằng dấu phẩy (,), ví dụ: 260806M62C8YRK, 260529N9RNPRY5..." style="width: 100%; font-size: 11px; padding: 5px 22px 5px 8px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;">
+        <button id="btn-clear-nhieu-don-search" type="button" title="Xóa tìm kiếm" style="position: absolute; right: 4px; display: none; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 12px; padding: 2px;">✕</button>
+      </div>
+      
+      <!-- Input Chọn Gian Tự Động (DataList + Input) -->
+      <div style="position: relative; flex: 1.1; min-width: 95px;">
+        <input type="text" id="nhieu-don-hang-gian-filter" list="nhieu-don-hang-gian-list" placeholder="🏢 Mã gian..." style="width: 100%; font-size: 11px; padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; background: #fff;" title="Gõ hoặc chọn Mã Gian để lọc">
+        <datalist id="nhieu-don-hang-gian-list"></datalist>
+      </div>
+
+      <!-- Dropdown Chọn Kiểu Sắp Xếp -->
+      <div style="position: relative; flex: 1.5; min-width: 145px;">
+        <select id="nhieu-don-hang-sort-select" style="width: 100%; font-size: 11px; padding: 5px 6px; border: 1px solid #cbd5e1; border-radius: 4px; background: #f8fafc; font-weight: 600; color: #1e293b; cursor: pointer;" title="Sắp xếp danh sách đơn hàng">
+          <option value="bottom_to_top" selected>⬇️ Dưới cùng lên trên (Mặc định)</option>
+          <option value="date_desc">🕒 Ngày giờ (Mới ➔ Cũ)</option>
+          <option value="date_asc">🕒 Ngày giờ (Cũ ➔ Mới)</option>
+          <option value="top_to_bottom">⬆️ Trên cùng xuống dưới</option>
+        </select>
+    </div>
+
+    <!-- KHỐI BẢNG NỘI DUNG ĐƠN HÀNG VỪA ĐỌC (LUÔN HIỂN THỊ) -->
+    <div id="nhieu-don-preview-card" style="margin-bottom: 12px; background: #ffffff; border: 1.5px solid #059669; border-radius: 6px; padding: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+      <div class="section-head" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h3 style="margin: 0; font-size: 13px; color: #047857; display: flex; align-items: center; gap: 6px;">
+          <span>📦</span> <span id="nhieu-don-preview-title">Đơn hàng vừa đọc</span>
+        </h3>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button id="btn-toggle-view-mode-preview" type="button" class="secondary" style="font-size: 11px; padding: 3px 8px; background: #f0fdf4; color: #047857; border: 1px solid #86efac; border-radius: 4px; font-weight: bold; cursor: pointer;" title="Chuyển đổi kiểu xem dạng dòng hoặc dạng thẻ">
+            🔄 Xem dạng thẻ dọc
+          </button>
+          <button id="btn-toggle-preview-body" type="button" class="secondary" style="font-size: 11px; padding: 3px 8px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer;" title="Thu gọn / Mở rộng bảng">
+            ▲ Thu gọn
+          </button>
+          <button id="btn-close-preview" type="button" class="secondary" style="font-size: 11px; padding: 3px 7px; background: #fef2f2; color: #ef4444; border: 1px solid #fca5a5; border-radius: 4px; cursor: pointer; font-weight: bold;" title="Đóng bảng xem trước">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Hàng nút chức năng y hệt tab Đơn hàng -->
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px;">
+        <button id="btn-save-preview-to-sheet" type="button" class="secondary" style="background:#16a34a; color:white; border-color:#15803d; font-weight:bold; font-size: 11px; padding: 5px 8px;">💾 Lưu DH</button>
+        <button id="btn-copy-preview-tsv" type="button" class="secondary" style="font-size: 11px; padding: 5px 8px;">📋 Copy TSV</button>
+        <button id="btn-export-excel-preview" type="button" class="secondary" style="background:#107c41; color:white; border-color:#107c41; font-weight:bold; font-size: 11px; padding: 5px 8px;">📊 Excel</button>
+      </div>
+
+      <!-- Hàng nút cập nhật trạng thái Hủy / Hoàn / Trả -->
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px;">
+        <button id="btn-preview-status-huy" type="button" class="secondary" style="background:#fef2f2; color:#dc2626; border-color:#fca5a5; font-weight:bold; font-size: 11px; padding: 4px 6px;" title="Cập nhật trạng thái HỦY ĐƠN vào Sheet DH (Doanh thu=0, Vốn=0, Lợi nhuận=0)">🔴 Hủy đơn</button>
+        <button id="btn-preview-status-hoan" type="button" class="secondary" style="background:#fffbeb; color:#d97706; border-color:#fde68a; font-weight:bold; font-size: 11px; padding: 4px 6px;" title="Cập nhật trạng thái HOÀN HÀNG vào Sheet DH (Vốn=0)">🟠 Hoàn hàng</button>
+        <button id="btn-preview-status-tra" type="button" class="secondary" style="background:#faf5ff; color:#7e22ce; border-color:#e9d5ff; font-weight:bold; font-size: 11px; padding: 4px 6px;" title="Cập nhật trạng thái TRẢ HÀNG vào Sheet DH (Vốn=0)">🟣 Trả hàng</button>
+      </div>
+
+      <!-- Trạng thái đơn hàng (Cảnh báo / Thành công) -->
+      <div id="nhieu-don-preview-status" style="margin: 0 0 8px; font-size: 11px; line-height: 1.4;"></div>
+
+      <!-- Thân bảng có thể thu gọn -->
+      <div id="nhieu-don-preview-body">
+        <div class="table-responsive" style="max-height: 280px; overflow: auto; border: 1px solid #d8dee8; border-radius: 4px; background: white;">
+          <table id="table-nhieu-don-preview" style="width: max-content; min-width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+            <thead id="nhieu-don-preview-thead" style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+              <tr>
+                <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Thong tin don hang</th>
+              </tr>
+            </thead>
+            <tbody id="nhieu-don-preview-tbody">
+              <tr><td colspan="1" style="text-align: center; padding: 10px; color: #64748b;">Chưa đọc dữ liệu.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- THANH CÔNG CỤ CHỌN ĐƠN HÀNG VÀ ĐIỀN LẠI ĐƠN ĐÃ CHỌN -->
+    <div id="nhieu-don-selection-bar" style="display: flex; align-items: center; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; flex-wrap: nowrap; gap: 8px; overflow-x: auto;">
+      <span style="font-size: 11px; font-weight: bold; color: #1e293b; white-space: nowrap; margin-right: 2px;">
+        Đã chọn: <b id="nhieu-don-selected-count" style="color: #2563eb; font-size: 12px;">0</b> đơn
+      </span>
+      <button id="btn-nhieu-don-select-page" type="button" class="btn-selection-tool" style="width: auto !important; min-height: 28px !important; height: 28px; font-size: 11px; font-weight: 600; padding: 0 10px; background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Chọn toàn bộ đơn trên trang hiện tại">
+        ☑️ Chọn trang này
+      </button>
+      <button id="btn-nhieu-don-select-all" type="button" class="btn-selection-tool" style="width: auto !important; min-height: 28px !important; height: 28px; font-size: 11px; font-weight: 600; padding: 0 10px; background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Chọn tất cả đơn hàng trên tất cả các trang">
+        ✅ Chọn tất cả trang
+      </button>
+      <button id="btn-nhieu-don-deselect-all" type="button" class="btn-selection-tool" style="width: auto !important; min-height: 28px !important; height: 28px; font-size: 11px; font-weight: 600; padding: 0 10px; background: #ffffff; color: #475569; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Bỏ chọn toàn bộ đơn">
+        ⬜ Bỏ chọn
+      </button>
+      <button id="btn-nhieu-don-fill-selected" type="button" style="width: auto !important; min-height: 28px !important; height: 28px; font-size: 11px; font-weight: bold; padding: 0 12px; background: #e11d48; color: #ffffff; border: 1px solid #be123c; border-radius: 4px; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); flex-shrink: 0;" title="Mở lần lượt từng đơn đã chọn trên Shopee, quét chi tiết sản phẩm/doanh thu/SKU và tự động lưu vào Sheet DH">
+        ⚡ Điền lại đơn đã chọn (<span id="nhieu-don-fill-selected-badge">0</span>)
+      </button>
+    </div>
+
+    <!-- THANH TRẠNG THÁI VÀ BỘ ĐIỀU KHIỂN PHÂN TRANG (TRÊN BẢNG) -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+      <div id="nhieu-don-hang-status" style="font-size: 11px; color: #64748b; line-height: 1.4;">
+        Đang tải dữ liệu...
+      </div>
+
+      <!-- Bộ điều khiển phân trang (Pagination Top) -->
+      <div id="nhieu-don-pagination-container" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px;">
+        <button id="btn-nhieu-don-page-first" type="button" class="secondary" style="padding: 2px 6px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #cbd5e1; background: #fff;" title="Về trang đầu tiên">⏮</button>
+        <button id="btn-nhieu-don-page-prev" type="button" class="secondary" style="padding: 2px 7px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #cbd5e1; background: #fff;" title="Trang trước">◀</button>
+        <span style="font-weight: 600; color: #334155; padding: 0 2px;">
+          Trang <select id="nhieu-don-page-select" style="font-size: 11px; padding: 1px 4px; border: 1px solid #cbd5e1; border-radius: 3px; background: #fff; font-weight: bold; color: #2563eb; cursor: pointer;"></select> / <span id="nhieu-don-page-total">1</span>
+        </span>
+        <button id="btn-nhieu-don-page-next" type="button" class="secondary" style="padding: 2px 7px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #cbd5e1; background: #fff;" title="Trang sau">▶</button>
+        <button id="btn-nhieu-don-page-last" type="button" class="secondary" style="padding: 2px 6px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #cbd5e1; background: #fff;" title="Đến trang cuối cùng">⏭</button>
+      </div>
+    </div>
+
+    <!-- BẢNG DỮ LIỆU ĐƠN HÀNG (PHÂN TRANG 50 DÒNG/TRANG) -->
+    <div class="table-responsive" style="max-height: calc(100vh - 220px); min-height: 400px; overflow: auto; border: 1px solid #cbd5e1; border-radius: 6px; background: white; box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);">
+      <table id="table-nhieu-don-hang" style="width: max-content; min-width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+        <thead id="nhieu-don-hang-thead">
+        </thead>
+        <tbody id="nhieu-don-hang-tbody">
+          <tr><td colspan="15" style="padding: 20px; text-align: center; color: #64748b;">Đang chuẩn bị dữ liệu...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- THANH PHÂN TRANG DƯỚI BẢNG (BOTTOM PAGINATION) -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; flex-wrap: wrap; gap: 6px; font-size: 11px;">
+      <span id="nhieu-don-pagination-summary" style="color: #64748b; font-size: 11px;">
+        Hiển thị 0 / 0 dòng
+      </span>
+      <div style="display: inline-flex; align-items: center; gap: 4px;">
+        <button id="btn-nhieu-don-page-first-bottom" type="button" class="secondary" style="padding: 2px 6px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #cbd5e1; background: #fff;" title="Về trang đầu tiên">⏮ Đầu</button>
+        <button id="btn-nhieu-don-page-prev-bottom" type="button" class="secondary" style="padding: 2px 7px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #cbd5e1; background: #fff;" title="Trang trước">◀ Trước</button>
+        <span style="font-weight: 600; color: #334155; padding: 0 4px;">
+          Trang <span id="nhieu-don-page-curr-bottom" style="color: #2563eb; font-weight: bold;">1</span> / <span id="nhieu-don-page-total-bottom">1</span>
+        </span>
+        <button id="btn-nhieu-don-page-next-bottom" type="button" class="secondary" style="padding: 2px 7px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #cbd5e1; background: #fff;" title="Trang sau">Sau ▶</button>
+        <button id="btn-nhieu-don-page-last-bottom" type="button" class="secondary" style="padding: 2px 6px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #cbd5e1; background: #fff;" title="Đến trang cuối cùng">Cuối ⏭</button>
+      </div>
+    </div>
+  </section>
+</div>
+<div id="tab-ds-sp" class="tab-content" hidden>
+<section class="tool-section ds-sp-section" style="padding: 0; border: none; background: transparent;">
+
+<div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center;">
+<div class="search-container" style="flex: 1;">
+<input id="ds-sp-search" class="brand-input" placeholder="Tìm kiếm mã hoặc tên sản phẩm..." style="width: 100%;">
+</div>
+<div class="filter-mode-group" style="display: inline-flex; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 6px; gap: 6px; font-size: 11px; align-items: center; white-space: nowrap;">
+  <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; margin: 0; font-weight: 600; color: #1e293b;">
+    <input type="radio" name="ds-sp-filter-mode" value="OR" checked style="cursor: pointer; margin: 0;"> Hoặc (OR)
+  </label>
+  <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; margin: 0; font-weight: 600; color: #1e293b;">
+    <input type="radio" name="ds-sp-filter-mode" value="AND" style="cursor: pointer; margin: 0;"> Và (AND)
+  </label>
+</div>
+</div>
+
+<div class="filter-row-container" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;" id="filter-1-char-container">
+<!-- 1 char filters injected here -->
+</div>
+<div class="filter-row-container" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px;" id="filter-2-char-container">
+<!-- 2 char filters injected here -->
+</div>
+
+<div class="table-responsive" style="max-height: calc(100vh - 180px); overflow: auto; border: 1px solid #e2e8f0; border-radius: 4px; background: white;">
+<table class="data-table" id="ds-sp-table" style="width: max-content; min-width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+<thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+<tr>
+<th style="padding: 8px; border-bottom: 2px solid #e2e8f0; font-weight: bold; color: #1e293b; white-space: nowrap;">ID_SP_CON</th>
+<th style="padding: 8px; border-bottom: 2px solid #e2e8f0; font-weight: bold; color: #1e293b; white-space: nowrap;">ID_SP</th>
+<th style="padding: 8px; border-bottom: 2px solid #e2e8f0; font-weight: bold; color: #1e293b; min-width: 150px; max-width: 150px;">TEN_SP</th>
+<th style="padding: 8px; border-bottom: 2px solid #e2e8f0; font-weight: bold; color: #1e293b; min-width: 170px; max-width: 170px;">COT_AO</th>
+<th style="padding: 8px; border-bottom: 2px solid #e2e8f0; font-weight: bold; color: #1e293b; white-space: nowrap;">GIA_BAN</th>
+<th style="padding: 8px; border-bottom: 2px solid #e2e8f0; font-weight: bold; color: #1e293b; white-space: nowrap;">GIA_THAP_NHAT</th>
+</tr>
+</thead>
+<tbody id="ds-sp-tbody">
+<tr><td colspan="23" style="padding: 10px; text-align: center; color: #64748b;">Đang tải dữ liệu...</td></tr>
+</tbody>
+</table>
+</div>
+
+</section>
+</div>
+<div id="tab-hieu-qua-sp" class="tab-content" hidden>
+<section class="tool-section">
+<div class="section-head">
+<h2>Hiệu Quả Sản Phẩm</h2>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+<button id="btn-read-hieu-qua-sp" type="button" class="primary-action">Đọc Trang Hiện Tại</button>
+<button id="btn-open-hieu-qua-sp" type="button" class="secondary" style="background-color: white; color: #1e293b; border: 1px solid #d8dee8;">Mở Trang Web</button>
+<button id="btn-copy-hieu-qua-sp" type="button" class="secondary">Copy TSV</button>
+</div>
+<input type="text" id="input-search-hieu-qua-sp" class="brand-input" placeholder="Tìm kiếm tên sản phẩm, mã SP, SKU..." style="width: 100%; padding: 6px; margin-bottom: 8px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 6px; flex-wrap: wrap;">
+<p id="hieu-qua-sp-status" style="margin: 0; font-size: 12px; color: #64748b; flex: 1; min-width: 100px;"></p>
+<div style="display: flex; gap: 6px;">
+<button id="btn-copy-names-hieu-qua-sp" type="button" class="secondary" style="background-color: #3b82f6; color: white; border: 1px solid #2563eb; padding: 4px 8px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; white-space: nowrap;" title="Copy toàn bộ Tên sản phẩm (mỗi dòng 1 tên)">📋 Copy Tên SP</button>
+<button id="btn-copy-all-ids-hieu-qua-sp" type="button" class="secondary" style="background-color: #10b981; color: white; border: 1px solid #059669; padding: 4px 8px; font-size: 11px; font-weight: bold; border-radius: 4px; cursor: pointer; white-space: nowrap;" title="Copy toàn bộ Mã sản phẩm cách nhau dấu phẩy (,)">📋 Copy Mã SP (,)</button>
+</div>
+</div>
+<div class="table-responsive" style="max-height: calc(100vh - 200px); min-height: 400px; overflow: auto; border: 1px solid #d8dee8; border-radius: 4px; background: white;">
+<table id="table-hieu-qua-sp" style="width: max-content; min-width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+<thead id="hieu-qua-sp-thead" style="position: sticky; top: 0; background: #f8fafc; z-index: 1; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+<tr>
+<th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; min-width: 40px; text-align: center; background: #f8fafc;">STT</th>
+<th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; min-width: 50px; text-align: center; background: #f8fafc;">Ảnh</th>
+<th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; min-width: 200px; background: #f8fafc;">Tên sản phẩm</th>
+<th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; min-width: 110px; background: #f8fafc;">Mã sản phẩm</th>
+<th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; min-width: 140px; background: #f8fafc;">Chỉ số hiệu quả</th>
+</tr>
+</thead>
+<tbody id="hieu-qua-sp-tbody">
+<tr><td colspan="5" style="text-align: center; padding: 15px; color: #64748b;">Chưa đọc dữ liệu. Hãy mở trang Hiệu quả sản phẩm (<a href="https://banhang.shopee.vn/datacenter/product/performance" target="_blank" style="color: #2563eb; font-weight: bold;">Mở trang Shopee</a>) và bấm "Đọc Trang Hiện Tại".</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+<div id="tab-day-sp" class="tab-content" hidden>
+<section class="tool-section" style="padding: 8px 10px;">
+<div class="section-head" style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+  <h2 style="margin: 0; font-size: 13px;">🚀 Tự Động Đẩy Sản Phẩm (Tối đa 5 SP)</h2>
+  <div style="display: flex; gap: 5px; align-items: center;">
+    <button id="btn-get-ids-from-hieu-qua" type="button" class="secondary" style="width: auto !important; min-height: 24px !important; height: 24px; padding: 0 8px; font-size: 11px; white-space: nowrap;">📋 Lấy từ Hiệu quả SP</button>
+    <button id="btn-clear-day-sp-ids" type="button" class="ghost" style="width: auto !important; min-height: 24px !important; height: 24px; padding: 0 8px; font-size: 11px; color: #dc2626; border: 1px solid #fecaca; background: #fff5f5; white-space: nowrap;">🗑️ Xóa trắng</button>
+  </div>
+</div>
+
+<div style="margin-bottom: 8px;">
+  <textarea id="day-sp-ids-input" class="brand-input" rows="2" placeholder="Nhập hoặc dán Mã SP cần đẩy (cách nhau dấu phẩy, khoảng trắng hoặc xuống dòng)..." style="width: 100%; min-height: 48px; margin-top: 0; box-sizing: border-box; font-size: 11px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; resize: vertical; font-family: monospace;"></textarea>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; flex-wrap: wrap;">
+  <label style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: #1e293b; cursor: pointer; background: #f8fafc; padding: 5px 8px; border-radius: 4px; border: 1px solid #e2e8f0; flex: 1; min-width: 165px;" title="Khi đến giờ hẹn, tiện ích sẽ tự động mở trang danh sách sản phẩm Shopee và đẩy tối đa 5 sản phẩm.">
+    <input type="checkbox" id="chk-auto-repeat-4h" style="cursor: pointer; margin: 0;">
+    <span>⏰ Bật tự động đẩy theo giờ</span>
+  </label>
+  <button id="btn-start-day-sp" type="button" class="primary-action" style="width: auto !important; min-height: 30px !important; height: 30px; background-color: #16a34a; font-weight: bold; font-size: 11px; padding: 0 12px; white-space: nowrap;">🚀 ĐẨY 5 SP NGAY</button>
+  <button id="btn-open-shopee-product-list" type="button" class="secondary" style="width: auto !important; min-height: 30px !important; height: 30px; background-color: white; color: #1e293b; border: 1px solid #cbd5e1; font-size: 11px; padding: 0 10px; white-space: nowrap;">🌐 Mở DS SP</button>
+</div>
+
+<div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 5px 8px; margin-bottom: 8px;">
+  <span style="font-size: 11px; font-weight: 600; color: #475569; white-space: nowrap;">Khung giờ đẩy:</span>
+  <div id="day-sp-schedule-times-list" style="display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap;"></div>
+  <button id="btn-add-day-sp-time" type="button" class="secondary" style="width: auto !important; min-height: 24px !important; height: 24px; padding: 0 8px; font-size: 11px; font-weight: 600; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 4px; cursor: pointer; white-space: nowrap;">+ Thêm giờ</button>
+</div>
+
+<p id="day-sp-status" style="margin: 0 0 6px; font-size: 11px; color: #64748b; font-weight: 500;"></p>
+
+<div style="border: 1px solid #d8dee8; border-radius: 4px; background: #f8fafc; padding: 6px 8px; max-height: calc(100vh - 240px); min-height: 160px; overflow-y: auto;">
+<div style="font-size: 11px; font-weight: 600; color: #475569; margin-bottom: 6px; display: flex; justify-content: space-between;">
+<span>Tiến trình & Trạng thái 5 vị trí:</span>
+<span style="font-size: 10px; color: #64748b;">(Tối đa 5/5 SP)</span>
+</div>
+<div id="day-sp-log-list">
+<div style="padding: 12px; text-align: center; color: #94a3b8; font-size: 11px;">Chưa chạy lượt đẩy nào. Bấm "ĐẨY 5 SP NGAY" để chạy.</div>
+</div>
+</div>
+</section>
+</div>
+
+<div id="tab-sheet-sp-shopee" class="tab-content" hidden>
+<header class="panel-header">
+<h1>Dữ Liệu SP_SHOPEE</h1>
+</header>
+<div class="panel-section">
+<div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center;">
+<input type="text" id="sheet-sp-shopee-search" placeholder="Tìm kiếm dữ liệu..." style="flex: 1; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px;">
+<div class="filter-mode-group" style="display: inline-flex; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 6px; gap: 6px; font-size: 11px; align-items: center; white-space: nowrap;">
+  <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; margin: 0; font-weight: 600; color: #1e293b;">
+    <input type="radio" name="sheet-sp-shopee-filter-mode" value="OR" checked style="cursor: pointer; margin: 0;"> Hoặc (OR)
+  </label>
+  <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; margin: 0; font-weight: 600; color: #1e293b;">
+    <input type="radio" name="sheet-sp-shopee-filter-mode" value="AND" style="cursor: pointer; margin: 0;"> Và (AND)
+  </label>
+</div>
+</div>
+<div class="table-responsive" style="max-height: calc(100vh - 140px); overflow-y: auto; border: 1px solid #d8dee8; border-radius: 4px;">
+<table id="table-sheet-sp-shopee" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+<thead id="sheet-sp-shopee-thead" style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+<tr>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569;">Đang tải tiêu đề...</th>
+</tr>
+</thead>
+<tbody id="sheet-sp-shopee-tbody">
+<tr>
+<td style="padding: 10px; text-align: center; color: #64748b;">Nhấn vào tab để tải dữ liệu...</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div id="tab-sp-giam-gia" class="tab-content" hidden>
+<header class="panel-header">
+<h1>Dữ Liệu SP_GIAM_GIA</h1>
+</header>
+<div class="panel-section">
+<div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center;">
+<input type="text" id="sp-giam-gia-search" placeholder="Tìm kiếm dữ liệu..." style="flex: 1; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;">
+<div class="filter-mode-group" style="display: inline-flex; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 3px 6px; gap: 6px; font-size: 11px; align-items: center; white-space: nowrap;">
+  <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; margin: 0; font-weight: 600; color: #1e293b;">
+    <input type="radio" name="sp-giam-gia-filter-mode" value="OR" checked style="cursor: pointer; margin: 0;"> Hoặc (OR)
+  </label>
+  <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; margin: 0; font-weight: 600; color: #1e293b;">
+    <input type="radio" name="sp-giam-gia-filter-mode" value="AND" style="cursor: pointer; margin: 0;"> Và (AND)
+  </label>
+</div>
+</div>
+<div class="table-responsive" style="max-height: calc(100vh - 140px); overflow-y: auto; border: 1px solid #d8dee8; border-radius: 4px;">
+<table id="table-sp-giam-gia" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+<thead id="sp-giam-gia-thead" style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+<tr>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569;">Đang tải tiêu đề...</th>
+</tr>
+</thead>
+<tbody id="sp-giam-gia-tbody">
+<tr>
+<td style="padding: 10px; text-align: center; color: #64748b;">Nhấn vào tab để tải dữ liệu...</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div id="tab-km" class="tab-content" hidden>
+  <header class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <h1>Khuyến Mãi (KM) - Hiển Thị Tên & Phân Loại</h1>
+  </header>
+
+  <div class="panel-section">
+    <!-- Toolbar buttons -->
+    <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
+      <button id="btn-km-read" type="button" class="primary-action" style="flex: 1.5; min-width: 110px; background-color: #ee4d2d; color: white; font-weight: bold; padding: 8px 6px; font-size: 11px;">⚡ Đọc KM Shopee</button>
+      <button id="btn-km-fill-min-price" type="button" class="secondary" style="flex: 1.5; min-width: 110px; background-color: #16a34a; color: white; border: none; font-weight: bold; padding: 8px 6px; font-size: 11px;" title="Tự động điền Giá Min vào cột Giá Sau Giảm trên Shopee">⚡ Điền Giá Min</button>
+      <button id="btn-km-inject-sku" type="button" class="secondary" style="flex: 1.5; min-width: 115px; background-color: #0284c7; color: white; border: none; font-weight: bold; padding: 8px 6px; font-size: 11px;" title="Chèn trực tiếp nhãn SKU vào dưới tên phân loại trên Shopee">📌 Hiện SKU lên Web</button>
+      <button id="btn-km-copy-tsv" type="button" class="ghost" style="flex: 1; min-width: 70px; padding: 8px 4px; font-size: 11px; border: 1px solid #cbd5e1; background: #f8fafc; color: #1e293b; font-weight: bold;">📋 Copy TSV</button>
+      <button id="btn-km-export-excel" type="button" class="ghost" style="flex: 1; min-width: 70px; padding: 8px 4px; font-size: 11px; border: 1px solid #cbd5e1; background: #f8fafc; color: #15803d; font-weight: bold;">📊 Xuất Excel</button>
+      <button id="btn-km-clear" type="button" class="ghost" style="flex: 0 0 auto; padding: 8px 8px; font-size: 11px; border: 1px solid #fecaca; background: #fff5f5; color: #dc2626; font-weight: bold;" title="Xóa dữ liệu đã lưu">🗑️</button>
+    </div>
+
+    <!-- Stats summary -->
+    <div id="km-stats" style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 11px; flex-wrap: wrap;"></div>
+
+    <!-- Group save section (FLASH_SALE) -->
+    <div id="km-save-group-section" style="display: none; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; padding: 8px; margin-bottom: 8px;">
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <input type="text" id="km-sheet-group-name" placeholder="Tên nhóm / Đợt (ví dụ: Đợt 1)..." style="flex: 1; min-width: 0; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; box-sizing: border-box;">
+        <button id="btn-km-save-sheet" type="button" class="secondary" style="width: auto; white-space: nowrap; padding: 6px 12px; background: #d97706; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 11px;">💾 Lưu Sheet FLASH_SALE</button>
+      </div>
+    </div>
+
+    <!-- Status message -->
+    <p id="km-status" style="margin: 0 0 8px; font-size: 12px; color: #64748b; line-height: 1.4;"></p>
+
+    <!-- Chọn nguồn đối chiếu SKU -->
+    <div style="display: flex; gap: 8px; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; font-size: 11px; flex-wrap: wrap;">
+      <span style="font-weight: bold; color: #334155; white-space: nowrap;">🔍 Nguồn lấy SKU:</span>
+      <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; color: #0f172a; font-weight: 500;">
+        <input type="radio" name="km-sku-source" value="sheet" checked style="cursor: pointer;"> 📑 Sheet SP_SHOPEE
+      </label>
+      <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; color: #0f172a; font-weight: 500;">
+        <input type="radio" name="km-sku-source" value="tab" style="cursor: pointer;"> 🌐 Tab SP (Web)
+      </label>
+      <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; color: #0f172a; font-weight: 500;">
+        <input type="radio" name="km-sku-source" value="both" style="cursor: pointer;"> 🔄 Cả 2 nguồn
+      </label>
+    </div>
+
+    <!-- Search filter -->
+    <div style="margin-bottom: 8px;">
+      <input type="text" id="km-search-input" placeholder="🔍 Tìm kiếm theo Tên SP, Phân Loại, Giá..." style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; box-sizing: border-box;">
+    </div>
+
+    <!-- Data Table -->
+    <div class="table-responsive" style="max-height: calc(100vh - 200px); min-height: 300px; overflow-y: auto; border: 1px solid #d8dee8; border-radius: 4px; background: white;">
+      <table id="table-km" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+        <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+          <tr>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; width: 30px; text-align: center; color: #475569;">#</th>
+            <th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; color: #475569; width: 44%;">Tên sản phẩm</th>
+            <th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; color: #475569; width: 22%;">Phân loại hàng</th>
+            <th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; color: #0284c7; width: 20%;">SKU / SKU_CT</th>
+            <th style="padding: 8px 6px; border-bottom: 1px solid #cbd5e1; text-align: right; color: #059669; width: 14%;">Giá Min</th>
+          </tr>
+        </thead>
+        <tbody id="km-tbody">
+          <tr>
+            <td colspan="5" style="padding: 20px; text-align: center; color: #64748b;">
+              Mở trang Shopee (Khuyến mãi / Flash sale / Giảm giá) và nhấn nút <b>"⚡ Đọc KM từ Shopee"</b>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="tab-web-sp" class="tab-content active">
+  <header class="panel-header">
+    <h1>Web Bán Sản Phẩm (Sheet WEB_SP)</h1>
+  </header>
+  <div class="panel-section">
+    <!-- BẢNG 1: ĐỌC SẢN PHẨM HIỆN TẠI (ĐƯA LÊN TRÊN CÙNG) -->
+    <section class="tool-section" id="section-current-sp" style="margin-bottom: 14px; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; background: #ffffff;">
+      <div class="section-head" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h2 style="font-size: 13px; font-weight: 700; color: #1e293b; margin: 0;">📦 Bảng 1: Đọc Dữ Liệu Sản Phẩm Hiện Tại</h2>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px;">
+        <button id="btn-read-current-sp" type="button" class="primary-action" style="font-size: 11px; padding: 6px 4px; white-space: nowrap;">Đọc SP hiện tại</button>
+        <button id="btn-save-shopee-page-sp" type="button" class="secondary" style="font-size: 11px; padding: 6px 4px; background: #2563eb; border: 1px solid #1d4ed8; color: white; font-weight: bold; white-space: nowrap;" title="Lưu thông tin sản phẩm từ trang Shopee vào Sheet SP_SHOPEE">💾 Lưu SP</button>
+        <button id="btn-save-current-sp-web" type="button" class="secondary" style="font-size: 11px; padding: 6px 4px; background: #059669; border: 1px solid #047857; color: white; white-space: nowrap;" title="Lưu các dòng bên dưới vào Sheet WEB_SP">Lưu WEB_SP</button>
+      </div>
+      <p id="current-sp-status" style="margin: 0 0 8px; font-size: 11px; color: #64748b; font-style: italic;"></p>
+      <div class="table-responsive" style="max-height: 240px; min-height: 80px; overflow: auto; border: 1px solid #d8dee8; border-radius: 4px; background: white;">
+        <table id="table-current-sp" style="width: max-content; min-width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+          <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+            <tr>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Item ID</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">SKU</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Phân loại</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Tên</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Ngành hàng</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Mô tả</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Ảnh chính</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Ảnh mô tả</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Ảnh phân loại</th>
+              <th style="padding: 6px; border-bottom: 1px solid #cbd5e1;">Video</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="10" style="text-align: center; padding: 12px; color: #64748b;">Chưa đọc dữ liệu. Bấm "Đọc SP hiện tại" để tải dữ liệu sản phẩm.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- BẢNG 2: DANH SÁCH SẢN PHẨM (WEB_SP) -->
+    <div style="margin-bottom: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <h2 style="font-size: 13px; font-weight: 700; color: #1e293b; margin: 0;">📋 Bảng 2: Danh Sách Sản Phẩm (Sheet WEB_SP)</h2>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 6px; flex-wrap: wrap;">
+        <label style="font-weight: 600; font-size: 11px; color: #475569;">Nhập SKU (So sánh 4 ký tự đầu cột C):</label>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <div class="filter-mode-group" style="display: inline-flex; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 2px 6px; gap: 6px; font-size: 11px; align-items: center; white-space: nowrap;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; margin: 0; font-weight: 600; color: #1e293b;">
+              <input type="radio" name="web-sp-filter-mode" value="OR" checked style="cursor: pointer; margin: 0;"> Hoặc (OR)
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 3px; margin: 0; font-weight: 600; color: #1e293b;">
+              <input type="radio" name="web-sp-filter-mode" value="AND" style="cursor: pointer; margin: 0;"> Và (AND)
+            </label>
+          </div>
+          <button id="btn-delete-selected-web-sp" type="button" style="width: auto !important; min-height: 24px !important; height: 24px !important; padding: 0 8px; font-size: 11px; font-weight: bold; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;" title="Xóa các dòng đã chọn trong bảng và Sheet WEB_SP">🗑️ Xóa dòng chọn</button>
+        </div>
+      </div>
+      <input type="text" id="web-sp-sku-input" placeholder="Nhập mã SKU..." style="width: 100%; padding: 6px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; font-size: 12px;">
+    </div>
+
+    <!-- Bảng danh sách sản phẩm -->
+    <div class="table-responsive" style="max-height: 180px; overflow-y: auto; border: 1px solid #d8dee8; border-radius: 4px; margin-bottom: 12px;">
+      <table id="table-web-sp" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+        <thead id="web-sp-thead" style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+          <tr>
+            <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; width: 34px; text-align: center;">
+              <input type="checkbox" id="check-all-web-sp" title="Chọn tất cả để xóa" style="cursor: pointer; width: 14px; height: 14px; vertical-align: middle;">
+            </th>
+            <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; width: 40px; text-align: center;">Xem</th>
+            <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">link</th>
+            <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Gian</th>
+            <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">SKU (C&#7897;t C)</th>
+            <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">Ph&#226;n lo&#7841;i</th>
+            <th style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">T&#234;n s&#7843;n ph&#7849;m</th>
+          </tr>
+        </thead>
+        <tbody id="web-sp-tbody">
+          <tr>
+            <td colspan="7" style="padding: 10px; text-align: center; color: #64748b;">Nhập SKU hoặc chọn tab để tải dữ liệu...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Các ô thông tin chi tiết -->
+    <div style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 10px;">
+      <h3 style="margin: 0; font-size: 12px; color: #1e293b; font-weight: bold; border-bottom: 1px dashed #cbd5e1; padding-bottom: 4px;">Chi tiết sản phẩm được chọn</h3>
+      
+      <div>
+        <label style="font-size: 11px; font-weight: 600; color: #475569;">Phân loại:</label>
+        <input type="text" id="web-sp-phan-loai" placeholder="Phân loại" style="width: 100%; padding: 5px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;">
+      </div>
+
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <label style="font-size: 11px; font-weight: 600; color: #475569;">Tên sản phẩm:</label>
+          <div style="display: flex; gap: 4px;">
+            <button type="button" id="web-sp-btn-copy-name" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #64748b; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Copy tên sản phẩm">Copy</button>
+            <button type="button" id="web-sp-btn-rewrite-name" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Viết lại tên bằng AI">Viết lại AI</button>
+            <button type="button" id="web-sp-btn-fill-name" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #3b82f6; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Điền tên vào trang sửa sản phẩm">Điền vào SP</button>
+          </div>
+        </div>
+        <input type="text" id="web-sp-ten" placeholder="Tên sản phẩm" style="width: 100%; padding: 5px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;">
+      </div>
+
+      <div>
+        <label style="font-size: 11px; font-weight: 600; color: #475569;">Ngành hàng:</label>
+        <input type="text" id="web-sp-nganh-hang" placeholder="Ngành hàng" style="width: 100%; padding: 5px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box;">
+      </div>
+
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <label style="font-size: 11px; font-weight: 600; color: #475569;">Mô tả:</label>
+          <div style="display: flex; gap: 4px;">
+            <button type="button" id="web-sp-btn-copy-desc" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #64748b; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Copy mô tả sản phẩm">Copy</button>
+            <button type="button" id="web-sp-btn-rewrite-desc" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Viết lại mô tả bằng AI">Viết lại AI</button>
+            <button type="button" id="web-sp-btn-fill-desc" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #3b82f6; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Điền mô tả vào trang sửa sản phẩm">Điền vào SP</button>
+          </div>
+        </div>
+        <textarea id="web-sp-mo-ta" placeholder="Nội dung mô tả..." rows="3" style="width: 100%; padding: 5px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; resize: vertical;"></textarea>
+      </div>
+
+      <!-- Khung ảnh chính -->
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <label style="font-size: 11px; font-weight: 600; color: #475569;">Khung ảnh sản phẩm:</label>
+          <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+            <button type="button" id="web-sp-btn-copy-anh" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #64748b; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Copy danh sách link/ảnh sản phẩm">Copy</button>
+            <button type="button" id="web-sp-btn-dua-anh-chinh" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #2563eb; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;">Đưa vào ảnh chính</button>
+            <button type="button" id="web-sp-btn-dua-anh-mota" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #0284c7; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;">Đưa vào mô tả</button>
+            <button type="button" id="web-sp-btn-upload-anh" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #8b5cf6; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Chọn ảnh tải lên từ máy tính">Tải ảnh</button>
+            <button type="button" id="web-sp-btn-download-all-anh" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #16a34a; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Tải tất cả ảnh sản phẩm về máy tính">⬇️ Tải về máy</button>
+          </div>
+        </div>
+        <input type="file" id="web-sp-file-anh" accept="image/*" multiple style="display: none;">
+        <div id="web-sp-khung-anh" style="display: flex; gap: 6px; overflow-x: auto; padding: 4px; background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; min-height: 50px;">
+          <span style="font-size: 10px; color: #94a3b8; align-self: center;">Chưa có ảnh</span>
+        </div>
+      </div>
+
+      <!-- Khung ảnh mô tả -->
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <label style="font-size: 11px; font-weight: 600; color: #475569;">Khung ảnh mô tả:</label>
+          <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+            <button type="button" id="web-sp-btn-copy-anh-mota" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #64748b; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Copy danh sách link/ảnh mô tả">Copy</button>
+            <button type="button" id="web-sp-btn-dua-anh-chinh-mota" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #2563eb; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;">Đưa vào ảnh chính</button>
+            <button type="button" id="web-sp-btn-dua-anh-mota-mota" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #0284c7; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;">Đưa vào mô tả</button>
+            <button type="button" id="web-sp-btn-upload-anh-mota" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #8b5cf6; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Chọn ảnh mô tả tải lên từ máy tính">Tải ảnh mô tả</button>
+            <button type="button" id="web-sp-btn-download-all-anh-mota" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #16a34a; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Tải tất cả ảnh mô tả về máy tính">⬇️ Tải về máy</button>
+          </div>
+        </div>
+        <input type="file" id="web-sp-file-anh-mota" accept="image/*" multiple style="display: none;">
+        <div id="web-sp-khung-anh-mo-ta" style="display: flex; gap: 6px; overflow-x: auto; padding: 4px; background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; min-height: 50px;">
+          <span style="font-size: 10px; color: #94a3b8; align-self: center;">Chưa có ảnh mô tả</span>
+        </div>
+      </div>
+
+      <!-- Khung Video -->
+      <div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+          <label style="font-size: 11px; font-weight: 600; color: #475569;">Khung Video (Kéo thả video vào đây):</label>
+          <button type="button" id="web-sp-btn-upload-video" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 8px; font-size: 10px; font-weight: bold; background: #0284c7; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;">Tải video</button>
+        </div>
+        <input type="file" id="web-sp-file-video" accept="video/*" style="display: none;">
+        <div id="web-sp-khung-video" style="padding: 6px; background: #fff; border: 2px dashed #cbd5e1; border-radius: 4px; min-height: 42px; font-size: 11px; color: #64748b; word-break: break-all; text-align: right; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; cursor: pointer;" title="Kéo thả file video vào đây hoặc click để chọn">
+          Chưa có video (Kéo thả video vào đây)
+        </div>
+      </div>
+    </div>
+
+    <!-- Khung sku_mota và Đơn giá (Tự động hiển thị tất cả các dòng id_sp_con trùng khớp) -->
+    <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div id="web-sp-sku-mota-container" style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 11px; color: #334155; min-height: 32px; font-weight: 500;">
+          <div class="web-sp-sku-mota-box" style="flex: 1; word-break: break-all; min-width: 0; font-size: 11px;">
+            SKU sẽ hiện ở đây
+          </div>
+          <button type="button" class="web-sp-btn-copy-sku-mota" style="width: auto !important; min-height: 22px !important; height: 22px !important; flex-shrink: 0; background: #e2e8f0; color: #334155; border: 1px solid #cbd5e1; border-radius: 3px; padding: 0 8px; font-size: 10px; font-weight: bold; cursor: pointer; line-height: 22px;" title="Copy SKU Mô tả">Copy</button>
+        </div>
+      </div>
+
+      <div id="web-sp-prices-container" style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 6px; align-items: center;">
+          <input type="text" class="web-sp-gia-ban" placeholder="Giá Bán" style="padding: 6px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; width: 100%; box-sizing: border-box;">
+          <input type="text" class="web-sp-gia-thap-nhat" placeholder="Giá Thấp Nhất" style="padding: 6px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; width: 100%; box-sizing: border-box;">
+          <input type="text" class="web-sp-gia-08" placeholder="Gia / 0.8" style="padding: 6px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; width: 100%; box-sizing: border-box;">
+          <button type="button" class="web-sp-btn-copy-08" style="width: auto !important; min-height: 28px !important; height: 28px !important; background-color: #2563eb; color: white; border: none; border-radius: 4px; padding: 0 12px; font-size: 11px; font-weight: bold; cursor: pointer; line-height: 28px;" title="Copy Giá / 0.8">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="tab-doanh-thu" class="tab-content" hidden>
+  <header class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <h1>Doanh Thu (Chi Tiết Giao Dịch Shopee)</h1>
+    <a href="https://banhang.shopee.vn/portal/finance/income?type=2&dateRange=THIS_WEEK" target="_blank" style="font-size: 11px; color: #ee4d2d; text-decoration: none; font-weight: bold;">Mở Shopee Finance ↗</a>
+  </header>
+
+  <div class="panel-section">
+    <!-- Date Range Filter & Auto Run Box -->
+    <div style="background: #f8fafc; padding: 8px 10px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 8px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span style="font-size: 11px; font-weight: bold; color: #334155;">Từ ngày:</span>
+          <input type="date" id="dt-from-date" style="padding: 3px 6px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+          <span style="font-size: 11px; font-weight: bold; color: #334155;">Tới ngày:</span>
+          <input type="date" id="dt-to-date" style="padding: 3px 6px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 4px; background: white;">
+        </div>
+
+        <div style="display: flex; gap: 3px; flex-wrap: wrap;">
+          <button type="button" class="dt-quick-date-btn" data-days="0" style="padding: 2px 6px; font-size: 10px; border: 1px solid #cbd5e1; border-radius: 3px; background: white; cursor: pointer; color: #475569;">Hôm nay</button>
+          <button type="button" class="dt-quick-date-btn" data-days="1" style="padding: 2px 6px; font-size: 10px; border: 1px solid #cbd5e1; border-radius: 3px; background: white; cursor: pointer; color: #475569;">Hôm qua</button>
+          <button type="button" class="dt-quick-date-btn" data-days="7" style="padding: 2px 6px; font-size: 10px; border: 1px solid #cbd5e1; border-radius: 3px; background: white; cursor: pointer; color: #475569;">7 ngày</button>
+          <button type="button" class="dt-quick-date-btn" data-days="30" style="padding: 2px 6px; font-size: 10px; border: 1px solid #cbd5e1; border-radius: 3px; background: white; cursor: pointer; color: #475569;">30 ngày</button>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+        <button id="btn-dt-auto-run" type="button" style="flex: 1; min-width: 200px; background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; font-weight: bold; padding: 7px 12px; font-size: 11px; border-radius: 4px; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.12);">
+          <span>⚡ Tự Động Quét Từng Ngày & Cập Nhật Sheet ĐH</span>
+        </button>
+        <button id="btn-dt-auto-stop" type="button" style="display: none; background: #dc2626; color: white; font-weight: bold; padding: 7px 12px; font-size: 11px; border-radius: 4px; border: none; cursor: pointer;">
+          ⏹ Dừng Lại
+        </button>
+      </div>
+
+      <!-- Auto Scan Progress Info -->
+      <div id="dt-auto-progress" style="display: none; margin-top: 6px; font-size: 11px; color: #3730a3; background: #e0e7ff; padding: 5px 8px; border-radius: 4px; border: 1px solid #c7d2fe; line-height: 1.3;"></div>
+    </div>
+
+    <!-- Toolbar buttons -->
+    <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
+      <button id="btn-dt-read" type="button" class="primary-action" style="flex: 2; min-width: 130px; background-color: #ee4d2d; color: white; font-weight: bold; padding: 8px 6px; font-size: 11px;">⚡ Đọc Doanh Thu Shopee</button>
+      <button id="btn-dt-sync-all-dh" type="button" class="primary-action" style="flex: 2; min-width: 140px; background-color: #059669; color: white; font-weight: bold; padding: 8px 6px; font-size: 11px;">☁️ Cập Nhật Tất Cả Lên Sheet ĐH</button>
+      <button id="btn-dt-copy-tsv" type="button" class="ghost" style="flex: 1; min-width: 65px; padding: 8px 4px; font-size: 11px; border: 1px solid #cbd5e1; background: #f8fafc; color: #1e293b; font-weight: bold;">📋 Copy TSV</button>
+      <button id="btn-dt-export-excel" type="button" class="ghost" style="flex: 1; min-width: 65px; padding: 8px 4px; font-size: 11px; border: 1px solid #cbd5e1; background: #f8fafc; color: #15803d; font-weight: bold;">📊 Xuất Excel</button>
+      <button id="btn-dt-clear" type="button" class="ghost" style="flex: 0 0 auto; padding: 8px 8px; font-size: 11px; border: 1px solid #fecaca; background: #fff5f5; color: #dc2626; font-weight: bold;" title="Xóa dữ liệu đã đọc">🗑️</button>
+    </div>
+
+    <!-- Stats summary -->
+    <div id="dt-stats" style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px; font-size: 11px; flex-wrap: wrap;"></div>
+
+    <!-- Status message -->
+    <p id="dt-status" style="margin: 0 0 8px; font-size: 12px; color: #64748b; line-height: 1.4;"></p>
+
+    <!-- Search filter -->
+    <div style="margin-bottom: 8px;">
+      <input type="text" id="dt-search-input" placeholder="🔍 Tìm theo Mã đơn, Người mua, Ngày, Phương thức, Tiền..." style="width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; box-sizing: border-box;">
+    </div>
+
+    <!-- Data Table -->
+    <div class="table-responsive" style="max-height: calc(100vh - 200px); min-height: 300px; overflow-y: auto; border: 1px solid #d8dee8; border-radius: 4px; background: white;">
+      <table id="table-doanh-thu" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+        <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+          <tr>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; width: 22px; text-align: center; color: #475569;">#</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; color: #475569; width: 15%;">Đơn hàng</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; color: #0284c7; width: 11%;">Link đơn</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; color: #475569; width: 9%;">Ngày chuyển</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; text-align: right; color: #1e293b; width: 10%;">Tiền SP</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; text-align: right; color: #1e293b; width: 8%;">Phí VC</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; text-align: right; color: #dc2626; width: 9%;">Phụ phí</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; text-align: right; color: #dc2626; width: 8%;">Thuế</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; text-align: right; color: #059669; width: 11%;">Doanh thu</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; text-align: center; color: #059669; width: 11%;">Cập nhật ĐH</th>
+            <th style="padding: 8px 4px; border-bottom: 1px solid #cbd5e1; color: #475569; width: 8%;">Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody id="dt-tbody">
+          <tr>
+            <td colspan="6" style="padding: 20px; text-align: center; color: #64748b;">
+              Mở trang Shopee Finance (Doanh thu) và nhấn nút <b>"⚡ Đọc Doanh Thu Shopee"</b>.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="tab-hang-hoan" class="tab-content" hidden>
+<header class="panel-header">
+<h1>Hàng Hoàn Shopee</h1>
+</header>
+<div style="display: flex; gap: 6px; margin-bottom: 10px; align-items: center; flex-wrap: wrap;">
+<button id="btn-read-hang-hoan" type="button" class="primary-action" style="margin-bottom: 0; padding: 4px 10px; font-size: 11px; width: auto !important; min-height: 28px !important; font-weight: bold; background-color: #ee4d2d;">Đọc</button>
+
+<div id="filter-info-btn-group" style="display: flex; gap: 3px;">
+<button class="filter-info-btn active" data-val="ALL" style="width: auto !important; min-height: 26px !important; padding: 4px 8px; font-size: 10px; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; background: #6366f1; color: white; white-space: nowrap;">Thẻ: Tất cả</button>
+<button class="filter-info-btn" data-val="NO" style="width: auto !important; min-height: 26px !important; padding: 4px 8px; font-size: 10px; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; background: white; color: #475569; white-space: nowrap;">Chưa</button>
+<button class="filter-info-btn" data-val="YES" style="width: auto !important; min-height: 26px !important; padding: 4px 8px; font-size: 10px; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; background: white; color: #475569; white-space: nowrap;">Có</button>
+</div>
+
+<div id="filter-return-btn-group" style="display: flex; gap: 3px;">
+<button class="filter-return-btn active" data-val="ALL" style="width: auto !important; min-height: 26px !important; padding: 4px 8px; font-size: 10px; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; background: #6366f1; color: white; white-space: nowrap;">Mã YC: Tất cả</button>
+<button class="filter-return-btn" data-val="YES" style="width: auto !important; min-height: 26px !important; padding: 4px 8px; font-size: 10px; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; background: white; color: #475569; white-space: nowrap;">Có</button>
+<button class="filter-return-btn" data-val="NO" style="width: auto !important; min-height: 26px !important; padding: 4px 8px; font-size: 10px; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 4px; cursor: pointer; background: white; color: #475569; white-space: nowrap;">Không</button>
+</div>
+</div>
+
+<div class="table-responsive" style="max-height: calc(100vh - 180px); overflow: auto; border: 1px solid #d8dee8; border-radius: 4px; background: white;">
+<table id="table-hang-hoan" style="width: 100%; min-width: 1180px; border-collapse: collapse; font-size: 11px; text-align: left;">
+<thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+<tr>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 190px; min-width: 190px;">Sản phẩm</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 110px; min-width: 110px;">Mã đơn hàng</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 110px; min-width: 110px;">Mã yc trả hàng</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 120px; min-width: 120px;">Mã vận đơn trả hàng</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 120px; min-width: 120px;">Phương án cho Người mua</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 150px; min-width: 150px;">Trạng thái</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 150px; min-width: 150px;">Vận chuyển hàng hoàn</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 140px; min-width: 140px;">Thông tin thêm</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 130px; min-width: 130px;">Lý do</th>
+</tr>
+</thead>
+<tbody id="hang-hoan-tbody">
+<tr>
+<td colspan="9" style="padding: 10px; text-align: center; color: #64748b;">Chưa có dữ liệu. Mở trang Trả hàng/Hoàn tiền của Shopee và bấm "Đọc"</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div id="tab-test" class="tab-content" hidden>
+<header class="panel-header">
+<h1>Dữ Liệu Test</h1>
+</header>
+<div class="panel-section">
+<input type="text" id="test-search" placeholder="Tìm kiếm theo SKU hoặc Tên..." style="width: 100%; padding: 6px; margin-bottom: 10px; border: 1px solid #cbd5e1; border-radius: 4px;">
+<div class="table-responsive" style="max-height: calc(100vh - 140px); overflow-y: auto; border: 1px solid #d8dee8; border-radius: 4px;">
+<table id="table-test" style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: left;">
+<thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+<tr>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600;">SKU</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600;">Tên</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600;">Thương hiệu</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600;">Mô tả</th>
+<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600;">Ảnh</th>
+</tr>
+</thead>
+<tbody id="test-tbody">
+<tr>
+<td colspan="5" style="padding: 10px; text-align: center; color: #64748b;">Nhấn vào tab để tải dữ liệu...</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+
+
+<div id="tab-chat-ai" class="tab-content" hidden>
+  <div class="chat-ai-container">
+    
+    <!-- 1. TOP BAR: SCAN & CONNECTION STATUS -->
+    <div class="chat-ai-topbar">
+      <div class="chat-ai-topbar-header">
+        <div class="chat-ai-topbar-title">
+          <span class="chat-ai-logo-icon">🤖</span>
+          <div>
+            <div class="chat-ai-brand-name">Shopee AI Chat Assistant</div>
+            <div class="chat-ai-brand-sub">Quét Realtime &amp; Trả lời tự động</div>
+          </div>
+        </div>
+        <div class="chat-ai-topbar-actions">
+          <label class="chat-ai-realtime-toggle-wrap" title="Tự động phát hiện và quét tin nhắn mới theo thời gian thực không cần ấn nút">
+            <input type="checkbox" id="chat-ai-realtime-toggle" checked>
+            <span class="chat-ai-realtime-label">⚡ Realtime</span>
+          </label>
+          <button id="chat-ai-btn-scan" type="button" class="chat-ai-btn-scan-primary" title="Quét nội dung chat từ tab Shopee Webchat">
+            <span>🔄</span> Quét lại
+          </button>
+          <button id="chat-ai-btn-open-webchat" type="button" class="chat-ai-btn-webchat-link" title="Mở trang Webchat Shopee">
+            ↗ Webchat
+          </button>
+        </div>
+      </div>
+      <div id="chat-ai-status" class="chat-ai-status-banner">
+        Đang tự động kết nối Shopee Webchat (Realtime)...
+      </div>
+    </div>
+
+    <!-- 2. PRODUCT CARD (HIỂN THỊ KHI CÓ SẢN PHẨM) -->
+    <div id="chat-ai-product-section" class="chat-ai-card chat-ai-product-card" style="display: none;">
+      <div class="chat-ai-card-badge">🛍️ Sản phẩm khách đang hỏi</div>
+      <div class="chat-ai-product-body">
+        <img id="chat-ai-product-img" src="" alt="SP" class="chat-ai-p-thumb">
+        <div class="chat-ai-p-details">
+          <div id="chat-ai-product-name" class="chat-ai-p-title"></div>
+          <div class="chat-ai-p-meta">
+            <span id="chat-ai-product-price" class="chat-ai-p-price"></span>
+            <span id="chat-ai-product-orig-price" class="chat-ai-p-orig-price"></span>
+            <span id="chat-ai-product-discount" class="chat-ai-p-pill chat-ai-pill-red"></span>
+            <span id="chat-ai-product-stock" class="chat-ai-p-pill chat-ai-pill-gray"></span>
+            <span id="chat-ai-product-sold" class="chat-ai-p-pill chat-ai-pill-amber"></span>
+          </div>
+        </div>
+      </div>
+      <div id="chat-ai-product-sheet-info" class="chat-ai-sheet-match-box" style="display: none;"></div>
+    </div>
+
+    <!-- 3. CHAT HISTORY & CUSTOMER QUESTION SELECTOR -->
+    <div class="chat-ai-card">
+      <div class="chat-ai-card-head-row">
+        <div class="chat-ai-card-title">💬 Tin nhắn gần đây</div>
+        <span id="chat-ai-selected-count-badge" class="chat-ai-selected-badge">Đã chọn: 0 câu</span>
+      </div>
+
+      <!-- Khung bong bóng chat -->
+      <div id="chat-ai-history-list" class="chat-ai-history-container">
+        <div class="chat-ai-history-empty">Chưa quét dữ liệu chat từ Shopee Webchat</div>
+      </div>
+
+      <!-- Ô nhập câu hỏi đã chọn -->
+      <div class="chat-ai-question-box">
+        <div class="chat-ai-input-head">
+          <label for="chat-ai-customer-question" class="chat-ai-label">👤 Nội dung câu hỏi cần tư vấn:</label>
+          <button id="chat-ai-btn-clear-question-input" type="button" class="chat-ai-btn-clear-text" title="Xóa nội dung">Xóa</button>
+        </div>
+        <textarea id="chat-ai-customer-question" rows="2" class="chat-ai-textarea" placeholder="Nội dung câu hỏi của khách hàng được tick chọn ở trên sẽ hiển thị tại đây (có thể chỉnh sửa trực tiếp)..."></textarea>
+      </div>
+
+      <!-- Chỉ dẫn thêm cho AI (mở rộng trực tiếp) -->
+      <div class="chat-ai-custom-note-wrap">
+        <div class="chat-ai-input-head">
+          <label for="chat-ai-custom-note" class="chat-ai-label">📝 Ghi chú riêng / chỉ dẫn cho Shop (tùy chọn):</label>
+        </div>
+        <input type="text" id="chat-ai-custom-note" class="chat-ai-input-note" placeholder="VD: Bảo hành 12 tháng, giao hỏa tốc 2h, tặng kèm quà...">
+      </div>
+
+      <!-- Phong cách trả lời (4 icon 1 dòng nhỏ lại) -->
+      <div class="chat-ai-style-section">
+        <div class="chat-ai-label">🎯 Chọn phong cách trả lời:</div>
+        <div class="chat-ai-styles-grid">
+          <button type="button" class="chat-ai-style-btn active" data-style="tu_van" title="Tư vấn tận tình">🌸 Tư vấn</button>
+          <button type="button" class="chat-ai-style-btn" data-style="chot_don" title="Chốt đơn nhanh">⚡ Chốt đơn</button>
+          <button type="button" class="chat-ai-style-btn" data-style="voucher" title="Báo giá & Voucher">🏷️ Báo giá</button>
+          <button type="button" class="chat-ai-style-btn" data-style="bao_hanh" title="Bảo hành & Đổi trả">🛡️ Bảo hành</button>
+        </div>
+      </div>
+
+      <!-- Nút AI sinh câu trả lời -->
+      <button id="chat-ai-btn-generate" type="button" class="chat-ai-btn-generate-main">
+        <span>✨</span> AI Sinh Câu Trả Lời
+      </button>
+    </div>
+
+    <!-- 4. KẾT QUẢ AI SINH & TÁC VỤ GỬI -->
+    <div class="chat-ai-card chat-ai-result-card">
+      <div class="chat-ai-card-head-row">
+        <div class="chat-ai-card-title chat-ai-ai-title">
+          <span>✨</span> Câu trả lời AI (Có thể sửa trực tiếp):
+        </div>
+      </div>
+      <textarea id="chat-ai-output-text" rows="3" class="chat-ai-output-textarea" placeholder="Câu trả lời do AI tạo sẽ xuất hiện tại đây..."></textarea>
+      
+      <div class="chat-ai-action-grid">
+        <button id="chat-ai-btn-copy" type="button" class="chat-ai-btn-act chat-ai-btn-act-slate" title="Sao chép câu trả lời vào bộ nhớ">
+          📋 Copy
+        </button>
+        <button id="chat-ai-btn-fill-shopee" type="button" class="chat-ai-btn-act chat-ai-btn-act-blue" title="Điền câu trả lời vào ô chat của Shopee Webchat">
+          📝 Điền Chat
+        </button>
+        <button id="chat-ai-btn-send-shopee" type="button" class="chat-ai-btn-act chat-ai-btn-act-orange" title="Điền và gửi ngay lập tức cho khách">
+          ⚡ Điền &amp; Gửi Luôn
+        </button>
+      </div>
+      <div id="chat-ai-action-feedback" class="chat-ai-feedback-msg" style="display: none;"></div>
+    </div>
+
+    <!-- 5. MẪU TRẢ LỜI NHANH (Cột H sheet CAI_DAT & Tùy chỉnh) -->
+    <div class="chat-ai-card chat-ai-templates-card">
+      <div class="chat-ai-card-head-row">
+        <div class="chat-ai-card-title">
+          <span>⚡</span> Mẫu trả lời nhanh (Cột H sheet CAI_DAT)
+        </div>
+        <div class="chat-ai-tpl-tools">
+          <button id="chat-ai-btn-toggle-add-template" type="button" class="chat-ai-tpl-btn chat-ai-tpl-btn-green" title="Thêm câu mẫu mới">+ Thêm mẫu</button>
+          <button id="chat-ai-btn-toggle-preset-templates" type="button" class="chat-ai-tpl-btn" title="Gợi ý các mẫu câu thông dụng">💡 Mẫu gợi ý</button>
+          <button id="chat-ai-btn-refresh-templates" type="button" class="chat-ai-tpl-btn" title="Tải lại mẫu từ Sheet CAI_DAT">🔄 Làm mới</button>
+        </div>
+      </div>
+
+      <!-- KHUNG THÊM MẪU MỚI (ẨN / HIỆN) -->
+      <div id="chat-ai-add-template-panel" class="chat-ai-subpanel" style="display: none;">
+        <label for="chat-ai-new-template-input" class="chat-ai-subpanel-title">➕ Nhập nội dung câu mẫu mới:</label>
+        <textarea id="chat-ai-new-template-input" rows="2" class="chat-ai-textarea" placeholder="Ví dụ: Dạ sản phẩm bên mình luôn có sẵn và bảo hành 12 tháng ạ..."></textarea>
+        <div class="chat-ai-subpanel-footer">
+          <button id="chat-ai-btn-cancel-add-template" type="button" class="chat-ai-subpanel-btn-cancel">Hủy</button>
+          <button id="chat-ai-btn-save-new-template" type="button" class="chat-ai-subpanel-btn-save">💾 Lưu câu mẫu</button>
+        </div>
+      </div>
+
+      <!-- KHUNG MẪU GỢI Ý (ẨN / HIỆN) -->
+      <div id="chat-ai-preset-templates-panel" class="chat-ai-subpanel chat-ai-preset-panel" style="display: none;">
+        <div class="chat-ai-subpanel-head">
+          <span class="chat-ai-subpanel-title" style="color: #92400e;">💡 Mẫu câu chăm sóc khách hàng hay dùng:</span>
+          <button id="chat-ai-btn-close-presets" type="button" class="chat-ai-btn-close">✕ Đóng</button>
+        </div>
+        <div id="chat-ai-preset-templates-list" class="chat-ai-preset-list"></div>
+      </div>
+
+      <!-- Ô tìm kiếm mẫu nhanh -->
+      <div class="chat-ai-search-wrap">
+        <input type="text" id="chat-ai-search-template" class="chat-ai-search-input" placeholder="🔍 Tìm mẫu câu trả lời nhanh...">
+      </div>
+
+      <!-- Danh sách mẫu câu trả lời -->
+      <div id="chat-ai-templates-list" class="chat-ai-templates-container">
+        <div class="chat-ai-templates-loading">Đang tải mẫu trả lời nhanh...</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="tab-settings" class="tab-content" hidden>
+<section class="tool-section">
+<div class="section-head">
+<h2>Cài đặt</h2>
+</div>
+<div style="margin-bottom: 20px; padding: 10px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+<label for="config-spreadsheet-id" style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 5px; color: #1e293b;">Google Spreadsheet ID</label>
+<input type="text" id="config-spreadsheet-id" style="width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 13px;" placeholder="">
+
+<button id="btn-save-config" type="button" class="primary-action" style="width: 100%; margin-top: 10px;">Lưu Spreadsheet ID</button>
+<p id="save-config-status" style="margin-top: 8px; margin-bottom: 0; font-size: 12px; color: #22c55e; font-weight: bold;"></p>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 0.9fr); gap: 8px; align-items: stretch; margin-top: 12px;">
+<p id="sheet-home-b2" style="margin: 0; font-size: 13px; font-weight: bold; padding: 8px; background: white; border-radius: 4px; border: 1px solid #cbd5e1; min-width: 0; overflow-wrap: anywhere;"></p>
+<p id="saved-spreadsheet-id" style="margin: 0; font-size: 12px; font-weight: bold; padding: 8px; background: white; border-radius: 4px; border: 2px solid #ef4444; color: #1e293b; min-width: 0; overflow-wrap: anywhere;"></p>
+</div>
+</div>
+<div id="gemini-config-section" style="margin-bottom: 20px; padding: 12px; background: #fff7ed; border-radius: 8px; border: 1px solid #fed7aa;">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;">
+<h3 style="font-size: 13px; margin: 0; color: #1e293b;">Cau hinh Gemini</h3>
+<span id="gemini-config-status" style="font-size: 11px; font-weight: bold; color: #64748b;"></span>
+</div>
+<p style="margin: 0 0 10px; font-size: 11px; color: #9a3412;">API Key va model duoc luu trong trinh duyet nay bang chrome.storage.local.</p>
+<label for="gemini-api-key" style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px; color: #1e293b;">API Key Gemini</label>
+<div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
+<input type="text" id="gemini-api-key" list="gemini-api-keys-list" placeholder="Dan API Key tai day" autocomplete="off" style="flex: 1; min-width: 0; padding: 8px; box-sizing: border-box; border: 1px solid #fed7aa; border-radius: 6px; font-size: 12px;">
+<datalist id="gemini-api-keys-list"></datalist>
+<button id="btn-toggle-gemini-key" type="button" title="Hien/an API Key" style="width: 34px; min-height: 34px; padding: 0; border: 1px solid #fed7aa; border-radius: 6px; background: white; cursor: pointer;">Hide</button>
+</div>
+<div style="background-color: #ffedd5; padding: 10px; border-radius: 6px; border: 1px solid #fed7aa; margin-bottom: 10px;">
+<p style="margin: 0 0 6px; font-size: 11px; font-weight: bold; color: #9a3412;">Chức năng API Gemini:</p>
+<p style="margin: 0; font-size: 11px; color: #9a3412; line-height: 1.4;">
+Trong extension của bạn, Gemini API đang được dùng để tự động viết mô tả sản phẩm chuẩn SEO bằng AI.<br>
+Cụ thể, khi extension xử lý chức năng "Tạo mô tả bằng AI", nó sẽ gửi tên sản phẩm của bạn cho Gemini cùng với lệnh:<br>
+<i>"Hãy đóng vai chuyên gia viết nội dung chuẩn SEO cho các sàn thương mại điện tử..."</i><br>
+Yêu cầu viết đoạn mô tả hấp dẫn, bao gồm: Lời giới thiệu thu hút, Tính năng nổi bật, và Lợi ích khi sử dụng.<br>
+Kết quả trả về sẽ tự động định dạng bằng HTML cơ bản (&lt;p&gt;, &lt;b&gt;, &lt;ul&gt;, &lt;li&gt;...) để hiển thị đẹp mắt và chuẩn form khi dán lên Shopee.
+</p>
+</div>
+
+<label for="gemini-model-select" style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px; color: #1e293b;">Model Gemini</label>
+<select id="gemini-model-select" style="width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #fed7aa; border-radius: 6px; font-size: 12px; background: white; margin-bottom: 10px;"></select>
+
+<label for="gemini-new-model" style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 5px; color: #1e293b;">Them model moi</label>
+<div style="display: flex; gap: 6px; align-items: center; margin-bottom: 8px;">
+<input type="text" id="gemini-new-model" placeholder="vd: gemini-3.0-pro" style="flex: 1; min-width: 0; padding: 8px; box-sizing: border-box; border: 1px solid #fed7aa; border-radius: 6px; font-size: 12px;">
+<button id="btn-add-gemini-model" type="button" style="width: auto; white-space: nowrap; padding: 8px 10px; background: white; color: #ea580c; border: 1px solid #fb923c; border-radius: 6px; font-weight: bold; cursor: pointer;">Th�m</button>
+</div>
+<div id="gemini-model-chips" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px;"></div>
+
+<div id="xkiro-config-section" style="margin-bottom: 12px; padding: 10px; background: #f0fdf4; border-radius: 6px; border: 1px solid #bbf7d0;">
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+  <span style="font-size: 12px; font-weight: bold; color: #166534;">⚡ API Dự phòng (XKiro AI: DeepSeek, Qwen Free...)</span>
+  <span style="font-size: 10px; background: #dcfce7; color: #15803d; padding: 2px 6px; border-radius: 4px; font-weight: bold;">Tự động chạy khi Gemini hết hạn / quá tải</span>
+</div>
+<label for="xkiro-api-key" style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 4px; color: #1e293b;">API Key XKiro</label>
+<div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
+  <input type="text" id="xkiro-api-key" placeholder="sk-xt-27e56ff5d3d864c86e4993e85cf95f1695698217d913faf3" autocomplete="off" style="flex: 1; min-width: 0; padding: 6px 8px; box-sizing: border-box; border: 1px solid #86efac; border-radius: 6px; font-size: 11px;">
+  <button id="btn-toggle-xkiro-key" type="button" style="width: 34px; min-height: 30px; padding: 0; border: 1px solid #86efac; border-radius: 6px; background: white; cursor: pointer; font-size: 11px;">Hide</button>
+</div>
+<label for="xkiro-model-select" style="font-size: 11px; font-weight: bold; display: block; margin-bottom: 4px; color: #1e293b;">Chọn Model XKiro</label>
+<select id="xkiro-model-select" style="width: 100%; padding: 6px 8px; box-sizing: border-box; border: 1px solid #86efac; border-radius: 6px; font-size: 11px; background: white; margin-bottom: 6px;">
+  <option value="deepseek/deepseek-v4-flash">deepseek/deepseek-v4-flash (Tốc độ cao)</option>
+  <option value="deepseek/deepseek-v4-pro">deepseek/deepseek-v4-pro (Chất lượng cao)</option>
+  <option value="qwen/qwen3.8-max:free">qwen/qwen3.8-max:free (Miễn phí)</option>
+  <option value="qwen/qwen3.7-max:free">qwen/qwen3.7-max:free (Miễn phí)</option>
+  <option value="qwen/qwen3.7-plus:free">qwen/qwen3.7-plus:free (Miễn phí)</option>
+  <option value="qwen/qwen3.6-plus:free">qwen/qwen3.6-plus:free (Miễn phí)</option>
+  <option value="minimax/minimax-m2.7-highspeed:free">minimax/minimax-m2.7-highspeed:free (Miễn phí)</option>
+</select>
+<div style="display: flex; gap: 6px; align-items: center;">
+  <input type="text" id="xkiro-new-model" placeholder="Nhập model khác (vd: deepseek/deepseek-v4-pro)" style="flex: 1; min-width: 0; padding: 6px 8px; box-sizing: border-box; border: 1px solid #86efac; border-radius: 6px; font-size: 11px;">
+  <button id="btn-add-xkiro-model" type="button" style="width: auto; white-space: nowrap; padding: 6px 10px; background: white; color: #15803d; border: 1px solid #86efac; border-radius: 6px; font-weight: bold; font-size: 11px; cursor: pointer;">Thêm</button>
+</div>
+</div>
+
+<button id="btn-test-gemini-config" type="button" class="secondary" style="width: 100%; margin-bottom: 8px; border: 1px solid #fed7aa; background: white; color: #9a3412;">Kiem tra ket noi</button>
+<button id="btn-save-gemini-config" type="button" class="primary-action" style="width: 100%; background: linear-gradient(135deg, #f97316, #fbbf24); color: white; border: none;">Luu cau hinh Gemini</button>
+</div>
+<div class="dh-hoan-section" style="margin-bottom: 16px; border: 1px solid #e2e8f0; padding: 8px; border-radius: 4px;">
+<h3 style="font-size: 13px; margin-bottom: 8px; color: #334155; margin-top: 0;">Mã gian</h3>
+<div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+<input list="gian-suggestions" id="dh-hoan-text" placeholder="Mã gian" style="flex: 1; min-width: 60px; padding: 6px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 4px;">
+<input id="gian-link-text" placeholder="Link giảm giá..." style="flex: 3; min-width: 120px; padding: 6px; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 4px;">
+<button id="btn-save-gian-sheet" type="button" style="flex: 0 0 auto; width: auto; white-space: nowrap; padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">Lưu</button>
+</div>
+<datalist id="gian-suggestions"></datalist>
+<p id="gian-status" style="font-size: 12px; margin-top: 0; margin-bottom: 8px;"></p>
+
+</div>
+
+<input type="file" id="upload-excel-sp-shopee" accept=".xlsx, .xls" style="display: none;">
+<button id="btn-upload-sp-shopee" type="button" class="primary-action" style="width: 100%; margin-top: 10px;">Tải lên Excel SP_SHOPEE</button>
+<p id="upload-sp-shopee-status" style="margin-top: 8px; margin-bottom: 15px; font-size: 12px; color: #64748b;"></p>
+
+<input type="file" id="upload-excel-sp-giam-gia" accept=".xlsx, .xls" style="display: none;">
+<button id="btn-upload-sp-giam-gia" type="button" class="secondary" style="width: 100%; margin-top: 10px; border: 1px solid #d8dee8;">Tải lên Excel SP_GIAM_GIA</button>
+<p id="upload-sp-giam-gia-status" style="margin-top: 8px; font-size: 12px; color: #64748b;"></p>
+<button id="btn-tai-ds-sp" type="button" class="primary-action" style="width: 100%; margin-top: 15px; background-color: #f59e0b; color: white;">Tải DS_SP</button>
+<button id="btn-tai-giam-gia" type="button" class="secondary" style="width: 100%; margin-top: 10px; background-color: #8b5cf6; color: white; border: none; padding: 10px; font-weight: bold; border-radius: 4px; cursor: pointer;">Tải giảm giá</button>
+<p id="giam-gia-download-status" style="margin-top: 8px; font-size: 12px; color: #16a34a; font-weight: bold;"></p>
+<p id="ds-sp-download-status" style="margin-top: 8px; font-size: 12px; color: #16a34a; font-weight: bold;"></p>
+
+
+</section>
+</div>
+
+</main>
+<script src="../lib/xlsx.full.min.js"></script>
+<script src="popup.js"></script>
+<script src="tabs/sp_tab.js"></script>
+<script src="tabs/order_tab.js"></script>
+<script src="tabs/ds_sp_tab.js"></script>
+<script src="tabs/test_tab.js"></script>
+<script src="tabs/sheet_sp_shopee_tab.js"></script>
+<script src="tabs/sp_giam_gia_tab.js"></script>
+<script src="tabs/km_tab.js"></script>
+<script src="tabs/web_sp_tab.js"></script>
+<script src="tabs/hang_hoan_tab.js"></script>
+<script src="tabs/hieu_qua_sp_tab.js"></script>
+<script src="tabs/day_sp_tab.js"></script>
+<script src="tabs/doanh_thu_tab.js"></script>
+<script src="tabs/chat_ai_tab.js"></script>
+<script src="tabs/nhieu_don_hang_tab.js"></script>
+<script src="tabs/tao_phieu_tab.js"></script>
+<script src="tabs/in_tu_dong_tab.js"></script>
+</body>
+
+</html>

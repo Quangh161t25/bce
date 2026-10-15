@@ -1,13 +1,14 @@
 {
-  "name": "bce-management-system",
+  "name": "shopee-quan-ly-sp",
   "private": true,
   "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node -e \"const fs=require('fs'); let h=fs.readFileSync('dist/template.html','utf8'); fs.writeFileSync('dist/index.html',h); let rh=h.replace(/\\.\\/assets\\//g, './dist/assets/').replace(/<script type=\\\"module\\\" crossorigin/g, '<script'); fs.writeFileSync('index.html', rh);\"",
-    "build:single": "node -e \"process.env.SINGLE_FILE='true'\" && vite build && node -e \"fs.copyFileSync('dist/template.html', 'bce-standalone.html');\"",
-    "preview": "vite preview"
+    "build": "vite build",
+    "build:standalone": "node -e \"process.env.SINGLE_FILE='true'; require('child_process').execSync('npx vite build', {stdio:'inherit', env: process.env})\"",
+    "preview": "vite preview",
+    "serve": "python tools/server.py"
   },
   "dependencies": {
     "jsrsasign": "^11.1.0",
