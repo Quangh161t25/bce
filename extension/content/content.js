@@ -11700,6 +11700,7 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
   }
 
   let cachedUdCtMdhIds = new Map();
+  let cachedUdCtItemsByMdh = new Map();
   let isFetchingUdCtMdhIds = false;
   let lastFetchUdCtMdhIdsTime = 0;
 
@@ -11712,15 +11713,21 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
           const response = await new Promise(resolve => chrome.runtime.sendMessage({ type: "FETCH_UD_CT_MDH" }, resolve));
           if (response && response.ok && response.values) {
               cachedUdCtMdhIds.clear();
+              cachedUdCtItemsByMdh.clear();
               for (const row of response.values) {
                   const id = String(row[8] || "").trim();
                   if (id) {
                       const ngay = String(row[0] || "").trim();
                       const san = String(row[4] || "").trim();
                       const khungh = String(row[5] || "").trim();
+                      const maGian = String(row[6] || "").trim();
                       const mvd = String(row[7] || id || "").trim();
-                      const idspct = String(row[12] || "").trim();
+                      const skuShopUp = String(row[9] || "").trim();
+                      const soLuong = parseInt(String(row[10] || "1").trim(), 10) || 1;
+                      const idspct = String(row[12] || "").trim() || skuShopUp;
+                      const tenSp = String(row[13] || "").trim();
                       const trangthai = String(row[20] || "").trim();
+
                       const displayText = [ngay, san, khungh, mvd, idspct, trangthai].filter(Boolean).join(" - ");
                       const idUpper = id.toUpperCase();
                       const prev = cachedUdCtMdhIds.get(id) || cachedUdCtMdhIds.get(idUpper) || "";
@@ -11728,6 +11735,24 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
                       cachedUdCtMdhIds.set(id, combined);
                       if (idUpper !== id) {
                           cachedUdCtMdhIds.set(idUpper, combined);
+                      }
+
+                      const udItem = {
+                          sku: idspct,
+                          ten_sp: tenSp,
+                          so_luong: soLuong,
+                          mvd: mvd,
+                          ma_gian: maGian
+                      };
+                      if (!cachedUdCtItemsByMdh.has(id)) {
+                          cachedUdCtItemsByMdh.set(id, []);
+                      }
+                      cachedUdCtItemsByMdh.get(id).push(udItem);
+                      if (idUpper !== id) {
+                          if (!cachedUdCtItemsByMdh.has(idUpper)) {
+                              cachedUdCtItemsByMdh.set(idUpper, []);
+                          }
+                          cachedUdCtItemsByMdh.get(idUpper).push(udItem);
                       }
                   }
               }
@@ -11739,6 +11764,57 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       } finally {
           isFetchingUdCtMdhIds = false;
       }
+  }
+
+  let cachedHhShopDienFilledOrders = new Set();
+  let isFetchingHhShopDienMdh = false;
+  let lastFetchHhShopDienMdhTime = 0;
+
+  async function updateHhShopDienCache(force = false) {
+      if (isFetchingHhShopDienMdh) return;
+      const now = Date.now();
+      if (!force && (now - lastFetchHhShopDienMdhTime < 30000)) return;
+      isFetchingHhShopDienMdh = true;
+      try {
+          const response = await new Promise(resolve => chrome.runtime.sendMessage({ type: "FETCH_HH_SHOP_DIEN_MDH" }, resolve));
+          if (response && response.ok && response.values) {
+              cachedHhShopDienFilledOrders.clear();
+              for (const row of response.values) {
+                  const mdh = String(row[0] || "").trim();
+                  if (mdh) {
+                      cachedHhShopDienFilledOrders.add(mdh);
+                      cachedHhShopDienFilledOrders.add(mdh.toUpperCase());
+                  }
+              }
+              lastFetchHhShopDienMdhTime = Date.now();
+              updateHhShopDienButtonColors();
+          }
+      } catch(e) {
+          console.error("Lỗi updateHhShopDienCache:", e);
+      } finally {
+          isFetchingHhShopDienMdh = false;
+      }
+  }
+
+  function updateHhShopDienButtonColors() {
+      document.querySelectorAll(".btn-hh-shop-dien-action").forEach(btn => {
+          const id = btn.dataset.shopeeQlspHhShopDienOrderId;
+          const isFilled = btn.dataset.shopeeQlspHhShopDienFilled === "1" || 
+                           (id && (cachedHhShopDienFilledOrders.has(id) || cachedHhShopDienFilledOrders.has(id.toUpperCase())));
+          if (isFilled) {
+              btn.style.setProperty("background-color", "#059669", "important"); // Màu xanh lá (#059669)
+              btn.style.setProperty("border-color", "#047857", "important");
+              btn.style.setProperty("color", "#ffffff", "important");
+              btn.innerHTML = "✓ HH Shop Điền";
+              btn.title = "Đã điền vào Sheet HH_SHOP_DIEN";
+          } else {
+              btn.style.setProperty("background-color", "#64748b", "important"); // Màu xám
+              btn.style.removeProperty("border-color");
+              btn.style.setProperty("color", "#ffffff", "important");
+              btn.innerHTML = "📝 HH Shop Điền";
+              btn.title = "Điền đơn hàng này vào Sheet HH_SHOP_DIEN (WAMELI KHO-SHOP)";
+          }
+      });
   }
 
   let cachedDonHangMdhIndices = new Map();
@@ -12023,9 +12099,9 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
               btn.style.setProperty("font-weight", "bold", "important");
               btn.title = "Đã có trong Sheet DH (chưa cập nhật trạng thái)";
           }
-          // 3. CHƯA CÓ TRONG SHEET DH -> MÀU ĐỎ CAM
+          // 3. CHƯA CÓ TRONG SHEET DH -> MÀU XÁM (#64748b)
           else {
-              btn.style.setProperty("background-color", "#ee4d2d", "important");
+              btn.style.setProperty("background-color", "#64748b", "important"); // Màu xám
               btn.style.removeProperty("border-color");
               btn.style.setProperty("color", "#ffffff", "important");
               btn.style.removeProperty("font-weight");
@@ -12278,6 +12354,12 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
     if (!orderId && targetEl) {
       orderId = extractShopeeCode(targetEl.textContent);
     }
+    if (!orderId && targetEl.dataset?.shopeeQlspCopyReturnOrderId) {
+      orderId = targetEl.dataset.shopeeQlspCopyReturnOrderId;
+    }
+    if (!orderId && targetEl.dataset?.shopeeQlspHhShopDienOrderId) {
+      orderId = targetEl.dataset.shopeeQlspHhShopDienOrderId;
+    }
 
     // 2. Return ID
     let returnId = "";
@@ -12289,14 +12371,37 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       }
     }
 
-    // 3. Return tracking (mvd_tra)
+    // 3. Return tracking (mvd_tra) & Ngày trả (ngayTra) từ cột Vận chuyển hàng hoàn (Image 1 & Image 2)
     let returnTracking = "";
+    let ngayTra = "";
     if (rowContainer) {
-      const trackingEl = rowContainer.querySelector(".item-return-logistic .tracking-number, .tracking-number, [class*=\"tracking\"]");
+      const logisticCol = rowContainer.querySelector(".item-return-logistic, [class*='return-logistic'], .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(8), .return-item-main-content > .eds-col:nth-child(8)") || rowContainer;
+      
+      const trackingEl = (logisticCol && logisticCol.querySelector(".tracking-number, [class*=\"tracking\"]")) ||
+                         rowContainer.querySelector(".item-return-logistic .tracking-number, .tracking-number, [class*=\"tracking\"]");
       if (trackingEl) {
         const clone = trackingEl.cloneNode(true);
         clone.querySelectorAll("span, .hh-bh-info, [class*='info']").forEach(s => s.remove());
         returnTracking = clone.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+      }
+
+      if (!returnTracking && logisticCol) {
+        const fullText = logisticCol.innerText || logisticCol.textContent || "";
+        const m = fullText.match(/\b(SPXVN[0-9A-Z]+|VN[0-9A-Z]+|[A-Z0-9]{12,20})\b/i);
+        if (m) {
+          returnTracking = m[1].trim();
+        }
+      }
+
+      // Trích xuất ngày trả từ cột vận chuyển hàng hoàn (Image 2: ví dụ "Đã giao hàng ngày 19-10-2026")
+      const searchBox = (logisticCol !== rowContainer ? logisticCol : null) || rowContainer.querySelector(".item-return-logistic, [class*='return-logistic']") || rowContainer;
+      const logText = searchBox ? (searchBox.innerText || searchBox.textContent || "") : "";
+      const mDateMatch = logText.match(/(?:ngày|vào|lúc)?\s*(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/i);
+      if (mDateMatch) {
+        const d = String(mDateMatch[1]).padStart(2, '0');
+        const m = String(mDateMatch[2]).padStart(2, '0');
+        const y = mDateMatch[3];
+        ngayTra = `${d}/${m}/${y}`;
       }
     }
 
@@ -12317,7 +12422,7 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
         if (m) forwardTracking = m[1];
       }
     }
-    // Fallback: Nếu không có mã vận đơn chiều đi riêng, dùng mã vận đơn trả hàng (như đơn hoàn tiền ngay / giao không thành công)
+    // Fallback: Nếu không có mã vận đơn chiều đi riêng, dùng mã vận đơn trả hàng
     if (!forwardTracking) {
       forwardTracking = returnTracking;
     }
@@ -12404,6 +12509,7 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       returnId,
       forwardTracking,
       returnTracking,
+      ngayTra,
       reason,
       hoanTra,
       products
@@ -12421,40 +12527,86 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
     const ss = pad(now.getSeconds());
 
     const ngay_tao = `${hh}:${min}:${ss} ${dd}/${mm}/${yyyy}`;
-    const ngay_tra = `${dd}/${mm}/${yyyy}`;
+    // Ưu tiên ngày trả trích xuất từ cột Vận chuyển hàng hoàn (Image 2), nếu không có fallback về ngày hiện tại
+    const ngay_tra = details.ngayTra || `${dd}/${mm}/${yyyy}`;
     const cleanGian = String(maGian || "").trim().toUpperCase() || "BCE";
 
     const rows = [];
     const baseId = Date.now();
 
-    details.products.forEach((p, idx) => {
-      const rowId = String(baseId + idx);
-      const skuVal = p.sku || "";
-      const skuTra = p.sku || "";
-      const tenSp = p.pName || "";
-      const sl = String(p.qty || 1);
-      const anh = p.imgUrl || "";
+    const orderId = String(details.orderId || "").trim();
+    const udItems = (orderId && (cachedUdCtItemsByMdh.get(orderId) || cachedUdCtItemsByMdh.get(orderId.toUpperCase()))) || [];
 
-      // 16 cột tương ứng chính xác với sheet HH_SHOP_DIEN (A:P)
-      rows.push([
-        rowId,                                    // Col A (0): id
-        ngay_tao,                                 // Col B (1): ngay_tao
-        ngay_tra,                                 // Col C (2): ngay_tra
-        details.forwardTracking || "",            // Col D (3): mvd
-        details.orderId || "",                    // Col E (4): mdh
-        cleanGian,                                // Col F (5): ma_gian
-        skuVal,                                   // Col G (6): sku
-        tenSp,                                    // Col H (7): ten_sp
-        details.returnTracking || "",             // Col I (8): mvd_tra
-        skuTra,                                   // Col J (9): sku_tra
-        sl,                                       // Col K (10): sl
-        details.hoanTra || "Trả",                 // Col L (11): hoan_tra
-        details.reason || "",                     // Col M (12): ghi_chu
-        "CHỜ XÁC NHẬN",                           // Col N (13): xac_nhan
-        "SHOP ĐIỀN",                              // Col O (14): nguoi_nhap
-        anh                                       // Col P (15): anh
-      ]);
-    });
+    // Nếu tìm thấy đơn hàng trong sheet UD_CT:
+    // Đọc tất cả sku cùng mdh, ten_sp ăn theo các sku, mvd_tra là mã trong ảnh, sku_tra và slg tương tự như sku
+    if (udItems.length > 0) {
+      udItems.forEach((item, idx) => {
+        const rowId = String(baseId + idx);
+        const skuVal = item.sku || "";
+        const skuTra = item.sku || "";
+        const tenSp = item.ten_sp || "";
+        const sl = String(item.so_luong || 1);
+        const mvdChieuDi = item.mvd || details.forwardTracking || "";
+        const itemGian = item.ma_gian ? item.ma_gian.toUpperCase() : cleanGian;
+
+        // Trích xuất link ảnh từ sản phẩm cào trên web nếu có
+        let anh = "";
+        if (details.products && details.products[idx] && details.products[idx].imgUrl) {
+          anh = details.products[idx].imgUrl;
+        } else if (details.products && details.products[0] && details.products[0].imgUrl) {
+          anh = details.products[0].imgUrl;
+        }
+
+        // 16 cột tương ứng chính xác với sheet HH_SHOP_DIEN (A:P)
+        rows.push([
+          rowId,                                    // Col A (0): id
+          ngay_tao,                                 // Col B (1): ngay_tao
+          ngay_tra,                                 // Col C (2): ngay_tra
+          mvdChieuDi,                               // Col D (3): mvd
+          orderId,                                  // Col E (4): mdh
+          itemGian,                                 // Col F (5): ma_gian
+          skuVal,                                   // Col G (6): sku
+          tenSp,                                    // Col H (7): ten_sp
+          details.returnTracking || "",             // Col I (8): mvd_tra
+          skuTra,                                   // Col J (9): sku_tra
+          sl,                                       // Col K (10): sl
+          details.hoanTra || "Trả",                 // Col L (11): hoan_tra
+          details.reason || "",                     // Col M (12): ghi_chu
+          "CHỜ XÁC NHẬN",                           // Col N (13): xac_nhan
+          "SHOP ĐIỀN",                              // Col O (14): nguoi_nhap
+          anh                                       // Col P (15): anh
+        ]);
+      });
+    } else {
+      // Fallback: nếu đơn hàng chưa đồng bộ trong UD_CT thì điền các sản phẩm trích xuất từ giao diện Shopee
+      details.products.forEach((p, idx) => {
+        const rowId = String(baseId + idx);
+        const skuVal = p.sku || "";
+        const skuTra = p.sku || "";
+        const tenSp = p.pName || "";
+        const sl = String(p.qty || 1);
+        const anh = p.imgUrl || "";
+
+        rows.push([
+          rowId,                                    // Col A (0): id
+          ngay_tao,                                 // Col B (1): ngay_tao
+          ngay_tra,                                 // Col C (2): ngay_tra
+          details.forwardTracking || "",            // Col D (3): mvd
+          orderId,                                  // Col E (4): mdh
+          cleanGian,                                // Col F (5): ma_gian
+          skuVal,                                   // Col G (6): sku
+          tenSp,                                    // Col H (7): ten_sp
+          details.returnTracking || "",             // Col I (8): mvd_tra
+          skuTra,                                   // Col J (9): sku_tra
+          sl,                                       // Col K (10): sl
+          details.hoanTra || "Trả",                 // Col L (11): hoan_tra
+          details.reason || "",                     // Col M (12): ghi_chu
+          "CHỜ XÁC NHẬN",                           // Col N (13): xac_nhan
+          "SHOP ĐIỀN",                              // Col O (14): nguoi_nhap
+          anh                                       // Col P (15): anh
+        ]);
+      });
+    }
 
     return rows;
   }
@@ -12472,6 +12624,10 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
     btn.disabled = true;
 
     try {
+      if (typeof cachedUdCtItemsByMdh === "undefined" || cachedUdCtItemsByMdh.size === 0) {
+        await updateUdCtMdhIdsCache();
+      }
+
       const storageRes = await new Promise(resolve => {
         chrome.storage.local.get(["maGian", "dhHoanTextValue"], resolve);
       });
@@ -12494,21 +12650,24 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
           return;
         }
 
+        if (details.orderId) {
+          cachedHhShopDienFilledOrders.add(details.orderId);
+          cachedHhShopDienFilledOrders.add(details.orderId.toUpperCase());
+        }
         btn.innerHTML = "✓ Đã điền";
-        btn.style.backgroundColor = "#10b981";
-        btn.style.borderColor = "#059669";
-        btn.style.color = "#ffffff";
+        btn.style.setProperty("background-color", "#059669", "important");
+        btn.style.setProperty("border-color", "#047857", "important");
+        btn.style.setProperty("color", "#ffffff", "important");
         btn.dataset.shopeeQlspHhShopDienFilled = "1";
 
         if (typeof showWebchatToast === "function") {
-          showWebchatToast(`Đã điền ${rows.length} sản phẩm (đơn ${details.orderId || details.returnTracking}) vào HH_SHOP_DIEN thành công!`, "success");
+          showWebchatToast(`Đã điền ${rows.length} dòng (đơn ${details.orderId || details.returnTracking}) vào HH_SHOP_DIEN thành công!`, "success");
         }
 
         setTimeout(() => {
-          btn.innerHTML = origText;
-          btn.style.backgroundColor = "#059669";
+          updateHhShopDienButtonColors();
           btn.disabled = false;
-        }, 4000);
+        }, 2000);
       });
     } catch (err) {
       alert("Lỗi: " + (err.message || String(err)));
@@ -12546,6 +12705,10 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
     btn.disabled = true;
 
     try {
+      if (typeof cachedUdCtItemsByMdh === "undefined" || cachedUdCtItemsByMdh.size === 0) {
+        await updateUdCtMdhIdsCache();
+      }
+
       const storageRes = await new Promise(resolve => {
         chrome.storage.local.get(["maGian", "dhHoanTextValue"], resolve);
       });
@@ -12587,16 +12750,25 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
             return;
           }
 
+          for (const el of orderIdElements) {
+            const oId = extractShopeeCode(el.textContent);
+            if (oId) {
+              cachedHhShopDienFilledOrders.add(oId);
+              cachedHhShopDienFilledOrders.add(oId.toUpperCase());
+            }
+          }
+
           btn.innerHTML = `✓ Đã điền ${allRows.length} dòng!`;
-          btn.style.backgroundColor = "#10b981";
+          btn.style.backgroundColor = "#059669";
 
           rowButtons.forEach(rb => {
             rb.innerHTML = "✓ Đã điền";
-            rb.style.backgroundColor = "#10b981";
-            rb.style.borderColor = "#059669";
+            rb.style.backgroundColor = "#059669";
+            rb.style.borderColor = "#047857";
             rb.style.color = "#ffffff";
             rb.dataset.shopeeQlspHhShopDienFilled = "1";
           });
+          updateHhShopDienButtonColors();
 
           if (typeof showWebchatToast === "function") {
             showWebchatToast(`Đã điền thành công ${allRows.length} dòng vào Sheet HH_SHOP_DIEN!`, "success");
@@ -12841,8 +13013,10 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
     updateDhHoanIdsCache().then(() => updateCopyButtonColors());
     updateHhBhMvdIdsCache().then(() => updateTrackingNumberColors());
     updateUdCtMdhIdsCache().then(() => updateUdCtBadgeColors());
+    updateHhShopDienCache().then(() => updateHhShopDienButtonColors());
     updateTrackingNumberColors();
     updateUdCtBadgeColors();
+    updateHhShopDienButtonColors();
 
     // Dọn dẹp bất kỳ badge tiêu đề cũ nào ở trên (chỉ giữ 1 ô hiển thị bên dưới trong cụm nút)
     document.querySelectorAll('.ud-ct-badge').forEach(badge => {
@@ -12872,7 +13046,8 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       container.addEventListener("click", (e) => { e.stopPropagation(); });
       container.addEventListener("mousedown", (e) => { e.stopPropagation(); });
 
-      const btnCopy = createActionBtn("Copy Data", "#ee4d2d", () => {
+      // Mặc định tất cả các nút ban đầu màu xám (#64748b)
+      const btnCopy = createActionBtn("Copy Data", "#64748b", () => {
         const rowData = extractReturnRowData(orderIdEl);
         if (!rowData) return;
         const copyLines = [];
@@ -12906,6 +13081,10 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       btnCopy.dataset.shopeeQlspCopyReturnOrderId = directOrderId;
       btnCopy.classList.add("btn-copy-return-data-check");
       
+      // Copy Data đổi màu theo điều kiện cũ:
+      // 1. Đã cập nhật trạng thái -> Xanh lá (#22c55e)
+      // 2. Đã có trong Sheet DH -> Be (#cbb89d)
+      // 3. Chưa có -> Mặc định xám (#64748b)
       if (directOrderId) {
           if (cachedDhHoanStatusMap.has(directOrderId)) {
               btnCopy.style.backgroundColor = "#22c55e"; // màu xanh lá
@@ -12917,25 +13096,39 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
               btnCopy.style.borderColor = "#b7a285";
               btnCopy.style.color = "#3d3124";
               btnCopy.style.fontWeight = "bold";
+          } else {
+              btnCopy.style.backgroundColor = "#64748b";
+              btnCopy.style.color = "#ffffff";
           }
       }
       container.appendChild(btnCopy);
 
-      const btnTra = createActionBtn("Trả", "#3b82f6", () => handleDhHoanAction("Trả", orderIdEl, btnTra));
+      const btnTra = createActionBtn("Trả", "#64748b", () => handleDhHoanAction("Trả", orderIdEl, btnTra));
       container.appendChild(btnTra);
 
-      const btnHuy = createActionBtn("Hủy", "#ef4444", () => handleDhHoanAction("Hủy", orderIdEl, btnHuy));
+      const btnHuy = createActionBtn("Hủy", "#64748b", () => handleDhHoanAction("Hủy", orderIdEl, btnHuy));
       container.appendChild(btnHuy);
 
-      const btnHoan = createActionBtn("Hoàn", "#f59e0b", () => handleDhHoanAction("Hoàn", orderIdEl, btnHoan));
+      const btnHoan = createActionBtn("Hoàn", "#64748b", () => handleDhHoanAction("Hoàn", orderIdEl, btnHoan));
       container.appendChild(btnHoan);
 
       const btnUpdate = createActionBtn("Cập nhật", "#64748b", () => handleDhHoanAction("Cập nhật", orderIdEl, btnUpdate));
       container.appendChild(btnUpdate);
 
-      const btnHhShopDien = createActionBtn("📝 HH Shop Điền", "#059669", () => handleHhShopDienAction(orderIdEl, btnHhShopDien));
+      // HH Shop Điền: mặc định màu xám (#64748b), khi đã điền đổi sang màu xanh lá (#059669)
+      const isHhFilled = cachedHhShopDienFilledOrders.has(directOrderId) || cachedHhShopDienFilledOrders.has(directOrderId.toUpperCase());
+      const btnHhShopDien = createActionBtn(isHhFilled ? "✓ HH Shop Điền" : "📝 HH Shop Điền", isHhFilled ? "#059669" : "#64748b", () => handleHhShopDienAction(orderIdEl, btnHhShopDien));
       btnHhShopDien.className = "btn-hh-shop-dien-action";
-      btnHhShopDien.title = "Điền đơn hàng này vào Sheet HH_SHOP_DIEN (WAMELI KHO-SHOP)";
+      btnHhShopDien.dataset.shopeeQlspHhShopDienOrderId = directOrderId;
+      if (isHhFilled) {
+        btnHhShopDien.dataset.shopeeQlspHhShopDienFilled = "1";
+        btnHhShopDien.style.backgroundColor = "#059669";
+        btnHhShopDien.style.borderColor = "#047857";
+        btnHhShopDien.title = "Đã điền vào Sheet HH_SHOP_DIEN";
+      } else {
+        btnHhShopDien.style.backgroundColor = "#64748b";
+        btnHhShopDien.title = "Điền đơn hàng này vào Sheet HH_SHOP_DIEN (WAMELI KHO-SHOP)";
+      }
       container.appendChild(btnHhShopDien);
 
       // Thêm badge UD_CT vào container cạnh các nút thao tác

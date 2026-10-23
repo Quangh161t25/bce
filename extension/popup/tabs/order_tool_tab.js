@@ -198,49 +198,30 @@
     });
   }
 
-  // 2. Mở toàn bộ link làm việc (mở full tất cả các link bên dưới)
+  // 2. Mở toàn bộ link làm việc: mỗi link đang BẬT giữ đúng 1 tab (mở nếu thiếu, tải lại nếu có),
+  //    đóng tab trùng và mọi tab không thuộc link nào (xử lý ở background: executeAutoCleanTabs)
   function openAllQuickLinks() {
-    const linksToOpen = quickLinks.filter(l => l.enabled !== false);
-    const finalLinks = linksToOpen.length > 0 ? linksToOpen : quickLinks;
-    if (!finalLinks.length) {
-      showStatus("Chưa có link nào trong danh sách bên dưới để mở!", true);
+    const linksToOpen = quickLinks.filter(l => l.url && l.enabled !== false);
+    if (!linksToOpen.length) {
+      showStatus("Chưa có link nào đang BẬT trong danh sách bên dưới để mở!", true);
       return;
     }
-
-    showStatus(`Đang mở full ${finalLinks.length} trang làm việc bên dưới...`);
-    chrome.tabs.query({}, (tabs) => {
-      const usedTabIds = new Set();
-      let createdCount = 0;
-      let reusedCount = 0;
-      let firstTabId = null;
-
-      finalLinks.forEach((item, idx) => {
-        const targetUrl = item.url;
-        if (!targetUrl) return;
-
-        // Tìm tab hiện có khớp trang này và chưa được gán cho link khác
-        const match = tabs.find(t => !usedTabIds.has(t.id) && isTabUrlMatchingSavedLink(t.url, targetUrl));
-
-        if (match) {
-          usedTabIds.add(match.id);
-          chrome.tabs.update(match.id, { url: targetUrl });
-          if (idx === 0) firstTabId = match.id;
-          reusedCount++;
-        } else {
-          // Chưa có tab tương ứng -> tạo tab mới riêng cho link này
-          chrome.tabs.create({ url: targetUrl, active: idx === 0 }, (newTab) => {
-            if (idx === 0 && newTab) firstTabId = newTab.id;
-          });
-          createdCount++;
+    showStatus(`Đang mở ${linksToOpen.length} trang làm việc và đóng các tab thừa...`);
+    // Lưu danh sách link hiện tại trước để background dùng đúng bản mới nhất
+    chrome.storage.local.set({ [STORAGE_QUICK_LINKS]: quickLinks }, () => {
+      chrome.runtime.sendMessage({ type: "ORDER_TOOL_OPEN_ALL" }, (res) => {
+        if (chrome.runtime.lastError || !res) {
+          showStatus("Lỗi mở trang: " + (chrome.runtime.lastError?.message || "Không phản hồi"), true);
+          return;
         }
+        if (res.error) {
+          showStatus("Lỗi: " + res.error, true);
+          return;
+        }
+        showStatus(`🚀 Đã mở ${res.linkCount} link (mỗi link 1 tab, mở mới ${res.createdCount || 0}), đóng ${res.closedCount || 0} tab thừa.`);
+        setTimeout(renderOpenTabs, 700);
+        fetchStatusFromBackground();
       });
-
-      if (firstTabId) {
-        chrome.tabs.update(firstTabId, { active: true }).catch(() => {});
-      }
-
-      showStatus(`🚀 Đã mở full ${finalLinks.length} link (${createdCount} tab mới, ${reusedCount} tab đã có)!`);
-      setTimeout(renderOpenTabs, 700);
     });
   }
 
@@ -918,7 +899,7 @@
       }
       currentConfig.enabled = res.enabled;
       updateUIState(res);
-      showStatus(res.enabled ? "✅ Đã bật tự động dọn tab sau mỗi 30 phút!" : "Đã tắt tự động dọn tab.");
+      showStatus(res.enabled ? "✅ Đã bật tự động: mỗi 30 phút mở lại các link đang bật (mỗi link 1 tab) và đóng tab thừa." : "Đã tắt tự động dọn tab.");
     });
   });
 
@@ -942,7 +923,7 @@
         return;
       }
 
-      showStatus(`✅ Dọn xong: Đã đóng ${res.closedCount || 0} tab thừa, giữ lại ${res.remainingCount || 0} tab!`);
+      showStatus(`✅ Dọn xong: mỗi link giữ 1 tab, đã đóng ${res.closedCount || 0} tab thừa (còn ${res.remainingCount || 0} tab).`);
       renderOpenTabs();
       fetchStatusFromBackground();
     });

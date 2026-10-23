@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { CONFIG, TAB_TITLES } from './config/sheetsConfig.js';
 import {
     fetchSheetDataWithFallback,
@@ -30,6 +30,7 @@ import {
 import {
     recalculateTinhGiaRowData,
     recalculateTinhGiaRowByProfitRate,
+    recalculateTinhGiaRowByProfitAmount,
     recalculateDhFinancials,
     hasTinhGiaRowChanges
 } from './utils/calculations.js';
@@ -1055,26 +1056,69 @@ export default function App() {
         } catch (_) {}
     };
 
+    // rowIndex do DataTable gửi lên là vị trí trong TRANG ĐANG XEM (đã lọc/sắp xếp/phân trang),
+    // nên phải đổi sang đúng dòng trong allData theo _sheetRow – không dùng allData[rowIndex].
+    const findAllDataIndex = (list, rowIndex) => {
+        const shown = paginatedRows[rowIndex];
+        if (!shown) return -1;
+        if (shown._sheetRow) {
+            const i = list.findIndex(r => r._sheetRow === shown._sheetRow);
+            if (i >= 0) return i;
+        }
+        return list.indexOf(shown);
+    };
+
+    // Ô đang gõ tay của từng dòng (theo _sheetRow) -> khi rời ô mới tính lại theo đúng ô đó
+    const tinhGiaEditedFieldRef = useRef({});
+
     const handleInlineTinhGiaChange = (rowIndex, header, value) => {
         setAllData(prev => {
-            const next = [...prev];
-            const targetRow = [...next[rowIndex]];
+            const i = findAllDataIndex(prev, rowIndex);
             const idx = storageHeaders.indexOf(header);
-            if (idx >= 0) {
-                targetRow[idx] = value;
-                const recalculated = recalculateTinhGiaRowData(targetRow);
-                next[rowIndex] = recalculated;
-            }
+            if (i < 0 || idx < 0) return prev;
+            const next = [...prev];
+            const targetRow = [...next[i]];
+            if (next[i]._sheetRow) targetRow._sheetRow = next[i]._sheetRow;
+            // Chỉ cập nhật ô đang gõ, chưa tính lại (để gõ tay % lợi nhuận / lãi mong muốn không bị ghi đè)
+            targetRow[idx] = value;
+            next[i] = targetRow;
+            tinhGiaEditedFieldRef.current[targetRow._sheetRow || `i${i}`] = header;
             return next;
         });
     };
 
     const handleSaveInlineTinhGia = async (rowIndex) => {
-        const targetRow = allData[rowIndex];
-        if (!targetRow || !targetRow._sheetRow) return;
+        const i = findAllDataIndex(allData, rowIndex);
+        const targetRow = i >= 0 ? allData[i] : null;
+        if (!targetRow) return;
+        const key = targetRow._sheetRow || `i${i}`;
+        const header = tinhGiaEditedFieldRef.current[key];
+        if (!header) return; // không gõ gì -> không lưu
+        delete tinhGiaEditedFieldRef.current[key];
+
+        let recalculated;
+        if (header === 'loi_nhuan%') {
+            const pct = parseFloat(String(targetRow[7] ?? '').replace('%', '').replace(',', '.'));
+            recalculated = Number.isFinite(pct) ? recalculateTinhGiaRowByProfitRate(targetRow, pct / 100) : recalculateTinhGiaRowData(targetRow);
+        } else if (header === 'lai_mong_muon') {
+            recalculated = recalculateTinhGiaRowByProfitAmount(targetRow, parseMoney(targetRow[8]));
+        } else {
+            // Giá đăng hoặc % phí: giữ Giá đăng, tính lại lãi / lợi nhuận
+            recalculated = recalculateTinhGiaRowData(targetRow);
+        }
+        if (targetRow._sheetRow) recalculated._sheetRow = targetRow._sheetRow;
+
+        setAllData(prev => {
+            const next = [...prev];
+            const j = targetRow._sheetRow ? next.findIndex(r => r._sheetRow === targetRow._sheetRow) : i;
+            if (j >= 0) next[j] = recalculated;
+            return next;
+        });
+
+        if (!recalculated._sheetRow) return;
         try {
-            const giaDang = parseMoney(targetRow[9]);
-            await writeDsSpGiaDang(targetRow._sheetRow, giaDang);
+            const giaDang = parseMoney(recalculated[9]);
+            await writeDsSpGiaDang(recalculated._sheetRow, giaDang);
             showToast(`✅ Đã lưu Giá đăng (${formatDisplayNumber(giaDang)} đ) vào DS_SP!`);
         } catch (err) {
             console.error('Error saving inline pricing:', err);
@@ -1093,8 +1137,9 @@ export default function App() {
                 const actualIndex = next.findIndex(r => r._sheetRow === row._sheetRow);
                 if (actualIndex >= 0) {
                     next[actualIndex] = recalculated;
-                } else if (rowIndex < next.length) {
-                    next[rowIndex] = recalculated;
+                } else {
+                    const k = findAllDataIndex(next, rowIndex);
+                    if (k >= 0) next[k] = recalculated;
                 }
                 return next;
             });
@@ -1112,6 +1157,7 @@ export default function App() {
     const handleQuickGiaDang = async (row, rowIndex) => {
         try {
             const updated = [...row];
+            if (row._sheetRow) updated._sheetRow = row._sheetRow;
             const giaThapNhat = parseMoney(updated[6] || 0);
             let recalculated;
             if (giaThapNhat > 0) {
@@ -1128,8 +1174,9 @@ export default function App() {
                 const actualIndex = next.findIndex(r => r._sheetRow === row._sheetRow);
                 if (actualIndex >= 0) {
                     next[actualIndex] = recalculated;
-                } else if (rowIndex < next.length) {
-                    next[rowIndex] = recalculated;
+                } else {
+                    const k = findAllDataIndex(next, rowIndex);
+                    if (k >= 0) next[k] = recalculated;
                 }
                 return next;
             });
@@ -1146,6 +1193,7 @@ export default function App() {
 
     const handleQuickFees = async (row, rowIndex) => {
         const updated = [...row];
+        if (row._sheetRow) updated._sheetRow = row._sheetRow;
         updated[12] = '11%';
         updated[14] = '6%';
         updated[16] = '5.5%';
@@ -1157,8 +1205,9 @@ export default function App() {
             const actualIndex = next.findIndex(r => r._sheetRow === row._sheetRow);
             if (actualIndex >= 0) {
                 next[actualIndex] = recalculated;
-            } else if (rowIndex < next.length) {
-                next[rowIndex] = recalculated;
+            } else {
+                const k = findAllDataIndex(next, rowIndex);
+                if (k >= 0) next[k] = recalculated;
             }
             return next;
         });

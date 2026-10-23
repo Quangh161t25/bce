@@ -100,7 +100,34 @@ export function recalculateTinhGiaRowByProfitRate(sourceRow, targetProfitRateNum
 
     row[9] = giaDang;
     row[7] = +(loiNhuanPt * 100).toFixed(2) + '%';
+    if (sourceRow._sheetRow) row._sheetRow = sourceRow._sheetRow; // giữ dòng sheet để lưu đúng DS_SP
 
+    return recalculateTinhGiaRowData(row);
+}
+
+// Tính Giá đăng để đạt đúng số tiền Lãi mong muốn (đ) – nghịch đảo của recalculateTinhGiaRowData.
+// Lãi = Giá đăng × (1 − tổng % phí − % XTRA) − (phí hạ tầng + Piship + giá bán); XTRA tối đa 50.000đ.
+export function recalculateTinhGiaRowByProfitAmount(sourceRow, targetProfitAmount) {
+    const row = [...sourceRow];
+    const giaBan = parseMoney(row[4] ?? '');
+
+    const getRate = (idx, defaultVal) => {
+        const valStr = String(row[idx] ?? defaultVal).replace('%', '').replace(',', '.').trim();
+        const num = parseFloat(valStr);
+        return (Number.isFinite(num) ? num : defaultVal) / 100;
+    };
+
+    const RSum = getRate(10, 0) + getRate(11, 0) + getRate(12, 11) + getRate(14, 6) + getRate(18, 1.5);
+    const rXt = getRate(16, 5.5);
+    const CFix = 3000 + 2700 + giaBan;
+    const lai = Number(targetProfitAmount) || 0;
+
+    let giaDang = Math.round((CFix + lai) / (1 - RSum - rXt));
+    if (giaDang * rXt > 50000) giaDang = Math.round((CFix + lai + 50000) / (1 - RSum));
+    if (giaDang < 0 || !Number.isFinite(giaDang)) giaDang = 0;
+
+    row[9] = giaDang;
+    if (sourceRow._sheetRow) row._sheetRow = sourceRow._sheetRow;
     return recalculateTinhGiaRowData(row);
 }
 

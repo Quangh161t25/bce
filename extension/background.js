@@ -1135,6 +1135,24 @@ async function uploadImageToFreeImageHost(imageUrl) {
     return true;
   }
 
+  if (message?.type === "FETCH_HH_SHOP_DIEN_MDH") {
+    getGoogleAccessToken().then(async token => {
+      try {
+        const spreadsheetId = message.spreadsheetId || "1cnA33cHHMhcOSaXa9l4Jeu6qw8QnXlUnEU4Bqtkj9wo";
+        const sheetName = message.sheetName || "HH_SHOP_DIEN";
+        const { res, data } = await fetchJsonWithTimeout(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName + "!E2:E")}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) throw new Error(data.error?.message || "Không đọc được sheet " + sheetName);
+        sendResponse({ ok: true, values: data.values || [] });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    }).catch(err => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
   if (message?.type === "APPEND_HH_SHOP_DIEN") {
     getGoogleAccessToken().then(async token => {
       try {
@@ -3381,8 +3399,14 @@ async function uploadImageToFreeImageHost(imageUrl) {
   // =========================================================================
   // MODULE: ORDER TOOL - Tự động dọn tab & kiểm soát tab
   // =========================================================================
+  if (message?.type === "ORDER_TOOL_OPEN_ALL") {
+    executeAutoCleanTabs({ open: true, focusFirst: true }).then(res => sendResponse(res))
+      .catch(err => sendResponse({ ok: false, error: err.message, closedCount: 0 }));
+    return true;
+  }
+
   if (message?.type === "ORDER_TOOL_TRIGGER_CLEAN_NOW") {
-    executeAutoCleanTabs().then(res => {
+    executeAutoCleanTabs({ open: false }).then(res => {
       sendResponse(res);
     }).catch(err => {
       sendResponse({ ok: false, error: err.message, closedCount: 0 });
@@ -4069,7 +4093,7 @@ chrome.alarms?.onAlarm?.addListener(async (alarm) => {
     const res = await chrome.storage.local.get(["order_tool_auto_clean_config"]);
     const config = res.order_tool_auto_clean_config || {};
     if (config.enabled) {
-      const cleanRes = await executeAutoCleanTabs();
+      const cleanRes = await executeAutoCleanTabs({ open: true, auto: true });
       chrome.runtime.sendMessage({
         type: "ORDER_TOOL_AUTO_CLEAN_DONE",
         result: cleanRes
@@ -4153,15 +4177,21 @@ function isTabUrlMatchingSavedLink(tabUrl, savedUrl) {
 // =========================================================================
 // HÀM TỰ ĐỘNG DỌN DẸP TAB TRÌNH DUYỆT (CHỈ GIỮ LẠI CÁC TAB ĐƯỢC LƯU)
 // =========================================================================
-async function executeAutoCleanTabs() {
+// Đồng bộ tab làm việc theo các link đang BẬT trong tab Đơn Tool:
+// - mỗi link chỉ giữ ĐÚNG 1 tab (ưu tiên tab đang xem / dùng gần nhất), đóng các tab trùng;
+// - đóng mọi tab khác không thuộc link nào (trừ tab ghim, trang hệ thống/tiện ích,
+//   tab đang xem nếu bật "Giữ tab đang xem", tab tích giữ thủ công trong danh sách);
+// - opts.open = true ("Mở toàn bộ" & Tự động 30 phút): mở thêm link còn thiếu và tải lại link về đúng trang.
+//   opts.open = false ("Dọn ngay"): chỉ đóng tab, không mở thêm.
+async function executeAutoCleanTabs(opts = {}) {
+  const open = !!opts.open;
+  const focusFirst = !!opts.focusFirst;
   try {
     const res = await chrome.storage.local.get(["order_tool_auto_clean_config", "order_tool_quick_links"]);
     const cfg = Object.assign({
       enabled: true,
-      keepOrder: true,
       keepActiveTab: true,
-      keepTabIds: [],
-      keepTabUrls: []
+      keepTabIds: []
     }, res.order_tool_auto_clean_config || {});
 
     let quickLinks = Array.isArray(res.order_tool_quick_links) ? res.order_tool_quick_links : [];
@@ -4175,73 +4205,77 @@ async function executeAutoCleanTabs() {
         }
       }
     }
+    const links = quickLinks.filter(l => l && l.url && l.enabled !== false);
+    // Không có link nào đang bật thì không đóng gì (tránh đóng sạch trình duyệt)
+    if (!links.length) {
+      return { ok: false, error: "Chưa có link nào đang BẬT trong danh sách trang làm việc.", closedCount: 0, remainingCount: 0 };
+    }
 
     const tabs = await chrome.tabs.query({});
-    if (!tabs || tabs.length === 0) {
-      return { ok: true, closedCount: 0, remainingCount: 0 };
+    const isSystem = (t) => {
+      const url = t.url || t.pendingUrl || "";
+      return t.pinned || /^(chrome|chrome-extension|edge|about|devtools|view-source):/.test(url);
+    };
+    const keepIds = new Set(Array.isArray(cfg.keepTabIds) ? cfg.keepTabIds : []);
+    const isProtected = (t) => isSystem(t) || keepIds.has(t.id) || (cfg.keepActiveTab && t.active);
+
+    // 1. Mỗi link chọn 1 tab giữ lại
+    const assigned = new Set();
+    const keepers = []; // { link, tab | null }
+    for (const link of links) {
+      const matches = tabs.filter(t => !assigned.has(t.id) && !isSystem(t) && isTabUrlMatchingSavedLink(t.url || t.pendingUrl || "", link.url));
+      matches.sort((a, b) => (b.active - a.active) || ((b.lastAccessed || 0) - (a.lastAccessed || 0)));
+      const keeper = matches[0] || null;
+      if (keeper) assigned.add(keeper.id);
+      keepers.push({ link, tab: keeper });
     }
 
-    const idsToClose = [];
-    for (const tab of tabs) {
-      const url = tab.url || tab.pendingUrl || "";
-
-      // 1. Không bao giờ đóng tab ghim hoặc trang hệ thống, tiện ích nội bộ
-      if (tab.pinned ||
-          url.startsWith("chrome://") ||
-          url.startsWith("chrome-extension://") ||
-          url.startsWith("edge://") ||
-          url.startsWith("about:") ||
-          url.startsWith("devtools://") ||
-          url.startsWith("view-source:")) {
-        continue;
+    // 2. Mở link còn thiếu / tải lại link về đúng trang (trước khi đóng để cửa sổ không bị đóng hết tab)
+    let createdCount = 0;
+    let firstTabId = null;
+    if (open) {
+      for (const k of keepers) {
+        if (k.tab) {
+          // Không làm gián đoạn tab bạn đang xem khi chạy tự động
+          if (!(opts.auto && k.tab.active)) {
+            await chrome.tabs.update(k.tab.id, { url: k.link.url }).catch(() => {});
+          }
+          if (firstTabId === null) firstTabId = k.tab.id;
+        } else {
+          const t = await chrome.tabs.create({ url: k.link.url, active: false }).catch(() => null);
+          if (t) {
+            createdCount++;
+            assigned.add(t.id);
+            if (firstTabId === null) firstTabId = t.id;
+          }
+        }
       }
-
-      // 2. Giữ tab đang xem nếu được cấu hình
-      if (cfg.keepActiveTab && tab.active) {
-        continue;
-      }
-
-      // 3. Giữ tab được người dùng đánh dấu thủ công qua ID hoặc URL
-      if (Array.isArray(cfg.keepTabIds) && cfg.keepTabIds.includes(tab.id)) {
-        continue;
-      }
-      if (Array.isArray(cfg.keepTabUrls) && cfg.keepTabUrls.some(u => isTabUrlMatchingSavedLink(url, u))) {
-        continue;
-      }
-
-      // 4. CHỈ GIỮ LẠI TAB NẾU KHỚP VỚI LINK ĐÃ LƯU (quickLinks đang BẬT)
-      if (cfg.keepOrder !== false && quickLinks.length > 0) {
-        const isQuickMatch = quickLinks.some(l => {
-          if (!l || !l.url || l.enabled === false) return false;
-          return isTabUrlMatchingSavedLink(url, l.url);
-        });
-        if (isQuickMatch) continue;
-      }
-
-      // Tab không nằm trong danh sách link đã lưu -> đóng (xóa hết những link không lưu)
-      idsToClose.push(tab.id);
     }
 
+    // 3. Đóng tab trùng link và tab không thuộc link nào
+    const idsToClose = tabs.filter(t => !assigned.has(t.id) && !isProtected(t)).map(t => t.id);
     if (idsToClose.length > 0) {
       await chrome.tabs.remove(idsToClose).catch(err => {
         console.warn("[executeAutoCleanTabs] Lỗi đóng tab:", err);
       });
     }
+    if (focusFirst && firstTabId !== null) {
+      await chrome.tabs.update(firstTabId, { active: true }).catch(() => {});
+    }
 
+    const remaining = await chrome.tabs.query({}).catch(() => []);
     const lastClean = {
       time: Date.now(),
       closedCount: idsToClose.length,
-      remainingCount: tabs.length - idsToClose.length
+      remainingCount: remaining.length,
+      createdCount
     };
+    const store = { order_tool_last_clean: lastClean };
+    if (cfg.enabled) store.order_tool_next_run_at = Date.now() + 30 * 60 * 1000;
+    await chrome.storage.local.set(store);
 
-    const nextRunAt = Date.now() + 30 * 60 * 1000;
-    await chrome.storage.local.set({
-      order_tool_last_clean: lastClean,
-      order_tool_next_run_at: nextRunAt
-    });
-
-    console.log(`[executeAutoCleanTabs] Đã dọn ${idsToClose.length} tab, còn ${lastClean.remainingCount} tab.`);
-    return { ok: true, closedCount: lastClean.closedCount, remainingCount: lastClean.remainingCount };
+    console.log(`[executeAutoCleanTabs] open=${open}: mở ${createdCount}, đóng ${idsToClose.length}, còn ${remaining.length} tab.`);
+    return { ok: true, closedCount: idsToClose.length, remainingCount: remaining.length, createdCount, linkCount: links.length };
   } catch (err) {
     console.error("[executeAutoCleanTabs] Lỗi:", err);
     return { ok: false, error: err.message, closedCount: 0, remainingCount: 0 };
