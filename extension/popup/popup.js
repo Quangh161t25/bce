@@ -352,7 +352,7 @@ async function sendOpenCommand(tabId) {
   } catch (error) {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ["extension/lib/xlsx.full.min.js", "extension/lib/html2pdf.bundle.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
+      files: ["extension/lib/xlsx.full.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
     });
 
     return chrome.tabs.sendMessage(tabId, {
@@ -367,7 +367,7 @@ async function sendMessageToTab(tabId, message) {
   } catch (error) {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ["extension/lib/xlsx.full.min.js", "extension/lib/html2pdf.bundle.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
+      files: ["extension/lib/xlsx.full.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
     });
 
     return chrome.tabs.sendMessage(tabId, message);
@@ -5614,24 +5614,36 @@ document.addEventListener("DOMContentLoaded", async () => {
           b2Element.style.color = "#f59e0b";
           return;
       }
-      b2Element.textContent = "⏳ Đang kiểm tra ID...";
+      b2Element.textContent = "⏳ Đang kiểm tra kết nối Sheet...";
       b2Element.style.color = "#64748b";
       try {
           const token = await getGoogleAccessToken(GOOGLE_SHEETS_SCOPE);
-          const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/Home!B2:B2`, {
+          let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/Home!B2:B2`, {
               headers: { Authorization: `Bearer ${token}` }
           });
-          const data = await res.json();
+          let data = await res.json();
           if (res.ok && data.values && data.values.length > 0) {
               b2Element.textContent = "✅ Kết nối thành công! Ô Home!B2: " + data.values[0][0];
               b2Element.style.color = "#22c55e";
-          } else {
-              b2Element.textContent = "❌ Lỗi: " + (data.error?.message || "Không thể đọc Home!B2");
-              b2Element.style.color = "#ef4444";
+              return true;
           }
+          // Thử tab cai_dat nếu sheet không có tab Home
+          res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/cai_dat!A1:B2`, {
+              headers: { Authorization: `Bearer ${token}` }
+          });
+          data = await res.json();
+          if (res.ok) {
+              b2Element.textContent = "✅ Kết nối thành công! (Sheet cai_dat)";
+              b2Element.style.color = "#22c55e";
+              return true;
+          }
+          b2Element.textContent = "❌ Lỗi: " + (data.error?.message || "Không thể đọc dữ liệu Sheet");
+          b2Element.style.color = "#ef4444";
+          return false;
       } catch(e) {
           b2Element.textContent = "❌ Lỗi kết nối: " + e.message;
           b2Element.style.color = "#ef4444";
+          return false;
       }
   }
 
@@ -5642,8 +5654,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       applySpreadsheetConfig(savedId);
       updateSavedSpreadsheetIdDisplay(savedId);
       if (configInput) configInput.value = GOOGLE_SHEET_CONFIG.spreadsheetId;
+      // Chưa nhập ID sheet để kết nối -> chỉ hiện tab Cài đặt
+      if (!savedId) {
+          hideAllTabsExceptSettings();
+          return;
+      }
       fetchHomeB2();
-      loadAndSortTabsFromCaiDat();
       if (typeof window.fetchGianSuggestions === "function") window.fetchGianSuggestions();
   });
 
@@ -5656,95 +5672,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }).catch(() => {});
 
   // Tự động đọc danh sách vị trí Tab từ sheet CÀI ĐẶT (Cột A: tap) và sắp xếp lại
-  async function loadAndSortTabsFromCaiDat() {
-    try {
-      const token = await getAccessToken();
-      if (!GOOGLE_SHEET_CONFIG.spreadsheetId) return;
-
-      const sheetNamesToTry = ["CAI_DAT", "Cài đặt", "CAI DAT", "Cai Dat", "cai_dat"];
-      let rows = null;
-
-      for (const sName of sheetNamesToTry) {
-        try {
-          const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/${encodeURIComponent(sName + "!A1:Z100")}`;
-          const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.values && data.values.length > 0) {
-              rows = data.values;
-              break;
-            }
-          }
-        } catch (e) {}
-      }
-
-      if (!rows || rows.length <= 1) return;
-
-      const headers = rows[0] || [];
-
-      // Tìm chỉ số cột 'tap' / 'tab' (Mặc định là Cột A - Index 0)
-      let tabOrderIdx = headers.findIndex(h => {
-        const s = String(h || "").trim().toLowerCase();
-        return s === 'tap' || s === 'tab' || s.includes('tap') || s.includes('thứ tự');
-      });
-      if (tabOrderIdx === -1) tabOrderIdx = 0; // Cột A (tap)
-
-      // Đọc danh sách tên tab theo thứ tự từ trên xuống dưới ở Cột A
-      const sheetTabNames = [];
-      for (let i = 1; i < rows.length; i++) {
-        const name = String(rows[i][tabOrderIdx] || "").trim();
-        if (name) sheetTabNames.push(name.toLowerCase());
-      }
-
-      if (sheetTabNames.length === 0) return;
-
-      const tabHeader = document.querySelector('.tab-header');
-      if (!tabHeader) return;
-
-      const tabButtons = Array.from(tabHeader.querySelectorAll('.tab-btn'));
-      
-      function removeAccents(str) {
-        return String(str || "")
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/đ/g, 'd')
-          .replace(/Đ/g, 'D')
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, ' ');
-      }
-
-      const normalizedSheetTabNames = sheetTabNames.map(removeAccents);
-
-      // Sắp xếp các button theo đúng thứ tự ở Cột A trong Sheet (Lấy vị trí đầu tiên xuất hiện)
-      tabButtons.sort((a, b) => {
-        const textA = removeAccents(a.textContent);
-        const textB = removeAccents(b.textContent);
-
-        let indexA = normalizedSheetTabNames.indexOf(textA);
-        if (indexA === -1) {
-          indexA = normalizedSheetTabNames.findIndex(n => textA.includes(n) || n.includes(textA));
-        }
-
-        let indexB = normalizedSheetTabNames.indexOf(textB);
-        if (indexB === -1) {
-          indexB = normalizedSheetTabNames.findIndex(n => textB.includes(n) || n.includes(textB));
-        }
-
-        if (indexA === -1) indexA = 999;
-        if (indexB === -1) indexB = 999;
-
-        return indexA - indexB;
-      });
-
-      // Gắn lại các nút vào DOM theo thứ tự mới
-      tabButtons.forEach(btn => tabHeader.appendChild(btn));
-    } catch (err) {
-      console.warn("Không thể sắp xếp lại tab theo sheet CAI_DAT:", err);
-    }
-  }
-
-
   // Load ma gian and link
   chrome.storage.local.get(["maGian", "gianLinks"], (res) => {
       const maGianInput = document.getElementById("dh-hoan-text");
@@ -5777,21 +5704,144 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
   }
 
+  // Trích xuất Spreadsheet ID sạch từ chuỗi (hỗ trợ cả khi dán cả link Google Sheet)
+  function extractSpreadsheetId(raw) {
+    if (!raw) return "";
+    const str = String(raw).trim();
+    const urlMatch = str.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (urlMatch && urlMatch[1]) {
+      return urlMatch[1];
+    }
+    return str;
+  }
+
+  // Hàm đồng bộ toàn bộ cấu hình và dữ liệu từ Sheet
+  async function syncAllFromSpreadsheet(targetId, isAuto = false) {
+    const cleanId = extractSpreadsheetId(targetId);
+    const statusEl = document.getElementById("save-config-status");
+    const configInput = document.getElementById("config-spreadsheet-id");
+    if (configInput && configInput.value !== cleanId) {
+      configInput.value = cleanId;
+    }
+
+    if (!cleanId) {
+      if (statusEl) {
+        statusEl.textContent = "⚠️ Vui lòng nhập Spreadsheet ID!";
+        statusEl.style.color = "#ef4444";
+      }
+      return;
+    }
+
+    if (statusEl) {
+      statusEl.textContent = isAuto ? "⏳ Đang tự động lưu & đồng bộ dữ liệu từ Sheet..." : "⏳ Đang lưu & đồng bộ dữ liệu từ Sheet...";
+      statusEl.style.color = "#f59e0b";
+    }
+
+    try {
+      // 1. Lưu ID vào storage
+      await saveSpreadsheetConfig(cleanId);
+      updateSavedSpreadsheetIdDisplay(cleanId);
+
+      // 2. Kiểm tra kết nối Sheet (Home!B2 hoặc cai_dat)
+      await fetchHomeB2();
+
+      // 3. Đồng bộ danh sách gian & sắp xếp/hiển thị tab từ CAI_DAT
+      if (typeof window.fetchGianSuggestions === "function") {
+        await window.fetchGianSuggestions();
+      }
+
+      // 4. Đồng bộ Tài khoản Wameli (wameli_user, wameli_pass) từ Sheet cai_dat
+      if (typeof window.syncWameliAccountFromSheet === "function") {
+        await window.syncWameliAccountFromSheet(true);
+      }
+
+      // 5. Đồng bộ Trang làm việc nhanh (Quick Links) từ Sheet cai_dat
+      if (typeof window.syncQuickLinksFromSheet === "function") {
+        window.syncQuickLinksFromSheet(true);
+      }
+
+      // 6. Đồng bộ Ảnh mẫu từ Sheet CAI_DAT (cột anh_mau)
+      if (typeof loadCaiDatTemplateImages === "function") {
+        loadCaiDatTemplateImages().catch(() => {});
+      }
+
+      // 7. Đồng bộ Gemini API Key từ cai_dat!E2 nếu có
+      if (typeof loadGeminiConfig === "function") {
+        loadGeminiConfig();
+      }
+
+      if (statusEl) {
+        statusEl.textContent = "✅ Đã lưu & đồng bộ toàn bộ dữ liệu từ Sheet thành công!";
+        statusEl.style.color = "#16a34a";
+        setTimeout(() => {
+          if (statusEl.textContent.includes("thành công")) statusEl.textContent = "";
+        }, 5000);
+      }
+    } catch (err) {
+      console.error("Lỗi đồng bộ Sheet:", err);
+      if (statusEl) {
+        statusEl.textContent = "❌ Lỗi: " + (err?.message || err);
+        statusEl.style.color = "#ef4444";
+      }
+    }
+  }
+
+  const configInput = document.getElementById("config-spreadsheet-id");
+  let inputDebounceTimer = null;
+
+  if (configInput) {
+    // Tự động nhận link / ID khi dán (Paste)
+    configInput.addEventListener("paste", () => {
+      setTimeout(() => {
+        const val = extractSpreadsheetId(configInput.value);
+        configInput.value = val;
+        if (val && val.length >= 20) {
+          syncAllFromSpreadsheet(val, true);
+        }
+      }, 50);
+    });
+
+    // Tự động đồng bộ khi gõ hoặc sửa (Debounce 600ms)
+    configInput.addEventListener("input", () => {
+      clearTimeout(inputDebounceTimer);
+      const rawVal = configInput.value.trim();
+      const val = extractSpreadsheetId(rawVal);
+      if (rawVal.includes("/spreadsheets/d/")) {
+        configInput.value = val;
+      }
+      if (val && val.length >= 25) {
+        inputDebounceTimer = setTimeout(() => {
+          syncAllFromSpreadsheet(val, true);
+        }, 600);
+      }
+    });
+
+    // Tự động đồng bộ khi rời khỏi ô nhập hoặc thay đổi
+    configInput.addEventListener("change", () => {
+      clearTimeout(inputDebounceTimer);
+      const val = extractSpreadsheetId(configInput.value);
+      if (val && val.length >= 10) {
+        syncAllFromSpreadsheet(val, true);
+      }
+    });
+
+    // Bấm Enter trong ô nhập
+    configInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        clearTimeout(inputDebounceTimer);
+        const val = extractSpreadsheetId(configInput.value);
+        syncAllFromSpreadsheet(val, false);
+      }
+    });
+  }
+
   const btnSaveConfig = document.getElementById("btn-save-config");
   if (btnSaveConfig) {
-      btnSaveConfig.addEventListener("click", async () => {
-          const newId = document.getElementById("config-spreadsheet-id").value.trim();
-          if (newId) {
-              await saveSpreadsheetConfig(newId);
-              updateSavedSpreadsheetIdDisplay(newId);
-              const status = document.getElementById("save-config-status");
-              if (status) {
-                  status.textContent = "Da luu Spreadsheet ID!";
-                  setTimeout(() => status.textContent = "", 3000);
-              }
-              fetchHomeB2();
-              fetchGianSuggestions();
-          }
+      btnSaveConfig.addEventListener("click", () => {
+          clearTimeout(inputDebounceTimer);
+          const val = extractSpreadsheetId(configInput ? configInput.value : "");
+          syncAllFromSpreadsheet(val, false);
       });
   }
 
@@ -7803,15 +7853,24 @@ document.getElementById('btn-export-flash-sale')?.addEventListener('click', asyn
 
           const worksheet = workbook.Sheets[sheetName];
           const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-          const dataRows = json.slice(1); // Bỏ qua dòng tiêu đề của file Excel
+          const rawRows = json.slice(1); // Bỏ qua dòng tiêu đề của file Excel
           
-          // Thêm mã gian vào cột L (index 11)
+          // Thêm mã gian vào cột G (index 6) và L (index 11), chỉ tải cột A tới G, cột H-K để trống
           const maGian = document.getElementById("dh-hoan-text") ? document.getElementById("dh-hoan-text").value.trim() : "";
-          if (maGian) {
-              dataRows.forEach(row => {
-                  row[11] = maGian;
-              });
-          }
+          const dataRows = rawRows.map(row => [
+              row[0] ?? "", // Cột A: ID chính
+              row[1] ?? "", // Cột B: Tên sản phẩm
+              row[2] ?? "", // Cột C: ID phân loại
+              row[3] ?? "", // Cột D: Tên phân loại
+              row[4] ?? "", // Cột E: SKU
+              row[5] ?? "", // Cột F: SKU phân loại
+              maGian,       // Cột G: ghi mã gian
+              "",           // Cột H: để trống
+              "",           // Cột I: để trống
+              "",           // Cột J: để trống
+              "",           // Cột K: để trống
+              maGian        // Cột L: ghi mã gian
+          ]);
           
           if (statusUploadSpShopee) {
              statusUploadSpShopee.textContent = 'Äang Ä‘áº©y ' + json.length + ' dÃ²ng lÃªn Google Sheet...';
@@ -7978,7 +8037,16 @@ const CAI_DAT_TAB_NAME_TO_ID = {
   "doanh thu": "tab-doanh-thu",
   "test": "tab-test",
   "tien ich": "tab-tools",
-  "flash sale": "tab-flash-sale",
+  "flash sale": "tab-fs-tool",
+  "flash sale tool": "tab-fs-tool",
+  "fs": "tab-fs-tool",
+  "sao chep san pham": "tab-in-nang-cao",
+  "in nang cao": "tab-in-nang-cao",
+  "autoin": "tab-autoin",
+  "auto in": "tab-autoin",
+  "doc don": "tab-autoin",
+  "don tool": "tab-order-tool",
+  "order tool": "tab-order-tool",
   "in": "tab-print",
   "tao phieu": "tab-tao-phieu",
   "in phieu": "tab-tao-phieu",
@@ -7987,7 +8055,12 @@ const CAI_DAT_TAB_NAME_TO_ID = {
   "chat ai": "tab-chat-ai",
   "chat": "tab-chat-ai",
   "tu van chat": "tab-chat-ai",
-  "chat shopee": "tab-chat-ai"
+  "chat shopee": "tab-chat-ai",
+  "quet shop": "tab-quet-shop",
+  "quet sp": "tab-quet-shop",
+  "doc sp shop": "tab-quet-shop",
+  "doc san pham shop": "tab-quet-shop",
+  "quet san pham": "tab-quet-shop"
 };
 
 function normalizeCaiDatTabName(value) {
@@ -8062,10 +8135,9 @@ window.hideAllTabsExceptSettings = function() {
         const tabBtns = Array.from(tabHeader.querySelectorAll(".tab-btn"));
         let settingsBtn = null;
         tabBtns.forEach(btn => {
-            const tabName = btn.textContent.trim().toLowerCase();
-            if (tabName === "cài đặt" || tabName === "sp shopee" || tabName === "lấy ảnh sp") {
+            if (btn.dataset.tab === "tab-settings") {
                 btn.style.display = "";
-                if (tabName === "cài đặt") settingsBtn = btn;
+                settingsBtn = btn;
             } else {
                 btn.style.display = "none";
             }
@@ -8081,7 +8153,7 @@ window.fetchGianSuggestions = async function() {
               return;
           }
           const token = await getGoogleAccessToken(GOOGLE_SHEETS_SCOPE);
-          const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/CAI_DAT!A:C`, {
+          const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/CAI_DAT!A:Z`, {
               headers: { Authorization: `Bearer ${token}` }
           });
           const data = await res.json();
@@ -8142,15 +8214,18 @@ window.fetchGianSuggestions = async function() {
                       datalist.appendChild(option);
                   });
               }
+              if (typeof window.updateOrderToolShopSelect === "function") {
+                  window.updateOrderToolShopSelect();
+              }
 
               // Dynamic Tab Visibility & Ordering from CAI_DAT column A.
               applyCaiDatTabOrder(orderedTabs);
           } else {
-              hideAllTabsExceptSettings();
+              applyCaiDatTabOrder([]);
           }
       } catch (e) {
           console.error("Lỗi lấy danh sách gian và tab:", e);
-          hideAllTabsExceptSettings();
+          applyCaiDatTabOrder([]);
       }
 };
 
@@ -8239,35 +8314,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-  const btnTaiGiamGia = document.getElementById('btn-tai-giam-gia');
-  if (btnTaiGiamGia) {
-      btnTaiGiamGia.addEventListener('click', () => {
-          const mG = document.getElementById("dh-hoan-text") ? document.getElementById("dh-hoan-text").value.trim().toLowerCase() : "";
-          const statusEl = document.getElementById("giam-gia-download-status");
-          
-          if (!mG) {
-              if (statusEl) { statusEl.textContent = "Vui lòng nhập Mã gian trước!"; statusEl.style.color = "red"; }
-              return;
-          }
-          
-          chrome.storage.local.get(["gianLinks"], (res) => {
-              const links = res.gianLinks || {};
-              const url = links[mG];
-              if (!url || !url.startsWith("http")) {
-                  if (statusEl) { statusEl.textContent = "Vui lòng lưu link hợp lệ cho mã gian này trước!"; statusEl.style.color = "red"; }
-                  return;
-              }
-              
-              if (statusEl) { statusEl.textContent = "Đang mở tab Shopee để tải giảm giá..."; statusEl.style.color = "#16a34a"; }
-              
-              let finalUrl = url;
-              if (url.includes("?")) finalUrl += "&auto_download_giam_gia=1";
-              else finalUrl += "?auto_download_giam_gia=1";
-              
-              chrome.storage.local.set({ autoDownloadGiamGia: true }, () => { chrome.tabs.create({ url: finalUrl, active: true }); });
-          });
-      });
-}
+
 
 let shopeeWebProducts = [];
 

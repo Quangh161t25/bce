@@ -108,6 +108,26 @@
   }
 
   // Mở url trong 1 tab MỚI (không ghi đè tab đang mở) rồi đợi tải xong.
+  // Trang của link đã đang mở (ưu tiên tab đang xem) thì tải lại link ngay trong
+  // tab đó; chưa có thì mở tab mới. isSamePage(url) xác định tab cùng trang.
+  async function openUrlReuseSamePage(fullUrl, isSamePage) {
+    const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    let target = activeTab?.url && isSamePage(activeTab.url) ? activeTab : null;
+    if (!target) {
+      const tabs = await chrome.tabs.query({ url: "*://banhang.shopee.vn/*" });
+      target = tabs.filter(t => t.url && isSamePage(t.url)).pop() || null;
+    }
+    if (!target?.id) return openUrlInNewTab(fullUrl);
+
+    const loaded = waitForTabToLoad(target.id);
+    await chrome.tabs.update(target.id, { url: fullUrl, active: true });
+    await loaded;
+    return target;
+  }
+
+  const isStep1Page = (url) => url.includes("/portal/sale/mass/ship") && url.includes("mass_shipment_tab=201");
+  const isStep2Page = (url) => url.includes("/portal/sale/order") && url.includes("type=toship") && url.includes("source=processed");
+
   async function openUrlInNewTab(fullUrl) {
     const newTab = await chrome.tabs.create({ url: fullUrl, active: true });
     if (newTab?.id) await waitForTabToLoad(newTab.id);
@@ -138,7 +158,7 @@
     } catch (_) {
       await chrome.scripting.executeScript({
         target: { tabId },
-        files: ["extension/lib/xlsx.full.min.js", "extension/lib/html2pdf.bundle.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
+        files: ["extension/lib/xlsx.full.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
       });
       await new Promise(r => setTimeout(r, 300));
       return await chrome.tabs.sendMessage(tabId, message, { frameId: 0 });
@@ -311,7 +331,7 @@
   async function runStep1ConfirmOrders() {
     updateStatus("⚡ [Bước 1] Đang mở trang Giao hàng loạt (tab 201) với bộ lọc...");
     try {
-      await openUrlInNewTab(buildStep1ConfirmUrl());
+      await openUrlReuseSamePage(buildStep1ConfirmUrl(), isStep1Page);
       updateStatus("⚡ [Bước 1] Đã mở trang, đang tự động xác nhận lấy hàng 2 kho...");
 
       if (typeof window.startAutoPickupAllWarehouses === "function") {
@@ -334,7 +354,7 @@
   async function runStep2ReadOrders() {
     updateStatus("📥 [Bước 2] Đang mở trang Đơn Đã Xử Lý & đọc danh sách đơn...");
     try {
-      const tab = await openUrlInNewTab(ORDER_PROCESSED_URL);
+      const tab = await openUrlReuseSamePage(ORDER_PROCESSED_URL, isStep2Page);
       if (!tab?.id) throw new Error("Không thể kết nối tới tab Shopee.");
 
       updateStatus("⏳ Đang quét danh sách đơn hàng (Tên, SKU, MDH, MVD, Trạng thái in)...");

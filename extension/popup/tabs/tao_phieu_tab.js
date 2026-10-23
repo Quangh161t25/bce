@@ -104,7 +104,7 @@
       // Inject content script nếu chưa được nạp
       await chrome.scripting.executeScript({
         target: { tabId },
-        files: ["extension/lib/xlsx.full.min.js", "extension/lib/html2pdf.bundle.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
+        files: ["extension/lib/xlsx.full.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
       });
       await new Promise(r => setTimeout(r, 300));
       return await chrome.tabs.sendMessage(tabId, message, { frameId: 0 });

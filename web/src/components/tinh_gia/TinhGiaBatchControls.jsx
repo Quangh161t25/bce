@@ -8,7 +8,8 @@ export default function TinhGiaBatchControls({
     onBatchMinPrice,
     onBatchDefaultFees,
     onMoveToSpBo,
-    onClearTinhTrang
+    onClearTinhTrang,
+    onSyncDsSp
 }) {
     const [profitInput, setProfitInput] = useState('');
 
@@ -187,6 +188,30 @@ export default function TinhGiaBatchControls({
                         <Zap style={{ width: 15, height: 15 }} />
                         <span>Điền Phí Mặc Định</span>
                     </button>
+
+                    {onSyncDsSp && (
+                        <button
+                            type="button"
+                            onClick={onSyncDsSp}
+                            style={{
+                                height: '34px',
+                                padding: '0 14px',
+                                background: '#2563eb',
+                                color: '#fff',
+                                fontWeight: 600,
+                                fontSize: '12px',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}
+                            title="Đồng bộ sản phẩm mới & giá mới từ sheet DS_SP sang sheet TÍNH GIÁ và ghi dữ liệu thực vào Google Sheets"
+                        >
+                            <span>🔄 Đồng Bộ DS_SP & Tính Lại</span>
+                        </button>
+                    )}
                 </div>
             )}
 

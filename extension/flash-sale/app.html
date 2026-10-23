@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Shopee Seller Tool</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="../hub/embed.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">⚡ Shopee Seller Tool</div>
+    <div class="conn">
+      <span id="connStatus" class="badge">Chưa kết nối</span>
+      <button id="btnConnect" class="btn small">Kết nối lại</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab" data-tab="products">Sản phẩm</button>
+    <button class="tab active" data-tab="list">Danh sách Flash Sale</button>
+    <button class="tab" data-tab="editor">Tạo / Sửa Flash Sale</button>
+    <button class="tab" data-tab="auto">Tự động đăng ký</button>
+    <button class="tab" data-tab="logs">Nhật ký</button>
+  </nav>
+
+  <main>
+    <!-- SẢN PHẨM -->
+    <section id="tab-products" class="panel">
+      <!-- Sub-tabs Navigation inside Tab Sản phẩm -->
+      <div class="subtabs-bar" style="display: flex; gap: 8px; margin-bottom: 12px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px;">
+        <button id="btnSubtabShopProducts" type="button" class="btn small primary" style="background: #0284c7; border-color: #0284c7; font-weight: 700; border-radius: 5px 5px 0 0; padding: 7px 14px; font-size: 13px; cursor: pointer;">
+          🛍️ Sản phẩm của Shop
+        </button>
+        <button id="btnSubtabSheetProducts" type="button" class="btn small" style="background: #f1f5f9; border-color: #cbd5e1; color: #475569; font-weight: 700; border-radius: 5px 5px 0 0; padding: 7px 14px; font-size: 13px; cursor: pointer;">
+          📋 Đọc SP từ Sheet đầy đủ (<span id="sheetProductsBadge">0</span>)
+        </button>
+      </div>
+
+      <!-- SUBTAB 1: SẢN PHẨM CỦA SHOP (GIAO DIỆN HIỆN TẠI) -->
+      <div id="subtabShopProductsView">
+        <div class="card">
+          <div class="card-head">
+            <div id="pSummary"></div>
+            <div class="row">
+              <span id="pProgress" class="muted"></span>
+              <button id="btnPStop" class="btn danger small hidden">Dừng</button>
+              <button id="btnPLoad" class="btn primary">Tải toàn bộ sản phẩm</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="toolbar">
+            <input id="pfSearch" placeholder="Tìm tên, ID, SKU...">
+            <select id="pfStatus">
+              <option value="">Tất cả trạng thái</option>
+              <option value="active">Đang bán</option>
+              <option value="hidden">Đã ẩn</option>
+              <option value="banned">Bị khoá</option>
+            </select>
+            <select id="pfStock">
+              <option value="">Tất cả tồn kho</option>
+              <option value="in">Còn hàng</option>
+              <option value="low">Sắp hết (≤ 10)</option>
+              <option value="out">Hết hàng</option>
+            </select>
+            <label>Sắp xếp
+              <select id="pfSort">
+                <option value="newest">Mới nhất</option>
+                <option value="name">Tên A–Z</option>
+                <option value="priceAsc">Giá tăng dần</option>
+                <option value="priceDesc">Giá giảm dần</option>
+                <option value="stockAsc">Tồn kho ít nhất</option>
+                <option value="stockDesc">Tồn kho nhiều nhất</option>
+                <option value="sold">Bán chạy</option>
+              </select>
+            </label>
+            <span class="muted">Khớp: <b id="pFilteredCount">0</b></span>
+          </div>
+          <div class="toolbar">
+            <span class="muted">Đã chọn: <b id="pSelCount">0</b></span>
+            <button id="btnPSelectFiltered" class="btn small">Chọn tất cả kết quả lọc</button>
+            <button id="btnPClearSel" class="btn small">Bỏ chọn</button>
+            <button id="btnPToFs" class="btn small">⚡ Thêm vào Flash Sale</button>
+            <button id="btnPToSpShopee" class="btn small" style="background:#0284c7;border-color:#0284c7;color:#fff;font-weight:700;" title="Thêm vào sheet SP_SHOPEE">📥 Thêm vào SP_SHOPEE</button>
+            <button id="btnPToWebSp" class="btn small" style="background:#10b981;border-color:#10b981;color:#fff;font-weight:700;" title="Thêm vào sheet WEB_SP">🌐 Thêm vào WEB_SP</button>
+            <button id="btnPToSpShopeeFull" class="btn small primary" style="background:#2563eb;border-color:#1d4ed8;color:#fff;font-weight:700;" title="Thêm toàn bộ sản phẩm của shop vào Sheet SP Shopee đầy đủ">📥 Thêm vào SP Shopee đầy đủ</button>
+            <button id="btnPEditStockBatch" class="btn small" style="background:#f59e0b;border-color:#d97706;color:#fff;font-weight:700;" title="Sửa tồn kho cho các sản phẩm đã chọn trực tiếp trên Shopee">✏️ Đổi tồn kho đã chọn</button>
+            <button id="btnPSyncBatch" class="btn small" style="background:#6366f1;border-color:#4f46e5;color:#fff;font-weight:700;" title="Đồng bộ lại thông tin và tồn kho cho các sản phẩm đã chọn từ Shopee">🔄 Đồng bộ đã chọn</button>
+            <button id="btnPExportMedia" class="btn small">⬇ Xuất link ảnh/video</button>
+            <button id="btnPTableCols" class="btn small" title="Chỉnh sửa chi tiết các cột (ẩn hiện, kéo thả, căn lề, kích thước, cố định cột)" style="font-weight:600;"><span style="font-size:13px;">⚙️</span> Tuỳ chỉnh cột</button>
+          </div>
+          <div class="table-wrap">
+            <table class="grid" id="pTable">
+              <thead>
+                <tr>
+                  <th><input type="checkbox" id="pChkAll" title="Chọn cả trang"></th>
+                  <th>ID chính</th>
+                  <th>Tên sản phẩm</th>
+                  <th>Link SP</th>
+                  <th>Mô tả SP</th>
+                  <th>SKU</th>
+                  <th>ID phân loại</th>
+                  <th>Tên phân loại</th>
+                  <th>SKU phân loại</th>
+                  <th>Ảnh phân loại</th>
+                  <th>Ảnh chính</th>
+                  <th>Ảnh mô tả</th>
+                  <th>Video</th>
+                  <th>Giá</th>
+                  <th>Giá KM</th>
+                  <th>Tồn kho</th>
+                  <th>Ngày tạo</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="pPager" class="row" style="justify-content:center;margin-top:10px"></div>
+        </div>
+      </div>
+
+      <!-- SUBTAB 2: ĐỌC SẢN PHẨM TỪ SHEET (GIAO DIỆN CHUẨN NHƯ TAB SẢN PHẨM) -->
+      <div id="subtabSheetProductsView" style="display: none;">
+        <div class="card">
+          <div class="card-head">
+            <div id="sheetSummary"></div>
+            <div class="row" style="gap: 8px; align-items: center;">
+              <select id="sheetSourceSelect" style="font-weight: 700; font-size: 12px; padding: 5px 8px; border-radius: 4px; border: 1px solid #0284c7; color: #0369a1; background: #f0f9ff; cursor: pointer;">
+                <option value="SP_SHOPEE_DAY_DU">📄 Sheet SP Shopee đầy đủ</option>
+                <option value="SP_SHOPEE">📄 Sheet SP_SHOPEE</option>
+              </select>
+              <button id="btnReloadSheetProducts" type="button" class="btn primary">
+                🔄 Đọc từ Sheet
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="toolbar">
+            <input id="sheetSearchInput" placeholder="Tìm tên, ID, SKU, phân loại...">
+            <select id="sheetGianFilter">
+              <option value="">Tất cả gian / shop</option>
+            </select>
+            <select id="sheetStockFilter">
+              <option value="">Tất cả tồn kho</option>
+              <option value="in">Còn hàng</option>
+              <option value="low">Sắp hết (≤ 10)</option>
+              <option value="out">Hết hàng</option>
+            </select>
+            <label>Sắp xếp
+              <select id="sheetSortFilter">
+                <option value="newest">Mới nhất</option>
+                <option value="name">Tên A–Z</option>
+                <option value="priceAsc">Giá tăng dần</option>
+                <option value="priceDesc">Giá giảm dần</option>
+                <option value="stockAsc">Tồn kho ít nhất</option>
+                <option value="stockDesc">Tồn kho nhiều nhất</option>
+              </select>
+            </label>
+            <span class="muted">Khớp: <b id="sheetFilteredCount">0</b></span>
+          </div>
+          <div class="toolbar">
+            <span class="muted">Đã chọn: <b id="sheetSelCount">0</b></span>
+            <button id="btnSheetSelectFiltered" class="btn small">Chọn tất cả kết quả lọc</button>
+            <button id="btnSheetClearSel" class="btn small">Bỏ chọn</button>
+            <button id="btnSheetToFs" class="btn small">⚡ Thêm vào Flash Sale</button>
+            <button id="btnSheetEditStockBatch" class="btn small" style="background:#f59e0b;border-color:#d97706;color:#fff;font-weight:700;" title="Sửa tồn kho cho các sản phẩm đã chọn trực tiếp trên Shopee">✏️ Đổi tồn kho đã chọn</button>
+            <button id="btnSheetSyncBatch" class="btn small" style="background:#6366f1;border-color:#4f46e5;color:#fff;font-weight:700;" title="Đồng bộ lại thông tin và tồn kho cho các sản phẩm đã chọn từ Shopee">🔄 Đồng bộ đã chọn</button>
+            <button id="btnSheetExportMedia" class="btn small">⬇ Xuất link ảnh/video</button>
+          </div>
+          <div class="table-wrap">
+            <table class="grid" id="sheetPTable">
+              <thead>
+                <tr>
+                  <th style="width: 46px; text-align: center;"><input type="checkbox" id="sheetChkAll" title="Chọn cả trang"></th>
+                  <th style="width: 80px;">Gian</th>
+                  <th style="width: 105px;">ID chính</th>
+                  <th style="width: 230px;">Tên sản phẩm</th>
+                  <th style="width: 70px; text-align: center;">Link SP</th>
+                  <th style="width: 180px;">Mô tả SP</th>
+                  <th style="width: 110px;">SKU</th>
+                  <th style="width: 95px;">ID phân loại</th>
+                  <th style="width: 130px;">Tên phân loại</th>
+                  <th style="width: 115px;">SKU phân loại</th>
+                  <th style="width: 75px; text-align: center;">Ảnh phân loại</th>
+                  <th style="width: 90px; text-align: center;">Ảnh chính</th>
+                  <th style="width: 90px; text-align: center;">Ảnh mô tả</th>
+                  <th style="width: 80px; text-align: center;">Video</th>
+                  <th style="width: 95px; text-align: right;">Giá</th>
+                  <th style="width: 95px; text-align: right;">Giá KM</th>
+                  <th style="width: 75px; text-align: center;">Tồn kho</th>
+                  <th style="width: 95px; text-align: center;">Ngày tạo</th>
+                  <th style="width: 280px; text-align: left;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="sheetPTbody">
+                <tr><td colspan="19" style="text-align: center; padding: 30px; color: #94a3b8;">Chưa nạp dữ liệu. Bấm <b>"🔄 Đọc từ Sheet"</b> để đọc sản phẩm từ Google Sheet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="sheetPPager" class="row" style="justify-content:center;margin-top:10px"></div>
+        </div>
+      </div>
+
+      <div id="pMedia" class="modal hidden">
+        <div class="modal-box">
+          <div class="card-head">
+            <h3 id="pMediaTitle"></h3>
+            <button id="pMediaClose" class="btn small">✕ Đóng</button>
+          </div>
+          <div id="pMediaBody"></div>
+        </div>
+      </div>
+
+      <!-- MODAL CHI TIẾT & CHỈNH SỬA SẢN PHẨM (CHUẨN GIAO DIỆN SHOPEE PORTAL) -->
+      <div id="pEditModal" class="modal hidden">
+        <div class="modal-box p-edit-modal-box">
+          <div class="card-head p-edit-header">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 20px;">🛍️</span>
+              <div>
+                <h3 id="pEditModalTitle" style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">Chi tiết &amp; Chỉnh sửa sản phẩm</h3>
+                <div id="pEditModalSub" style="font-size: 11.5px; color: #64748b; margin-top: 2px;">
+                  Mã SP: <b id="pEditModalId" style="font-family: monospace; color: #0f172a;">-</b>
+                  <span id="pEditModalShop"></span>
+                </div>
+              </div>
+            </div>
+            <div class="row" style="gap: 6px; align-items: center;">
+              <a id="btnPEditOpenShopee" href="#" target="_blank" class="btn small" style="color: #0284c7; font-weight: 600; text-decoration: none;" title="Mở trang chỉnh sửa trên Shopee Seller Portal">🔗 Mở Shopee</a>
+              <a id="btnPEditViewPublic" href="#" target="_blank" class="btn small" style="color: #475569; text-decoration: none;" title="Xem trang sản phẩm công khai">🌐 Xem SP</a>
+              <button id="pEditModalClose" type="button" class="btn small" style="font-size: 14px; padding: 3px 8px;" title="Đóng">✕</button>
+            </div>
+          </div>
+
+          <!-- Shopee Warning Notice Banner (Like Screenshot 2) -->
+          <div id="pEditNoticeBanner" class="p-edit-notice-banner" style="display: none; padding: 8px 14px; background: #fffbeb; border-bottom: 1px solid #fef3c7; color: #b45309; font-size: 12px; align-items: center; gap: 6px;">
+            <span>⚠️</span> <span id="pEditNoticeText">Vì chương trình khuyến mãi / Flash Sale đang diễn ra, một số thông tin (như phân loại, tồn kho, giá) có thể bị Shopee khóa tạm thời.</span>
+          </div>
+
+          <!-- Tabs bar (Mirroring Shopee Screenshot 2) -->
+          <div class="p-edit-tabs-bar">
+            <button type="button" class="p-edit-nav-tab active" data-p-tab="all" title="Hiển thị tất cả 6 phần liên tục trên một trang giống Shopee Portal">📜 Tất cả (như Shopee)</button>
+            <button type="button" class="p-edit-nav-tab" data-p-tab="basic">1. Cơ bản</button>
+            <button type="button" class="p-edit-nav-tab" data-p-tab="attributes">2. Chi tiết &amp; Thuộc tính</button>
+            <button type="button" class="p-edit-nav-tab" data-p-tab="sales">3. Bán hàng &amp; Tồn kho</button>
+            <button type="button" class="p-edit-nav-tab" data-p-tab="description">4. Mô tả sản phẩm</button>
+            <button type="button" class="p-edit-nav-tab" data-p-tab="shipping">5. Vận chuyển</button>
+            <button type="button" class="p-edit-nav-tab" data-p-tab="others">6. Thông tin khác</button>
+          </div>
+
+          <!-- Tab Content Views -->
+          <div id="pEditModalBody" class="p-edit-modal-body">
+            <!-- Dynamic content loaded via JS -->
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="p-edit-footer">
+            <div id="pEditStatusMsg" style="font-size: 12px; color: #64748b; margin-right: auto;"></div>
+            <button id="btnPEditCancel" type="button" class="btn">Đóng</button>
+            <button id="btnPEditSave" type="button" class="btn primary" style="font-weight: 700; padding: 7px 20px; background: #0284c7; border-color: #0284c7; color: #fff;">💾 Lưu thay đổi lên Shopee</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DANH SÁCH -->
+    <section id="tab-list" class="panel active">
+      <div class="toolbar">
+        <div class="seg" id="listTypes">
+          <button data-type="next" class="active">Sắp diễn ra</button>
+          <button data-type="current">Đang diễn ra</button>
+          <button data-type="end">Đã kết thúc</button>
+          <button data-type="all">Tất cả</button>
+        </div>
+        <button id="btnReloadList" class="btn">Tải lại</button>
+        <button id="btnNewFs" class="btn primary">+ Tạo Flash Sale mới</button>
+      </div>
+      <div id="fsList"></div>
+      <div id="fsDetail" class="card hidden"></div>
+    </section>
+
+    <!-- TRÌNH SOẠN THẢO -->
+    <section id="tab-editor" class="panel">
+      <div id="editorBanner" class="banner hidden"></div>
+
+      <div class="card" id="slotCard">
+        <div class="card-head">
+          <h3>1. Chọn khung giờ</h3>
+          <div>
+            <label>Số ngày tới
+              <select id="slotDays">
+                <option value="3">3</option>
+                <option value="7" selected>7</option>
+                <option value="14">14</option>
+                <option value="30">30</option>
+              </select>
+            </label>
+            <button id="btnLoadSlots" class="btn">Tải khung giờ</button>
+          </div>
+        </div>
+        <div class="hint">Khung giờ đã có Flash Sale của shop sẽ bị khoá. Có thể chọn nhiều khung giờ để đăng ký cùng lúc.</div>
+        <div id="slotList" class="slots"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>2. Thêm sản phẩm</h3>
+          <div class="row">
+            <input id="productKeyword" placeholder="Tìm theo tên sản phẩm...">
+            <button id="btnSearchProduct" class="btn">Tìm</button>
+            <button id="btnAddAllResults" class="btn">Thêm tất cả kết quả</button>
+          </div>
+        </div>
+        <div id="productResults" class="product-results"></div>
+        <div class="center"><button id="btnMoreProducts" class="btn hidden">Tải thêm</button></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>3. Thiết lập giá &amp; số lượng <span id="rowCount" class="muted"></span></h3>
+          <button id="btnClearRows" class="btn danger small">Xoá hết</button>
+        </div>
+        <div class="bulk">
+          <label>Cách tính giá FS
+            <select id="bulkMode">
+              <option value="percent">Giảm theo %</option>
+              <option value="amount">Giảm số tiền (đ)</option>
+              <option value="promo">= Giá khuyến mãi hiện tại</option>
+              <option value="fixed">Giá cố định (đ)</option>
+              <option value="keep">Giữ nguyên giá</option>
+            </select>
+          </label>
+          <label>Giá trị <input id="bulkValue" type="number" value="10" min="0"></label>
+          <label>Làm tròn
+            <select id="bulkRound">
+              <option value="1">Không</option>
+              <option value="100">100đ</option>
+              <option value="1000" selected>1.000đ</option>
+            </select>
+          </label>
+          <label>SL Flash Sale <input id="bulkStock" type="number" placeholder="giữ nguyên" min="0"></label>
+          <label>Giới hạn mua / khách <input id="bulkLimit" type="number" placeholder="giữ nguyên" min="0"></label>
+          <button id="btnApplyBulk" class="btn primary">Áp dụng</button>
+          <button id="btnRowsTableCols" class="btn small" type="button" title="Chỉnh sửa chi tiết các cột" style="margin-left:auto;font-weight:600;"><span style="font-size:13px;">⚙️</span> Tuỳ chỉnh cột</button>
+          <span class="hint">Áp dụng cho các dòng được tích chọn, nếu không tích dòng nào thì áp dụng cho tất cả.</span>
+        </div>
+        <div class="table-wrap">
+          <table class="grid" id="rowsTable">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="chkAllRows"></th>
+                <th>Bật</th>
+                <th>Sản phẩm / Phân loại</th>
+                <th>Giá gốc</th>
+                <th>Giá KM hiện tại</th>
+                <th>Tồn kho</th>
+                <th>Giá Flash Sale</th>
+                <th>Giảm</th>
+                <th>SL FS</th>
+                <th>Giới hạn</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>4. Đăng ký</h3>
+          <div class="row">
+            <button id="btnSaveTemplate" class="btn">Lưu làm mẫu tự động</button>
+            <button id="btnSubmit" class="btn primary big">Đăng ký Flash Sale</button>
+          </div>
+        </div>
+        <div id="submitLog" class="log-box"></div>
+      </div>
+    </section>
+
+    <!-- TỰ ĐỘNG -->
+    <section id="tab-auto" class="panel">
+      <div class="card">
+        <div class="card-head"><h3>Cài đặt chung</h3></div>
+        <div class="row">
+          <label class="switch-label"><input type="checkbox" id="autoEnabled"> Bật chạy ngầm</label>
+          <label>Kiểm tra mỗi
+            <select id="intervalMinutes">
+              <option value="30">30 phút</option>
+              <option value="60">1 giờ</option>
+              <option value="120">2 giờ</option>
+              <option value="180">3 giờ</option>
+              <option value="360">6 giờ</option>
+            </select>
+          </label>
+        </div>
+        <div class="hint">Chrome phải đang mở và bạn phải đang đăng nhập Kênh Người Bán. Nếu chưa có tab banhang.shopee.vn, extension sẽ tự mở một tab ngầm.</div>
+      </div>
+      <div id="ruleList"></div>
+      <div class="hint">Tạo mẫu: ở tab "Danh sách" bấm <b>Làm mẫu</b> trên một Flash Sale có sẵn, hoặc ở tab "Tạo / Sửa" bấm <b>Lưu làm mẫu tự động</b>.</div>
+    </section>
+
+    <!-- NHẬT KÝ -->
+    <section id="tab-logs" class="panel">
+      <div class="toolbar">
+        <button id="btnReloadLogs" class="btn">Tải lại</button>
+        <button id="btnClearLogs" class="btn danger">Xoá nhật ký</button>
+      </div>
+      <div id="logList" class="log-box tall"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

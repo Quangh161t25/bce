@@ -7,7 +7,89 @@
 
     let allData = [];
     let headers = [];
+    let tableCols = [];
+    let defaultCols = [];
     let dataLoaded = false;
+
+    // Nút mở modal tùy chỉnh cột
+    const btnCustom = document.getElementById('btn-col-custom-sp-giam-gia');
+    if (btnCustom) {
+        btnCustom.addEventListener('click', openCustomizer);
+    }
+
+    function buildDefaultCols(hdrs) {
+        return hdrs.map((h, i) => {
+            let defaultWidth = 110;
+            let defaultWrap = false;
+            let defaultAlign = 'left';
+            let defaultFixed = false;
+            const lower = h.toLowerCase();
+            if (lower.includes('tên') || lower.includes('mô tả')) {
+                defaultWidth = 240;
+                defaultWrap = true;
+            } else if (lower.includes('ảnh') || lower.includes('link') || lower.includes('video')) {
+                defaultWidth = 75;
+                defaultAlign = 'center';
+            } else if (lower.includes('giá') || lower.includes('kho') || lower.includes('tiền')) {
+                defaultWidth = 95;
+                defaultAlign = 'right';
+            } else if (lower.includes('ngày') || lower.includes('thời gian')) {
+                defaultWidth = 110;
+                defaultAlign = 'center';
+            }
+            return {
+                id: `col_${i}`,
+                originalIndex: i,
+                label: h || `Cột ${i + 1}`,
+                visible: true,
+                align: defaultAlign,
+                wrap: defaultWrap,
+                width: defaultWidth,
+                fixed: defaultFixed
+            };
+        });
+    }
+
+    function openCustomizer() {
+        if (!window.TableCustomizer || !defaultCols.length) return;
+        window.TableCustomizer.openColumnCustomizerModal({
+            tableId: 'table-sp-giam-gia',
+            tableName: 'Dữ Liệu SP_GIAM_GIA',
+            defaultCols: defaultCols,
+            currentConfig: tableCols,
+            onSave: (newCfg) => {
+                tableCols = newCfg;
+                renderThead();
+                renderTable();
+            }
+        });
+    }
+
+    function renderThead() {
+        if (!thead) return;
+        const activeCols = tableCols.filter(c => c.visible !== false);
+        let theadHtml = '<tr>';
+        activeCols.forEach(c => {
+            theadHtml += `<th data-col="${c.id}" style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; cursor: pointer;" title="Bấm để tùy chỉnh chi tiết cột">${c.label}</th>`;
+        });
+        theadHtml += `<th class="th-settings-gear" style="padding: 8px; border-bottom: 1px solid #e2e8f0; width: 34px; text-align: center; cursor: pointer; color: #0284c7;" title="Tùy chỉnh chi tiết các cột">⚙️</th>`;
+        theadHtml += '</tr>';
+        thead.innerHTML = theadHtml;
+
+        const gear = thead.querySelector('.th-settings-gear');
+        if (gear) {
+            gear.onclick = openCustomizer;
+        }
+        thead.querySelectorAll('th[data-col]').forEach(th => {
+            th.ondblclick = openCustomizer;
+        });
+
+        if (window.TableCustomizer) {
+            window.TableCustomizer.attachColumnResizers('table-sp-giam-gia', (newCfg) => {
+                tableCols = newCfg;
+            });
+        }
+    }
 
     // Reload whenever the tab is clicked to ensure it is always synchronized
     if (tabBtn) {
@@ -38,13 +120,15 @@
                     }
                     if (gianIdx === -1) gianIdx = 8; // Column I (index 8) is 'gian'
 
-                    // Build the header HTML dynamically
-                    let theadHtml = '<tr>';
-                    headers.forEach(h => {
-                        theadHtml += `<th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600;">${h}</th>`;
-                    });
-                    theadHtml += '</tr>';
-                    thead.innerHTML = theadHtml;
+                    // Khởi tạo TableCustomizer cho SP_GIAM_GIA
+                    defaultCols = buildDefaultCols(headers);
+                    if (window.TableCustomizer) {
+                        tableCols = window.TableCustomizer.getTableConfig('table-sp-giam-gia', defaultCols);
+                        window.TableCustomizer.applyTableStyles('table-sp-giam-gia', tableCols);
+                    } else {
+                        tableCols = defaultCols;
+                    }
+                    renderThead();
 
                     allData = [];
                     // Load from bottom to top (newest first)
@@ -116,9 +200,11 @@
             }
         }
 
+        const activeCols = tableCols.filter(c => c.visible !== false);
+
         tbody.innerHTML = '';
         if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="${headers.length}" style="padding: 10px; text-align: center; color: #64748b;">Không tìm thấy kết quả</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${activeCols.length + 1}" style="padding: 10px; text-align: center; color: #64748b;">Không tìm thấy kết quả</td></tr>`;
             return;
         }
 
@@ -126,14 +212,16 @@
         filtered.forEach(row => {
             const tr = document.createElement('tr');
             
-            row.forEach((cellValue, cellIndex) => {
+            activeCols.forEach(col => {
+                const cellIndex = col.originalIndex;
+                const cellValue = row[cellIndex] || '';
                 let cellHtml = cellValue;
                 // If value looks like an image link, render it as an image
                 if (cellValue.startsWith('http') && (cellValue.match(/\.(jpeg|jpg|gif|png|webp)/i) || cellValue.includes('googleusercontent') || cellValue.includes('drive.google'))) {
                     cellHtml = `<img src="${cellValue}" style="max-width: 60px; max-height: 60px; object-fit: contain; border-radius: 4px;" alt="ảnh">`;
                 } 
                 // Truncate long text
-                else if (cellValue.length > 80) {
+                else if (cellValue.length > 80 && !col.wrap) {
                     let shortText = cellValue.substring(0, 80) + '...';
                     cellHtml = `<span title="${cellValue.replace(/"/g, '&quot;')}">${shortText}</span>`;
                 }
@@ -149,11 +237,17 @@
                 }
 
                 const td = document.createElement('td');
-                td.style.cssText = "padding: 8px; border-bottom: 1px solid #f1f5f9; color: #475569; max-width: 200px; word-wrap: break-word;";
+                td.setAttribute('data-col', col.id);
+                td.style.cssText = "padding: 8px; border-bottom: 1px solid #f1f5f9; color: #475569;";
                 td.innerHTML = cellHtml;
                 tr.appendChild(td);
             });
             
+            // Cột rỗng tương ứng với cột ⚙️ ở header
+            const tdGear = document.createElement('td');
+            tdGear.style.cssText = "padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: center;";
+            tr.appendChild(tdGear);
+
             fragment.appendChild(tr);
         });
         tbody.appendChild(fragment);

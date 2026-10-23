@@ -13,7 +13,9 @@ import {
     fetchSpBoSet,
     fetchSpShopeeData,
     buildSpShopeeGianMap,
-    fetchWebSpImageMap
+    fetchWebSpImageMap,
+    writeDsSpGiaDang,
+    batchWriteDsSpGiaDang
 } from './services/googleSheetsApi.js';
 import {
     readDsSpExcelRows,
@@ -28,7 +30,8 @@ import {
 import {
     recalculateTinhGiaRowData,
     recalculateTinhGiaRowByProfitRate,
-    recalculateDhFinancials
+    recalculateDhFinancials,
+    hasTinhGiaRowChanges
 } from './utils/calculations.js';
 import { showToast } from './utils/clipboard.js';
 
@@ -238,16 +241,64 @@ export default function App() {
                 await loadSpBo();
             }
 
-            const rawRows = await fetchSheetDataWithFallback(tabToLoad, (msg) => {
-                setLoadingText(msg);
-            });
+            let rowsWithIndex = [];
+            if (tabToLoad === 'TINH_GIA') {
+                const rawDsSp = await fetchSheetDataWithFallback('DS_SP', (msg) => {
+                    setLoadingText(msg);
+                });
+                const cleanDsSp = (rawDsSp || []).filter(r => r && r.some(c => String(c || '').trim() !== ''));
+                rowsWithIndex = cleanDsSp.map((r, i) => {
+                    const row = Array(22).fill('');
+                    row[0] = r[0] ?? ''; // id_sp_con
+                    row[1] = r[1] ?? ''; // id_sp
+                    row[2] = r[2] ?? ''; // ten_sp
+                    row[3] = parseMoney(r[3]); // gia_nhap_ncc
+                    row[4] = parseMoney(r[4]); // gia_ban
+                    row[5] = parseMoney(r[5]); // gia_dong_goi
+                    row[6] = parseMoney(r[6]); // gia_thap_nhat
+                    row[7] = '10%';
+                    row[8] = 0;
 
-            const validRows = (rawRows || []).filter(r => r && r.some(c => String(c || '').trim() !== ''));
-            const rowsWithIndex = validRows.map((row, i) => {
-                const arr = Array.isArray(row) ? [...row] : [];
-                arr._sheetRow = i + 2;
-                return arr;
-            });
+                    let giaDang = parseMoney(r[11]);
+                    const giaThapNhat = parseMoney(r[6]);
+                    const giaBan = parseMoney(r[4]);
+                    if (giaDang <= 0) {
+                        if (giaThapNhat > 0) {
+                            giaDang = giaThapNhat;
+                        } else if (giaBan > 0) {
+                            const temp = recalculateTinhGiaRowByProfitRate(row, 0.10);
+                            giaDang = temp[9];
+                        }
+                    }
+                    row[9] = giaDang;
+                    row[10] = '0%';
+                    row[11] = '0%';
+                    row[12] = '11%';
+                    row[13] = 0;
+                    row[14] = '6%';
+                    row[15] = 0;
+                    row[16] = '5.5%';
+                    row[17] = 0;
+                    row[18] = '1.5%';
+                    row[19] = 0;
+                    row[20] = 3000;
+                    row[21] = 2700;
+
+                    const calculated = recalculateTinhGiaRowData(row);
+                    calculated._sheetRow = i + 2;
+                    return calculated;
+                });
+            } else {
+                const rawRows = await fetchSheetDataWithFallback(tabToLoad, (msg) => {
+                    setLoadingText(msg);
+                });
+                const validRows = (rawRows || []).filter(r => r && r.some(c => String(c || '').trim() !== ''));
+                rowsWithIndex = validRows.map((row, i) => {
+                    const arr = Array.isArray(row) ? [...row] : [];
+                    arr._sheetRow = i + 2;
+                    return arr;
+                });
+            }
 
             setAllData(rowsWithIndex);
             setCurrentPage(1);
@@ -441,7 +492,7 @@ export default function App() {
                     if (idCon && spBoSet.has(idCon)) return false;
                     if (idSp && !idCon && spBoSet.has(idSp)) return false;
                 }
-                if (currentTab === 'TINH_GIA' && String(row[0] || '').trim().length <= 5) {
+                if (currentTab === 'TINH_GIA' && !String(row[0] || '').trim() && !String(row[1] || '').trim()) {
                     return false;
                 }
 
@@ -1022,8 +1073,9 @@ export default function App() {
         const targetRow = allData[rowIndex];
         if (!targetRow || !targetRow._sheetRow) return;
         try {
-            await writeRecordRow('TINH_GIA', targetRow, targetRow._sheetRow);
-            showToast('✅ Đã lưu giá sản phẩm!');
+            const giaDang = parseMoney(targetRow[9]);
+            await writeDsSpGiaDang(targetRow._sheetRow, giaDang);
+            showToast(`✅ Đã lưu Giá đăng (${formatDisplayNumber(giaDang)} đ) vào DS_SP!`);
         } catch (err) {
             console.error('Error saving inline pricing:', err);
             showToast(`❌ Lỗi lưu giá: ${err.message || err}`);
@@ -1034,6 +1086,7 @@ export default function App() {
         try {
             const rate = profitPercent / 100;
             const recalculated = recalculateTinhGiaRowByProfitRate(row, rate);
+            const giaDang = parseMoney(recalculated[9]);
 
             setAllData(prev => {
                 const next = [...prev];
@@ -1047,8 +1100,8 @@ export default function App() {
             });
 
             if (recalculated._sheetRow) {
-                await writeRecordRow('TINH_GIA', recalculated, recalculated._sheetRow);
-                showToast(`✅ Đã đặt Lợi nhuận = ${profitPercent}% & lưu thành công!`);
+                await writeDsSpGiaDang(recalculated._sheetRow, giaDang);
+                showToast(`✅ Đã đặt Lợi nhuận = ${profitPercent}% (Giá đăng: ${formatDisplayNumber(giaDang)} đ) & lưu vào DS_SP!`);
             }
         } catch (err) {
             console.error('Error quick loi nhuan:', err);
@@ -1068,6 +1121,7 @@ export default function App() {
                 // Nếu chưa có giá thấp nhất -> tính theo Lợi nhuận 10%
                 recalculated = recalculateTinhGiaRowByProfitRate(row, 0.10);
             }
+            const giaDang = parseMoney(recalculated[9]);
 
             setAllData(prev => {
                 const next = [...prev];
@@ -1081,8 +1135,8 @@ export default function App() {
             });
 
             if (recalculated._sheetRow) {
-                await writeRecordRow('TINH_GIA', recalculated, recalculated._sheetRow);
-                showToast(giaThapNhat > 0 ? `✅ Đã điền Giá thấp nhất: ${formatDisplayNumber(giaThapNhat)} đ!` : `💡 Chưa có giá thấp nhất, đã tính theo Lợi nhuận 10%!`);
+                await writeDsSpGiaDang(recalculated._sheetRow, giaDang);
+                showToast(giaThapNhat > 0 ? `✅ Đã điền Giá thấp nhất: ${formatDisplayNumber(giaThapNhat)} đ & lưu vào DS_SP!` : `💡 Đã tính theo Lợi nhuận 10% & lưu vào DS_SP!`);
             }
         } catch (err) {
             console.error('Error quick gia dang:', err);
@@ -1091,74 +1145,51 @@ export default function App() {
     };
 
     const handleQuickFees = async (row, rowIndex) => {
-        try {
-            const updated = [...row];
-            updated[12] = '11%';
-            updated[14] = '6%';
-            updated[16] = '5.5%';
-            updated[18] = '1.5%';
-            const recalculated = recalculateTinhGiaRowData(updated);
+        const updated = [...row];
+        updated[12] = '11%';
+        updated[14] = '6%';
+        updated[16] = '5.5%';
+        updated[18] = '1.5%';
+        const recalculated = recalculateTinhGiaRowData(updated);
 
-            setAllData(prev => {
-                const next = [...prev];
-                const actualIndex = next.findIndex(r => r._sheetRow === row._sheetRow);
-                if (actualIndex >= 0) {
-                    next[actualIndex] = recalculated;
-                } else if (rowIndex < next.length) {
-                    next[rowIndex] = recalculated;
-                }
-                return next;
-            });
-
-            if (recalculated._sheetRow) {
-                await writeRecordRow('TINH_GIA', recalculated, recalculated._sheetRow);
-                showToast('⚡ Đã điền các phí mặc định (11% Cố định, 6% GD, 5.5% XTRA, 1.5% Thuế)!');
+        setAllData(prev => {
+            const next = [...prev];
+            const actualIndex = next.findIndex(r => r._sheetRow === row._sheetRow);
+            if (actualIndex >= 0) {
+                next[actualIndex] = recalculated;
+            } else if (rowIndex < next.length) {
+                next[rowIndex] = recalculated;
             }
-        } catch (err) {
-            console.error('Error quick fees:', err);
-            showToast(`❌ Lỗi điền phí: ${err.message || err}`);
-        }
+            return next;
+        });
+        showToast('⚡ Đã điền các phí mặc định (11% Cố định, 6% GD, 5.5% XTRA, 1.5% Thuế)!');
     };
 
     const handleBatchDefaultFees = async () => {
         const targetIds = selectedIds.size > 0 ? selectedIds : new Set(filteredRows.map(r => String(r[0] || '').trim()));
         if (targetIds.size === 0) return;
 
-        setIsLoading(true);
-        setLoadingText('Đang điền các phí mặc định (11% Cố định, 6% GD, 5.5% XTRA, 1.5% Thuế)...');
-        try {
-            const itemsToUpdate = [];
-            const nextData = [...allData];
+        const nextData = [...allData];
+        nextData.forEach((row, i) => {
+            const pId = String(row[0] || '').trim();
+            if (targetIds.has(pId)) {
+                const updated = [...row];
+                updated[12] = '11%';
+                updated[14] = '6%';
+                updated[16] = '5.5%';
+                updated[18] = '1.5%';
+                nextData[i] = recalculateTinhGiaRowData(updated);
+            }
+        });
 
-            nextData.forEach((row, i) => {
-                const pId = String(row[0] || '').trim();
-                if (targetIds.has(pId)) {
-                    const updated = [...row];
-                    updated[12] = '11%';
-                    updated[14] = '6%';
-                    updated[16] = '5.5%';
-                    updated[18] = '1.5%';
-                    const recalculated = recalculateTinhGiaRowData(updated);
-                    nextData[i] = recalculated;
-                    itemsToUpdate.push({ sheetRow: row._sheetRow, row: recalculated });
-                }
-            });
-
-            await batchWriteRecordRows('TINH_GIA', itemsToUpdate);
-            setAllData(nextData);
-            showToast(`⚡ Đã điền các phí mặc định cho ${itemsToUpdate.length} sản phẩm!`);
-        } catch (err) {
-            console.error('Error batch updating fees:', err);
-            showToast(`❌ Lỗi điền phí mặc định: ${err.message || err}`);
-        } finally {
-            setIsLoading(false);
-        }
+        setAllData(nextData);
+        showToast(`⚡ Đã điền các phí mặc định cho ${targetIds.size} sản phẩm!`);
     };
 
     const handleBatchTinhGiaProfit = async (profitRate) => {
         if (selectedIds.size === 0) return;
         setIsLoading(true);
-        setLoadingText(`Đang cập nhật lợi nhuận ${(profitRate * 100).toFixed(1)}%...`);
+        setLoadingText(`Đang cập nhật lợi nhuận ${(profitRate * 100).toFixed(1)}% vào sheet DS_SP...`);
         try {
             const itemsToUpdate = [];
             const nextData = [...allData];
@@ -1168,13 +1199,13 @@ export default function App() {
                 if (selectedIds.has(pId)) {
                     const recalculated = recalculateTinhGiaRowByProfitRate(row, profitRate);
                     nextData[i] = recalculated;
-                    itemsToUpdate.push({ sheetRow: row._sheetRow, row: recalculated });
+                    itemsToUpdate.push({ sheetRow: row._sheetRow, giaDang: parseMoney(recalculated[9]) });
                 }
             });
 
-            await batchWriteRecordRows('TINH_GIA', itemsToUpdate);
+            await batchWriteDsSpGiaDang(itemsToUpdate);
             setAllData(nextData);
-            showToast(`✅ Đã cập nhật lợi nhuận cho ${itemsToUpdate.length} sản phẩm!`);
+            showToast(`✅ Đã cập nhật lợi nhuận cho ${itemsToUpdate.length} sản phẩm & lưu vào DS_SP!`);
         } catch (err) {
             console.error('Error batch updating profit:', err);
             showToast(`❌ Lỗi cập nhật lợi nhuận: ${err.message || err}`);
@@ -1188,7 +1219,7 @@ export default function App() {
         if (targetIds.size === 0) return;
 
         setIsLoading(true);
-        setLoadingText('Đang cập nhật giá đăng = giá bán thấp nhất...');
+        setLoadingText('Đang cập nhật giá đăng = giá bán thấp nhất vào sheet DS_SP...');
         try {
             const itemsToUpdate = [];
             const nextData = [...allData];
@@ -1207,16 +1238,30 @@ export default function App() {
                         recalculated = recalculateTinhGiaRowByProfitRate(row, 0.10);
                     }
                     nextData[i] = recalculated;
-                    itemsToUpdate.push({ sheetRow: row._sheetRow, row: recalculated });
+                    itemsToUpdate.push({ sheetRow: row._sheetRow, giaDang: parseMoney(recalculated[9]) });
                 }
             });
 
-            await batchWriteRecordRows('TINH_GIA', itemsToUpdate);
+            await batchWriteDsSpGiaDang(itemsToUpdate);
             setAllData(nextData);
-            showToast(`✅ Đã cập nhật giá đăng cho ${itemsToUpdate.length} sản phẩm!`);
+            showToast(`✅ Đã cập nhật giá đăng cho ${itemsToUpdate.length} sản phẩm & lưu vào DS_SP!`);
         } catch (err) {
             console.error('Error updating min price:', err);
             showToast(`❌ Lỗi cập nhật giá thấp nhất: ${err.message || err}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSyncTinhGiaFromDsSp = async () => {
+        setIsLoading(true);
+        setLoadingText('Đang nạp và tính toán lại giá từ sheet DS_SP...');
+        try {
+            await loadData('TINH_GIA');
+            showToast('✅ Đã cập nhật toàn bộ bảng Tính Giá từ DS_SP!');
+        } catch (err) {
+            console.error('Lỗi khi tải lại Tính Giá từ DS_SP:', err);
+            showToast(`❌ Lỗi cập nhật: ${err.message || err}`);
         } finally {
             setIsLoading(false);
         }
@@ -1525,6 +1570,7 @@ export default function App() {
                         }}
                         onBatchMinPrice={handleBatchMinPrice}
                         onBatchDefaultFees={handleBatchDefaultFees}
+                        onSyncDsSp={handleSyncTinhGiaFromDsSp}
                     />
 
                     {/* Tab DS_SP / TINH_GIA / WEB_SP: Prefix Filters Bar */}
@@ -1557,6 +1603,7 @@ export default function App() {
                                 onBatchDefaultFees={handleBatchDefaultFees}
                                 onMoveToSpBo={handleMoveToSpBo}
                                 onClearTinhTrang={handleClearDsSpTinhTrang}
+                                onSyncDsSp={handleSyncTinhGiaFromDsSp}
                             />
                         </>
                     )}
@@ -1721,14 +1768,15 @@ export default function App() {
                     row={editingTinhGiaRow}
                     headers={storageHeaders}
                     onSaveRow={async (updatedRow) => {
-                        await writeRecordRow('TINH_GIA', updatedRow, updatedRow._sheetRow);
+                        const giaDang = parseMoney(updatedRow[9]);
+                        await writeDsSpGiaDang(updatedRow._sheetRow, giaDang);
                         setAllData(prev => {
                             const next = [...prev];
                             const idx = next.findIndex(r => r._sheetRow === updatedRow._sheetRow);
                             if (idx >= 0) next[idx] = updatedRow;
                             return next;
                         });
-                        showToast('✅ Đã lưu giá sản phẩm thành công!');
+                        showToast(`✅ Đã lưu Giá đăng (${formatDisplayNumber(giaDang)} đ) vào DS_SP!`);
                     }}
                 />
             )}

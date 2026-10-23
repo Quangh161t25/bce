@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shopee Clone Tool</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <header>
+    <strong>Shopee Clone Tool</strong>
+    <span id="shopStatus" class="pill">Đang kiểm tra shop...</span>
+  </header>
+
+  <section class="card" id="productCard">
+    <div id="productEmpty" class="hint">
+      Mở một trang sản phẩm trên <b>shopee.vn</b> (nếu đã mở thì bấm F5) để lấy dữ liệu.
+    </div>
+    <div id="productBox" hidden>
+      <div class="product">
+        <img id="pImage" alt="" />
+        <div>
+          <div id="pName" class="pname"></div>
+          <div id="pMeta" class="hint"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="mediaCard" hidden>
+    <div class="row between">
+      <b>🖼 Ảnh &amp; Video <span id="mediaCount" class="hint"></span></b>
+      <div class="row gap">
+        <button id="btnDlAll" class="btn">⬇ Tải tất cả</button>
+        <button id="btnToggleMedia" class="btn">Thu gọn</button>
+      </div>
+    </div>
+    <div id="mediaGrid" class="media-groups"></div>
+  </section>
+
+  <section class="card">
+    <div class="grid3">
+      <label>Cân nặng (g)<input data-opt="weight" type="number" min="1" /></label>
+      <label>Tồn kho<input data-opt="stock" type="number" min="0" /></label>
+      <label>Hạn sử dụng (ngày)<input data-opt="expiryDays" type="number" min="1" /></label>
+    </div>
+    <div class="grid2">
+      <label>Tăng giảm giá<input data-opt="priceChange" placeholder="+10% / -5% / +20000 / =99000" /></label>
+      <label>Thay SĐT trong mô tả<input data-opt="phone" placeholder="Để trống = giữ nguyên" /></label>
+    </div>
+    <div class="grid2">
+      <label>Giá hiện tại<input id="priceNow" readonly /></label>
+      <label>Giá sau tăng giảm<input id="priceAfter" readonly /></label>
+    </div>
+    <div class="grid2">
+      <label>Tiền tố tiêu đề<input data-opt="titlePrefix" /></label>
+      <label>Hậu tố tiêu đề<input data-opt="titleSuffix" /></label>
+    </div>
+    <div class="grid2">
+      <label>SKU phân loại<input data-opt="modelSku" placeholder="Để trống = dùng SKU sản phẩm" /></label>
+      <label>SKU sản phẩm<input data-opt="parentSku" placeholder="Để trống = ID sản phẩm gốc" /></label>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" data-opt="dropCover" /> Xóa ảnh bìa gốc</label>
+      <label><input type="checkbox" data-opt="usePriceBefore" /> Lấy giá trước KM</label>
+      <label><input type="checkbox" data-opt="skipDuplicate" /> Không trùng SP</label>
+      <label><input type="checkbox" data-opt="keepStock" /> Giữ tồn kho gốc</label>
+      <label><input type="checkbox" data-opt="copyVideo" /> Sao chép video</label>
+      <label><input type="checkbox" data-opt="descImages" /> Ảnh trong mô tả</label>
+      <label><input type="checkbox" data-opt="unlisted" /> Ẩn sản phẩm</label>
+    </div>
+    <div class="shopset">
+      <div class="row between">
+        <b class="small">🚚 Đơn vị vận chuyển</b>
+        <a href="#" id="reloadShop" class="small">↻ Tải lại</a>
+      </div>
+      <div id="channelList" class="chips"><span class="hint small">Đang tải...</span></div>
+      <b class="small">🏬 Kho</b>
+      <div id="locationList" class="chips"><span class="hint small">Đang tải...</span></div>
+      <div class="row gap scanrow">
+        <button id="btnScan" class="btn" disabled>Quét tồn kho (0/0)</button>
+        <span class="hint small">Đọc tồn kho thật từng phân loại trên trang shopee.vn</span>
+      </div>
+    </div>
+    <details>
+      <summary>Nâng cao</summary>
+      <label>ID sản phẩm mẫu (lấy cài đặt vận chuyển)<input data-opt="templateId" placeholder="Để trống = sản phẩm mới nhất của shop" /></label>
+      <label>Thêm vào đầu mô tả<textarea data-opt="descPrefix" rows="2"></textarea></label>
+      <label>Thêm vào cuối mô tả<textarea data-opt="descSuffix" rows="2"></textarea></label>
+    </details>
+  </section>
+
+  <section class="card ai">
+    <div class="row between">
+      <b>🪄 AI – Tạo / Ghép ảnh bìa</b>
+      <div class="row gap">
+        <button id="btnGemini" class="btn blue">Mở Gemini</button>
+        <button id="btnChatGpt" class="btn green">Mở ChatGPT</button>
+        <button id="btnAuto" class="btn red" title="Mở Gemini, tự gửi, chờ tạo ảnh, lấy làm ảnh bìa rồi tự sao chép sang Shopee">⚡ Tự động</button>
+      </div>
+    </div>
+    <input data-opt="aiImage1" placeholder="Dán link ảnh 1 (ảnh mẫu) vào đây..." />
+    <div class="grid2 previews">
+      <div class="preview">
+        <div class="cap green-t">Ảnh 1: Ảnh mẫu</div>
+        <img id="aiImg1" alt="" hidden />
+        <div id="aiImg1Empty" class="empty">Dán link ảnh ở trên</div>
+      </div>
+      <div class="preview">
+        <div class="cap blue-t">Ảnh 2: Ảnh sản phẩm (bấm ảnh nhỏ để đổi)</div>
+        <img id="aiImg2" alt="" hidden />
+        <div id="aiImg2Empty" class="empty">Chưa có sản phẩm</div>
+        <div id="aiThumbs" class="thumbs"></div>
+      </div>
+    </div>
+    <div class="row between small">
+      <span class="hint">Câu lệnh prompt ({ten_sp} = tên sản phẩm):</span>
+      <a href="#" id="resetPrompt">↺ Prompt mặc định</a>
+    </div>
+    <textarea data-opt="aiPrompt" rows="3"></textarea>
+
+    <div class="cover">
+      <div class="row between">
+        <span class="green-t"><b>Ảnh bìa mới khi sao chép</b></span>
+        <div class="row gap">
+          <button id="btnPickCover" class="btn">Chọn ảnh từ máy</button>
+          <button id="btnClearCover" class="btn danger" hidden>Bỏ</button>
+        </div>
+      </div>
+      <div id="coverBox" class="row gap" hidden>
+        <img id="coverImg" alt="" />
+        <span class="green-t small">✔ Ảnh này sẽ làm ảnh bìa khi bấm "Sao chép sang Shopee"</span>
+      </div>
+      <div id="coverEmpty" class="hint small">Trên Gemini, bấm nút "📥 Dùng làm ảnh bìa" ở góc ảnh đã tạo – ảnh sẽ tự hiện ở đây.</div>
+      <input id="coverFile" type="file" accept="image/*" hidden />
+    </div>
+  </section>
+
+  <section class="card">
+    <button id="btnClone" class="btn primary big" disabled>Sao chép sang Shopee</button>
+    <div id="log" class="log"></div>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

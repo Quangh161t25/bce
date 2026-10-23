@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Shopee Seller Tool</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">⚡ Shopee Seller Tool</div>
+    <div class="conn">
+      <span id="connStatus" class="badge">Chưa kết nối</span>
+      <button id="btnConnect" class="btn small">Kết nối lại</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab" data-tab="products">Sản phẩm</button>
+    <button class="tab active" data-tab="list">Danh sách Flash Sale</button>
+    <button class="tab" data-tab="editor">Tạo / Sửa Flash Sale</button>
+    <button class="tab" data-tab="auto">Tự động đăng ký</button>
+    <button class="tab" data-tab="logs">Nhật ký</button>
+  </nav>
+
+  <main>
+    <!-- SẢN PHẨM -->
+    <section id="tab-products" class="panel">
+      <div class="card">
+        <div class="card-head">
+          <div id="pSummary"></div>
+          <div class="row">
+            <span id="pProgress" class="muted"></span>
+            <button id="btnPStop" class="btn danger small hidden">Dừng</button>
+            <button id="btnPLoad" class="btn primary">Tải toàn bộ sản phẩm</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <input id="pfSearch" placeholder="Tìm tên, ID, SKU..." style="width:260px">
+          <select id="pfStatus">
+            <option value="">Tất cả trạng thái</option>
+            <option value="active">Đang bán</option>
+            <option value="hidden">Đã ẩn</option>
+            <option value="banned">Bị khoá</option>
+          </select>
+          <select id="pfStock">
+            <option value="">Tất cả tồn kho</option>
+            <option value="in">Còn hàng</option>
+            <option value="low">Sắp hết (≤ 10)</option>
+            <option value="out">Hết hàng</option>
+          </select>
+          <label>Sắp xếp
+            <select id="pfSort">
+              <option value="newest">Mới nhất</option>
+              <option value="name">Tên A–Z</option>
+              <option value="priceAsc">Giá tăng dần</option>
+              <option value="priceDesc">Giá giảm dần</option>
+              <option value="stockAsc">Tồn kho ít nhất</option>
+              <option value="stockDesc">Tồn kho nhiều nhất</option>
+              <option value="sold">Bán chạy</option>
+            </select>
+          </label>
+          <span class="muted">Khớp: <b id="pFilteredCount">0</b></span>
+        </div>
+        <div class="toolbar">
+          <span class="muted">Đã chọn: <b id="pSelCount">0</b></span>
+          <button id="btnPSelectFiltered" class="btn small">Chọn tất cả kết quả lọc</button>
+          <button id="btnPClearSel" class="btn small">Bỏ chọn</button>
+          <button id="btnPToFs" class="btn small">⚡ Thêm vào Flash Sale</button>
+          <button id="btnPExport" class="btn small">⬇ Xuất Excel (CSV)</button>
+          <button id="btnPExportMedia" class="btn small">⬇ Xuất link ảnh/video</button>
+        </div>
+        <div class="table-wrap">
+          <table class="grid" id="pTable">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="pChkAll" title="Chọn cả trang"></th>
+                <th>ID chính</th>
+                <th>Tên sản phẩm</th>
+                <th>SKU</th>
+                <th>ID phân loại</th>
+                <th>Tên phân loại</th>
+                <th>SKU phân loại</th>
+                <th>Ảnh phân loại</th>
+                <th>Ảnh chính</th>
+                <th>Ảnh mô tả</th>
+                <th>Video</th>
+                <th>Giá</th>
+                <th>Giá KM</th>
+                <th>Tồn kho</th>
+                <th>Ngày tạo</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="pPager" class="row" style="justify-content:center;margin-top:10px"></div>
+      </div>
+
+      <div id="pMedia" class="modal hidden">
+        <div class="modal-box">
+          <div class="card-head">
+            <h3 id="pMediaTitle"></h3>
+            <button id="pMediaClose" class="btn small">✕ Đóng</button>
+          </div>
+          <div id="pMediaBody"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DANH SÁCH -->
+    <section id="tab-list" class="panel active">
+      <div class="toolbar">
+        <div class="seg" id="listTypes">
+          <button data-type="next" class="active">Sắp diễn ra</button>
+          <button data-type="current">Đang diễn ra</button>
+          <button data-type="end">Đã kết thúc</button>
+          <button data-type="all">Tất cả</button>
+        </div>
+        <button id="btnReloadList" class="btn">Tải lại</button>
+        <button id="btnNewFs" class="btn primary">+ Tạo Flash Sale mới</button>
+      </div>
+      <div id="fsList"></div>
+      <div id="fsDetail" class="card hidden"></div>
+    </section>
+
+    <!-- TRÌNH SOẠN THẢO -->
+    <section id="tab-editor" class="panel">
+      <div id="editorBanner" class="banner hidden"></div>
+
+      <div class="card" id="slotCard">
+        <div class="card-head">
+          <h3>1. Chọn khung giờ</h3>
+          <div>
+            <label>Số ngày tới
+              <select id="slotDays">
+                <option value="3">3</option>
+                <option value="7" selected>7</option>
+                <option value="14">14</option>
+                <option value="30">30</option>
+              </select>
+            </label>
+            <button id="btnLoadSlots" class="btn">Tải khung giờ</button>
+          </div>
+        </div>
+        <div class="hint">Khung giờ đã có Flash Sale của shop sẽ bị khoá. Có thể chọn nhiều khung giờ để đăng ký cùng lúc.</div>
+        <div id="slotList" class="slots"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>2. Thêm sản phẩm</h3>
+          <div class="row">
+            <input id="productKeyword" placeholder="Tìm theo tên sản phẩm...">
+            <button id="btnSearchProduct" class="btn">Tìm</button>
+            <button id="btnAddAllResults" class="btn">Thêm tất cả kết quả</button>
+          </div>
+        </div>
+        <div id="productResults" class="product-results"></div>
+        <div class="center"><button id="btnMoreProducts" class="btn hidden">Tải thêm</button></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>3. Thiết lập giá &amp; số lượng <span id="rowCount" class="muted"></span></h3>
+          <button id="btnClearRows" class="btn danger small">Xoá hết</button>
+        </div>
+        <div class="bulk">
+          <label>Cách tính giá FS
+            <select id="bulkMode">
+              <option value="percent">Giảm theo %</option>
+              <option value="amount">Giảm số tiền (đ)</option>
+              <option value="promo">= Giá khuyến mãi hiện tại</option>
+              <option value="fixed">Giá cố định (đ)</option>
+              <option value="keep">Giữ nguyên giá</option>
+            </select>
+          </label>
+          <label>Giá trị <input id="bulkValue" type="number" value="10" min="0"></label>
+          <label>Làm tròn
+            <select id="bulkRound">
+              <option value="1">Không</option>
+              <option value="100">100đ</option>
+              <option value="1000" selected>1.000đ</option>
+            </select>
+          </label>
+          <label>SL Flash Sale <input id="bulkStock" type="number" placeholder="giữ nguyên" min="0"></label>
+          <label>Giới hạn mua / khách <input id="bulkLimit" type="number" placeholder="giữ nguyên" min="0"></label>
+          <button id="btnApplyBulk" class="btn primary">Áp dụng</button>
+          <span class="hint">Áp dụng cho các dòng được tích chọn, nếu không tích dòng nào thì áp dụng cho tất cả.</span>
+        </div>
+        <div class="table-wrap">
+          <table class="grid" id="rowsTable">
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="chkAllRows"></th>
+                <th>Bật</th>
+                <th>Sản phẩm / Phân loại</th>
+                <th>Giá gốc</th>
+                <th>Giá KM hiện tại</th>
+                <th>Tồn kho</th>
+                <th>Giá Flash Sale</th>
+                <th>Giảm</th>
+                <th>SL FS</th>
+                <th>Giới hạn</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>4. Đăng ký</h3>
+          <div class="row">
+            <button id="btnSaveTemplate" class="btn">Lưu làm mẫu tự động</button>
+            <button id="btnSubmit" class="btn primary big">Đăng ký Flash Sale</button>
+          </div>
+        </div>
+        <div id="submitLog" class="log-box"></div>
+      </div>
+    </section>
+
+    <!-- TỰ ĐỘNG -->
+    <section id="tab-auto" class="panel">
+      <div class="card">
+        <div class="card-head"><h3>Cài đặt chung</h3></div>
+        <div class="row">
+          <label class="switch-label"><input type="checkbox" id="autoEnabled"> Bật chạy ngầm</label>
+          <label>Kiểm tra mỗi
+            <select id="intervalMinutes">
+              <option value="30">30 phút</option>
+              <option value="60">1 giờ</option>
+              <option value="120">2 giờ</option>
+              <option value="180">3 giờ</option>
+              <option value="360">6 giờ</option>
+            </select>
+          </label>
+        </div>
+        <div class="hint">Chrome phải đang mở và bạn phải đang đăng nhập Kênh Người Bán. Nếu chưa có tab banhang.shopee.vn, extension sẽ tự mở một tab ngầm.</div>
+      </div>
+      <div id="ruleList"></div>
+      <div class="hint">Tạo mẫu: ở tab "Danh sách" bấm <b>Làm mẫu</b> trên một Flash Sale có sẵn, hoặc ở tab "Tạo / Sửa" bấm <b>Lưu làm mẫu tự động</b>.</div>
+    </section>
+
+    <!-- NHẬT KÝ -->
+    <section id="tab-logs" class="panel">
+      <div class="toolbar">
+        <button id="btnReloadLogs" class="btn">Tải lại</button>
+        <button id="btnClearLogs" class="btn danger">Xoá nhật ký</button>
+      </div>
+      <div id="logList" class="log-box tall"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

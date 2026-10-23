@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Clone Tool",
+  "version": "1.0.0",
+  "description": "Sao chép sản phẩm Shopee sang shop của bạn, kèm tạo ảnh bìa bằng AI (Gemini / ChatGPT)",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "scripting",
+    "tabs",
+    "cookies",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://shopee.vn/*",
+    "https://banhang.shopee.vn/*",
+    "https://*.susercontent.com/*",
+    "https://cf.shopee.vn/*",
+    "https://gemini.google.com/*",
+    "https://*.googleusercontent.com/*",
+    "https://chatgpt.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "app.html"
+  },
+  "action": {
+    "default_title": "Shopee Clone Tool",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "128": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://shopee.vn/*"],
+      "js": ["content/shopee-hook.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://shopee.vn/*"],
+      "js": ["content/shopee-relay.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://gemini.google.com/*", "https://chatgpt.com/*"],
+      "js": ["content/ai-chat.js"]
+    }
+  ]
+}

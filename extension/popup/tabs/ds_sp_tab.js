@@ -40,12 +40,57 @@
         return String(value || '').trim().toLowerCase();
     }
 
+    // Button mở tùy chỉnh cột
+    const btnCustomDsSp = document.getElementById('btn-col-custom-ds-sp');
+    if (btnCustomDsSp) {
+        btnCustomDsSp.addEventListener('click', openDsSpCustomizer);
+    }
+
+    function openDsSpCustomizer() {
+        if (!window.TableCustomizer || !tableColumns.length) return;
+        const defaultCols = tableColumns.map((col, idx) => ({
+            id: col.key || `col_${idx}`,
+            label: col.label,
+            visible: true,
+            align: 'left',
+            wrap: true,
+            width: col.key === 'virtual_sku' ? 170 : (normalizeHeader(col.label) === 'ten_sp' ? 160 : 90),
+            fixed: false
+        }));
+        const curCfg = window.TableCustomizer.getTableConfig('ds-sp-table', defaultCols);
+        window.TableCustomizer.openColumnCustomizerModal({
+            tableId: 'ds-sp-table',
+            tableName: 'Danh Sách Sản Phẩm',
+            defaultCols,
+            currentConfig: curCfg,
+            onSave: (newCfg) => {
+                const colMap = new Map(tableColumns.map(c => [c.key, c]));
+                const nextCols = [];
+                newCfg.forEach(nc => {
+                    if (nc.visible !== false && colMap.has(nc.id)) {
+                        nextCols.push(colMap.get(nc.id));
+                    }
+                });
+                tableColumns = nextCols;
+                window.TableCustomizer.applyTableStyles('ds-sp-table', newCfg);
+                renderHeaders();
+                renderTable();
+            }
+        });
+    }
+
     function renderHeaders(headersRaw) {
         if (!theadRow) return;
         theadRow.innerHTML = tableColumns.map((column) => {
-            const minWidth = column.key === 'virtual_sku' ? '170px' : (normalizeHeader(column.label) === 'ten_sp' ? '150px' : '80px');
-            return `<th style="padding: 8px; border-bottom: 2px solid #e2e8f0; font-weight: bold; color: #1e293b; white-space: nowrap; min-width: ${minWidth}; max-width: ${minWidth};">${escapeHtml(column.label)}</th>`;
-        }).join('');
+            return `<th data-col="${column.key}" style="padding: 8px; border-bottom: 2px solid #e2e8f0; font-weight: bold; color: #1e293b; white-space: nowrap; cursor: pointer;" title="Bấm để tùy chỉnh cột">${escapeHtml(column.label)}</th>`;
+        }).join('') + `<th class="th-settings-gear" style="padding: 8px; border-bottom: 2px solid #e2e8f0; width: 34px; text-align: center; cursor: pointer; color: #0284c7;" title="Tùy chỉnh chi tiết các cột">⚙️</th>`;
+
+        const gear = theadRow.querySelector('.th-settings-gear');
+        if (gear) gear.onclick = openDsSpCustomizer;
+
+        if (window.TableCustomizer) {
+            window.TableCustomizer.attachColumnResizers('ds-sp-table');
+        }
     }
 
     function formatNumber(numStr) {
@@ -132,6 +177,27 @@
                         tableColumns.splice(tenSpColumnIndex + 1, 0, virtualColumn);
                     } else {
                         tableColumns.push(virtualColumn);
+                    }
+                    if (window.TableCustomizer) {
+                        const defaultCols = tableColumns.map((col, idx) => ({
+                            id: col.key || `col_${idx}`,
+                            label: col.label,
+                            visible: true,
+                            align: 'left',
+                            wrap: true,
+                            width: col.key === 'virtual_sku' ? 170 : (normalizeHeader(col.label) === 'ten_sp' ? 160 : 90),
+                            fixed: false
+                        }));
+                        const savedCfg = window.TableCustomizer.getTableConfig('ds-sp-table', defaultCols);
+                        const colMap = new Map(tableColumns.map(c => [c.key, c]));
+                        const nextCols = [];
+                        savedCfg.forEach(nc => {
+                            if (nc.visible !== false && colMap.has(nc.id)) {
+                                nextCols.push(colMap.get(nc.id));
+                            }
+                        });
+                        if (nextCols.length > 0) tableColumns = nextCols;
+                        window.TableCustomizer.applyTableStyles('ds-sp-table', savedCfg);
                     }
                     renderHeaders(headersRaw);
 
@@ -394,9 +460,8 @@
 
             tr.innerHTML = tableColumns.map((column) => {
                 const content = column.virtual ? renderVirtualSkuCell(item) : renderSourceCell(item, column);
-                const minWidth = column.key === 'virtual_sku' ? '170px' : (normalizeHeader(column.label) === 'ten_sp' ? '150px' : '80px');
-                return `<td style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #475569; vertical-align: top; word-break: break-word; min-width: ${minWidth}; max-width: ${minWidth};">${content}</td>`;
-            }).join('');
+                return `<td data-col="${column.key}" style="padding: 8px; border-bottom: 1px solid #f1f5f9; color: #475569; vertical-align: top;">${content}</td>`;
+            }).join('') + `<td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: center;"></td>`;
             fragment.appendChild(tr);
         });
         tbody.appendChild(fragment);

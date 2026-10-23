@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node tools/build-flash-sale.mjs",
     "build:standalone": "node -e \"process.env.SINGLE_FILE='true'; require('child_process').execSync('npx vite build', {stdio:'inherit', env: process.env})\"",
     "preview": "vite preview",
-    "serve": "python tools/server.py"
+    "serve": "python tools/server.py",
+    "build:fs": "node tools/build-flash-sale.mjs"
   },
   "dependencies": {
     "jsrsasign": "^11.1.0",

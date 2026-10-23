@@ -19,6 +19,11 @@ exten them sp12/              ← thư mục "Load unpacked" trong Chrome (giữ
 │  ├─ lib/                    ← xlsx, pdf-lib, html2pdf, jsrsasign
 │  ├─ pages/camera.html
 │  ├─ tai-anh-shopee/         ← module tải ảnh Shopee
+│  ├─ flash-sale/             ← Flash Sale Tool: app.html (quản lý SP & Flash Sale) + tự động đăng ký
+│  ├─ order-tool/             ← Order Tool: app.html (đơn Shopee, In phiếu + Wameli) + wameli.html
+│  ├─ hub/                    ← Seller Hub: 1 trang gộp Flash Sale + Order Tool, menu bên trái
+│  ├─ autoin/                 ← AutoIn (TOPCARE – Đọc đơn hàng): tự xác nhận lấy hàng, in phiếu, nạp Wameli, Telegram
+│  ├─ clone-tool/             ← Sao chép sản phẩm (Shopee Clone Tool): sao chép SP shopee.vn sang shop + ảnh bìa AI
 │  └─ icons/
 ├─ web/                       ← nguồn Web BCE (React + Vite)
 │  ├─ index.html
@@ -38,7 +43,8 @@ exten them sp12/              ← thư mục "Load unpacked" trong Chrome (giữ
 ```bash
 npm install
 npm run dev               # chạy dev tại http://localhost:5173
-npm run build             # build ra dist/ (extension dùng bản này)
+npm run build             # build web ra dist/ + đóng gói background Flash Sale
+npm run build:fs          # chỉ đóng gói background Flash Sale
 npm run build:standalone  # build 1 file HTML duy nhất ra dist-standalone/index.html
 npm run serve             # chạy dist/ bằng tools/server.py (cổng 8000)
 ```
@@ -49,3 +55,44 @@ Trong extension, web mở tại `chrome-extension://<id>/dist/index.html`.
 
 Mọi thông tin service account và Spreadsheet ID mặc định nằm ở `shared/google-config.js`.
 Có thể đổi Spreadsheet ID lúc chạy bằng tab Cài đặt (`customSpreadsheetId`).
+
+## Flash Sale Tool
+
+- Mở từ side panel: tab **🔥 Flash Sale** → **Mở trang quản lý Flash Sale** (`extension/flash-sale/app.html`).
+- Giao diện (`app.js`, `products-tab.js`…) là ES module, sửa xong chỉ cần Reload extension.
+- Phần chạy ngầm (`background-entry.js`, `scheduler.js`, `storage.js`, `shopee-api.js`, `flashsale.js`) được đóng gói
+  thành `fs-background.bundle.js` để background chính nạp bằng `importScripts`.
+  **Sửa các file này xong phải chạy `npm run build:fs`** rồi Reload extension.
+- Dữ liệu lưu với khóa `fs_*` (fs_settings, fs_rules, fs_logs, fs_productCache, fs_mediaCache_v3).
+
+## Order Tool
+
+- Mở từ side panel: tab **📦 Đơn Tool** → **Mở quản lý đơn Shopee** (`extension/order-tool/app.html`)
+  hoặc **Mở Đơn & Sản phẩm Wameli** (`extension/order-tool/wameli.html`).
+- Toàn bộ là ES module chạy trong trang, không có phần chạy ngầm: sửa xong chỉ cần Reload extension.
+- Hướng dẫn chi tiết các chức năng: `extension/order-tool/README.md`.
+- Dữ liệu đơn lưu trong IndexedDB `ShopeeOrderToolDB`; cài đặt lưu trong chrome.storage
+  (arrangePickupAddress, shipWameliPrefs, shipWameliSeq, wameliUploadForm, wameliUploadPrefs, wameliUser, wameliPass).
+
+## Seller Hub (trang chung)
+
+- `extension/hub/index.html`: menu bên trái (Flash Sale: Sản phẩm, Danh sách, Tạo/Sửa, Tự động đăng ký, Nhật ký;
+  Đơn hàng: Đơn Shopee, Đơn xuất kho WML, Sản phẩm WML), bên phải là trang của từng tool trong iframe (nạp 1 lần, giữ trạng thái).
+- Nút mở Flash Sale / Đơn Tool trong side panel đều mở trang này (`?m=fs-list`, `?m=order-shopee`...).
+- Trang tool nằm trong hub thì ẩn thanh tab cũ (`extension/hub/embed.js` gắn class `embedded`).
+
+## Sao chép sản phẩm (Shopee Clone Tool)
+
+- Side panel → tab **Sao chép sản phẩm**: nhúng `extension/clone-tool/app.html` (nạp khi mở tab lần đầu).
+- Content script: `clone-tool/content/shopee-hook.js` + `shopee-relay.js` (shopee.vn, đọc dữ liệu sản phẩm trang tự tải),
+  `clone-tool/content/ai-chat.js` (Gemini / ChatGPT: dán ảnh + prompt, lấy ảnh bìa).
+- Phần chạy ngầm `clone-tool/background.js` là script thường, background chính nạp bằng `importScripts` (không cần build).
+- Hướng dẫn chi tiết: `extension/clone-tool/README.md`.
+
+## AutoIn (TOPCARE – Đọc đơn hàng)
+
+- Side panel → tab **AutoIn**: nhúng `extension/autoin/panel.html` (nạp khi mở tab lần đầu).
+- Phần chạy ngầm `autoin/background.js` (script thường, bọc IIFE) được background chính nạp bằng `importScripts`:
+  đọc đơn theo chu kỳ, tự xác nhận lấy hàng, in phiếu, tải PDF + Excel vào `TOPCARE-phieu-in/`, nạp Wameli,
+  báo âm thanh (`autoin/offscreen.html`, quyền `offscreen`), gửi Telegram, tổng kết 17h & 8h.
+- Bản gốc: `archive/extension-doc-don-original/`. Hướng dẫn chi tiết: `extension/autoin/HUONG-DAN.md`.

@@ -340,7 +340,7 @@
 
   function injectContentScript(tabId) {
     return new Promise((resolve, reject) => {
-      chrome.scripting.executeScript({ target: { tabId }, files: ["extension/lib/xlsx.full.min.js", "extension/lib/html2pdf.bundle.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"] }, () => {
+      chrome.scripting.executeScript({ target: { tabId }, files: ["extension/lib/xlsx.full.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"] }, () => {
         const error = chrome.runtime.lastError;
         if (error) {
           reject(new Error(error.message));

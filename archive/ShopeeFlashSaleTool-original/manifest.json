@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Seller Tool",
+  "version": "0.6.0",
+  "description": "Quản lý sản phẩm và Flash Sale (tạo, nhân bản, tự động đăng ký) cho Kênh Người Bán Shopee",
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting",
+    "tabs",
+    "cookies",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://banhang.shopee.vn/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Shopee Seller Tool",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "128": "icon.png"
+  }
+}

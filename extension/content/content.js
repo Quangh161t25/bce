@@ -8556,7 +8556,305 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       return true;
     }
     
+  async function switchReturnTabAndSort(targetTab) {
+    const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+
+    function triggerUserClick(element) {
+      if (!element) return;
+      try {
+        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (e) {}
+
+      const mouseEvents = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+      mouseEvents.forEach(type => {
+        try {
+          element.dispatchEvent(new MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            buttons: 1
+          }));
+        } catch (e) {}
+      });
+
+      if (typeof element.click === 'function') {
+        try { element.click(); } catch (e) {}
+      }
+
+      if (element.firstElementChild) {
+        mouseEvents.forEach(type => {
+          try {
+            element.firstElementChild.dispatchEvent(new MouseEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              buttons: 1
+            }));
+          } catch (e) {}
+        });
+        if (typeof element.firstElementChild.click === 'function') {
+          try { element.firstElementChild.click(); } catch (e) {}
+        }
+      }
+    }
+
+    function isTabElementActive(el) {
+      if (!el) return false;
+      return el.classList.contains('is-active') ||
+             el.classList.contains('active') ||
+             el.getAttribute('aria-selected') === 'true' ||
+             (el.parentElement && (el.parentElement.classList.contains('is-active') || el.parentElement.classList.contains('active')));
+    }
+
+    // 1. Tìm chính xác phần tử Tab trên Shopee EDS (chỉ lấy phần tử lá, không lấy wrapper cha)
+    function findReturnTabElement(type) {
+      const edsTabs = Array.from(document.querySelectorAll(
+        '.eds-tabs__nav-tab, .shopee-tabs__nav-tab, [role="tab"], [class*="nav-tab"], .eds-tabs__tab'
+      )).filter(el => {
+        // Loại bỏ container cha chứa các tab con bên trong
+        return !el.querySelector('.eds-tabs__nav-tab, [role="tab"]');
+      });
+
+      for (const el of edsTabs) {
+        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (text.length > 50) continue;
+
+        if (type === 'tra_hang' || type === 'return_refund') {
+          // Bỏ qua các tab con ở dưới ("đang trả hàng cho người bán", "đã hoàn tiền cho người mua")
+          if (text.includes('người bán') || text.includes('người mua')) continue;
+          if ((text.includes('trả hàng') && text.includes('hoàn')) || text.includes('trả hàng hoàn tiền') || text.startsWith('đơn trả hàng')) {
+            return el;
+          }
+        } else if (type === 'giao_that_bai' || type === 'undelivered') {
+          if (text.includes('giao hàng không thành công') || text.includes('giao không thành công') || (text.includes('giao') && text.includes('thành công'))) {
+            return el;
+          }
+        }
+      }
+
+      // Dự phòng: Tìm trong toàn bộ các element ngắn
+      const allLeaves = Array.from(document.querySelectorAll('div, span, button, a, li')).filter(el => {
+        if (el.children.length > 2) return false;
+        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        return text.length >= 3 && text.length <= 45;
+      });
+
+      for (const el of allLeaves) {
+        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (type === 'tra_hang' || type === 'return_refund') {
+          if (text.includes('người bán') || text.includes('người mua')) continue;
+          if ((text.includes('trả hàng') && text.includes('hoàn')) || text.startsWith('đơn trả hàng')) {
+            return el.closest('.eds-tabs__nav-tab, [role="tab"], [class*="nav-tab"]') || el;
+          }
+        } else if (type === 'giao_that_bai' || type === 'undelivered') {
+          if (text.includes('giao hàng không thành công') || text.includes('giao không thành công') || (text.includes('giao') && text.includes('thành công'))) {
+            return el.closest('.eds-tabs__nav-tab, [role="tab"], [class*="nav-tab"]') || el;
+          }
+        }
+      }
+
+      return null;
+    }
+
+    let tabFound = false;
+    let targetEl = findReturnTabElement(targetTab);
+
+    // Nếu chưa tìm thấy tab ngay (ví dụ trang đang tải thêm), đợi tối đa 2 giây
+    if (!targetEl) {
+      for (let w = 0; w < 10; w++) {
+        await sleep(200);
+        targetEl = findReturnTabElement(targetTab);
+        if (targetEl) break;
+      }
+    }
+
+    if (targetEl) {
+      tabFound = true;
+      if (!isTabElementActive(targetEl)) {
+        triggerUserClick(targetEl);
+        await sleep(400);
+
+        // Kiểm tra xem đã kích hoạt chưa, nếu chưa thử click lại
+        if (!isTabElementActive(targetEl)) {
+          triggerUserClick(targetEl);
+          await sleep(500);
+        }
+      }
+      await sleep(600);
+    } else {
+      console.warn("[switchReturnTabAndSort] Không tìm thấy tab:", targetTab);
+    }
+
+    // 2. Mở dropdown "Sắp xếp theo" và chọn "Ngày yêu cầu (Mới - Cũ)"
+    let sortSelected = false;
+    const findSortTrigger = () => {
+      // 1. Selector chuẩn class sort-button mà Shopee EDS sử dụng
+      const btn = document.querySelector('.sort-button, button.sort-button, [class*="sort-button"]');
+      if (btn) return btn;
+
+      // 2. Tìm button có text "Sắp xếp theo"
+      const allButtons = Array.from(document.querySelectorAll('button, div[role="button"], span[role="button"]'));
+      return allButtons.find((el) => {
+        const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        return (t.includes('sắp xếp theo') || t.startsWith('sắp xếp')) &&
+               !el.closest('ul.eds-dropdown-menu, .eds-dropdown-menu, .eds-popper, .sort-dropdown') &&
+               el.children.length <= 3;
+      }) || document.querySelector('[class*="sort"] button, button[class*="sort"]');
+    };
+
+    const sortTrigger = findSortTrigger();
+    if (sortTrigger) {
+      triggerUserClick(sortTrigger);
+      await sleep(400);
+
+      const menuItems = Array.from(document.querySelectorAll(
+        '.eds-dropdown-menu__item, .eds-dropdown-item, .sort-dropdown li, .eds-popper li, [class*="dropdown-menu"] li, [role="menuitem"], [role="option"], li'
+      ));
+
+      const targetOpt = menuItems.find((el) => {
+        const t = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        return t.includes('ngày yêu cầu') && t.includes('mới') && !t.includes('cũ - mới');
+      });
+
+      if (targetOpt) {
+        const alreadySelected = targetOpt.classList.contains('option-selected') ||
+                                targetOpt.classList.contains('is-selected') ||
+                                targetOpt.classList.contains('selected') ||
+                                targetOpt.getAttribute('aria-selected') === 'true';
+        if (!alreadySelected) {
+          triggerUserClick(targetOpt);
+          sortSelected = true;
+          await sleep(1500);
+        } else {
+          sortSelected = true;
+          // Đã chọn sẵn -> đóng menu
+          try { document.body.click(); } catch (e) {}
+          await sleep(200);
+        }
+      } else {
+        try { document.body.click(); } catch (e) {}
+        await sleep(200);
+      }
+    }
+
+    // 3. Đợi các row hiển thị (tối đa 3 giây)
+    for (let i = 0; i < 15; i++) {
+      const rows = document.querySelectorAll('.return-row-item, a.return-row-item');
+      const emptyEl = document.querySelector('.eds-empty, .shopee-empty, [class*="empty"]');
+      if (rows.length > 0 || emptyEl) break;
+      await sleep(200);
+    }
+
+    // 4. Đọc dữ liệu đơn
+    const items = [];
+    const rows = document.querySelectorAll('.return-row-item, a.return-row-item');
+    rows.forEach((row) => {
+      const orderIdNode = row.querySelector('.order-id .id-content');
+      const orderId = orderIdNode ? orderIdNode.textContent.trim() : '';
+
+      const returnIdNode = row.querySelector('.return-id .id-content');
+      const returnId = returnIdNode ? returnIdNode.textContent.trim() : '';
+
+      let trackingNum = '';
+      const trackingNode = row.querySelector('.item-return-logistic .tracking-number, .tracking-number');
+      if (trackingNode) {
+        const clone = trackingNode.cloneNode(true);
+        const span = clone.querySelector('span, .hh-bh-info');
+        if (span) span.remove();
+        trackingNum = clone.textContent.trim();
+      }
+
+      const solutionNode = row.querySelector('.item-request-solution');
+      const solutionText = solutionNode ? solutionNode.innerText.replace(/\s+/g, ' ').trim() : '';
+
+      const statusNode = row.querySelector('.item-request-status');
+      const statusText = statusNode ? statusNode.innerText.replace(/\n+/g, ' - ').trim() : '';
+
+      const reasonNode = row.querySelector('.item-request-reason');
+      const reasonText = reasonNode ? reasonNode.innerText.replace(/\s+/g, ' ').trim() : '';
+
+      let returnLogistics = '';
+      const returnLogisticsNode = row.querySelector('.item-return-logistic');
+      if (returnLogisticsNode) {
+        const tagNode = returnLogisticsNode.querySelector('.tag, .eds-tag');
+        const statusTag = tagNode ? tagNode.textContent.trim() : '';
+        const hintNode = returnLogisticsNode.querySelector('.logistics-hint-text');
+        const hintText = hintNode ? hintNode.textContent.trim() : '';
+        const channelNode = returnLogisticsNode.querySelector('.logistic-channel');
+        const channelText = channelNode ? channelNode.textContent.trim() : '';
+        returnLogistics = [statusTag, channelText, hintText].filter(Boolean).join(' - ');
+      }
+
+      let hhBhInfo = 'Chưa có';
+      const hhBhNode = row.querySelector('.hh-bh-info');
+      if (hhBhNode) {
+        hhBhInfo = hhBhNode.textContent.trim();
+      }
+
+      let udCtInfo = '';
+      const orderIdUpper = orderId ? orderId.toUpperCase() : '';
+      if (orderId && typeof cachedUdCtMdhIds !== 'undefined') {
+        const val = cachedUdCtMdhIds.get(orderId) || (orderIdUpper && cachedUdCtMdhIds.get(orderIdUpper));
+        if (val) udCtInfo = val.replace(/<br\s*\/?>/gi, ' | ');
+      }
+
+      const products = [];
+      const productWrappers = row.querySelectorAll('.order-product-wrapper');
+      productWrappers.forEach((wrapper) => {
+        const imgNode = wrapper.querySelector('.item-images, img');
+        const imgUrl = imgNode ? imgNode.src : '';
+        const nameNode = wrapper.querySelector('.ct-item-product-name');
+        const pName = nameNode ? nameNode.textContent.trim() : '';
+        if (pName || imgUrl) {
+          products.push({ pName, imgUrl });
+        }
+      });
+
+      if (orderId || returnId || trackingNum) {
+        items.push({
+          orderId,
+          returnId,
+          trackingNum,
+          solutionText,
+          statusText,
+          returnLogistics,
+          reasonText,
+          hhBhInfo,
+          udCtInfo,
+          products
+        });
+      }
+    });
+
+    return {
+      ok: true,
+      data: items,
+      count: items.length,
+      tabFound,
+      sortSelected
+    };
+  }
+
+
+    if (message?.type === "SWITCH_RETURN_TAB_AND_SORT") {
+      if (window.self !== window.top) return false;
+      switchReturnTabAndSort(message.targetTab)
+        .then((res) => sendResponse(res))
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+
+    if (message?.type === "BATCH_FILL_HH_SHOP_DIEN") {
+      if (window.self !== window.top) return false;
+      const topBtn = document.getElementById("btn-top-hh-shop-dien") || { innerHTML: "", style: {} };
+      handleBatchHhShopDienAction(topBtn, false)
+        .then((res) => sendResponse(res))
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
+    }
+
     if (message?.type === "READ_HANG_HOAN_LIST") {
+      if (window.self !== window.top) return false;
       try {
         const items = [];
         const rows = document.querySelectorAll('.return-row-item, a.return-row-item');
@@ -11953,6 +12251,427 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
 
 
 
+  // =========================================================================
+  // ĐIỀN VÀO SHEET HH_SHOP_DIEN (WAMELI KHO-SHOP)
+  // =========================================================================
+  function extractFullReturnOrderDetails(targetEl) {
+    let rowContainer = targetEl.closest ? targetEl.closest('.return-row-item, a.return-row-item, tr, [class*="return-row"]') : null;
+    if (!rowContainer) {
+      let current = targetEl;
+      rowContainer = targetEl;
+      while (current && current.parentElement && current.parentElement !== document.body) {
+        if (current.parentElement.querySelectorAll(".id.order-id, .order-id, .return-row-item").length > 1) {
+          break;
+        }
+        current = current.parentElement;
+        rowContainer = current;
+      }
+    }
+
+    // 1. Order ID
+    let orderId = "";
+    const orderNode = (rowContainer && rowContainer.querySelector(".order-id .id-content, .id.order-id .id-content, .order-id, .id.order-id")) || targetEl;
+    if (orderNode) {
+      const contentEl = orderNode.querySelector(".id-content") || orderNode;
+      orderId = extractShopeeCode(contentEl.textContent);
+    }
+    if (!orderId && targetEl) {
+      orderId = extractShopeeCode(targetEl.textContent);
+    }
+
+    // 2. Return ID
+    let returnId = "";
+    if (rowContainer) {
+      const returnIdNode = rowContainer.querySelector(".return-id .id-content, .id.return-id .id-content, .return-id, .id.return-id");
+      if (returnIdNode) {
+        const returnContent = returnIdNode.querySelector(".id-content") || returnIdNode;
+        returnId = extractShopeeCode(returnContent.textContent);
+      }
+    }
+
+    // 3. Return tracking (mvd_tra)
+    let returnTracking = "";
+    if (rowContainer) {
+      const trackingEl = rowContainer.querySelector(".item-return-logistic .tracking-number, .tracking-number, [class*=\"tracking\"]");
+      if (trackingEl) {
+        const clone = trackingEl.cloneNode(true);
+        clone.querySelectorAll("span, .hh-bh-info, [class*='info']").forEach(s => s.remove());
+        returnTracking = clone.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+      }
+    }
+
+    // 4. Forward tracking (mvd chiều đi)
+    let forwardTracking = "";
+    if (rowContainer) {
+      const fwdEl = rowContainer.querySelector(".item-forward-logistic .tracking-number, .forward-tracking-number");
+      if (fwdEl) {
+        const clone = fwdEl.cloneNode(true);
+        clone.querySelectorAll("span, .hh-bh-info").forEach(s => s.remove());
+        forwardTracking = clone.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+      }
+    }
+    if (!forwardTracking && orderId && typeof cachedUdCtMdhIds !== "undefined") {
+      const udVal = cachedUdCtMdhIds.get(orderId) || (orderId && cachedUdCtMdhIds.get(orderId.toUpperCase()));
+      if (udVal) {
+        const m = udVal.match(/(SPXVN[0-9A-Z]+|VN[0-9A-Z]+|[0-9]{10,18})/i);
+        if (m) forwardTracking = m[1];
+      }
+    }
+    // Fallback: Nếu không có mã vận đơn chiều đi riêng, dùng mã vận đơn trả hàng (như đơn hoàn tiền ngay / giao không thành công)
+    if (!forwardTracking) {
+      forwardTracking = returnTracking;
+    }
+
+    // 5. Lý do
+    let reason = "";
+    if (rowContainer) {
+      const reasonNode = rowContainer.querySelector('.item-request-reason');
+      if (reasonNode) {
+        reason = reasonNode.innerText.replace(/\s+/g, ' ').trim();
+      } else {
+        const rowData = extractReturnRowData(targetEl);
+        if (rowData?.reason) reason = rowData.reason;
+      }
+    }
+
+    // 6. Loại hoàn trả: "Trả" hoặc "Hoàn"
+    let hoanTra = "Trả";
+    if (rowContainer) {
+      const solNode = rowContainer.querySelector('.item-request-solution');
+      const solText = solNode ? solNode.innerText.trim().toLowerCase() : "";
+      if (solText.includes("trả") || solText.includes("tra")) {
+        hoanTra = "Trả";
+      } else if (solText.includes("hoàn") || solText.includes("hoan")) {
+        hoanTra = "Hoàn";
+      } else {
+        const activeNavTab = document.querySelector('.eds-tabs__nav-tab--active, .eds-tabs__nav-tab.is-active, .eds-tabs__nav-tab[aria-selected="true"]');
+        if (activeNavTab && activeNavTab.textContent.toLowerCase().includes('không thành công')) {
+          hoanTra = "Hoàn";
+        }
+      }
+    }
+
+    // 7. Products
+    const products = [];
+    if (rowContainer) {
+      const pWrappers = rowContainer.querySelectorAll('.order-product-wrapper');
+      pWrappers.forEach((wrapper) => {
+        const nameNode = wrapper.querySelector('.ct-item-product-name, .product-name, [class*="product-name"], [class*="item-name"]');
+        const pName = nameNode ? (nameNode.getAttribute('title') || nameNode.innerText || nameNode.textContent || '').replace(/\s+/g, ' ').trim() : '';
+
+        const imgNode = wrapper.querySelector('.item-images, img');
+        let imgUrl = imgNode ? (imgNode.src || imgNode.getAttribute('src') || '') : '';
+        if (imgUrl.startsWith("//")) imgUrl = "https:" + imgUrl;
+
+        // SKU
+        let sku = "";
+        const metaDivs = Array.from(wrapper.querySelectorAll('.product-meta > div, [class*="product-meta"] > div, .item-meta, .ct-item-meta, [class*="meta"]'));
+        for (const mDiv of metaDivs) {
+          const text = (mDiv.innerText || mDiv.textContent || "").trim();
+          if (text.includes('SKU phân loại:') || text.includes('SKU:') || text.includes('Mã phân loại:') || text.includes('Mã sản phẩm:')) {
+            sku = text.replace(/.*(?:SKU phân loại|SKU|Mã phân loại|Mã sản phẩm)\s*:\s*/i, '').trim();
+            sku = sku.replace(/copy\s*sku|sao\s*ch[eé]p\s*sku|copy|sao\s*ch[eé]p/gi, '').trim();
+            if (sku) break;
+          }
+        }
+        if (!sku && pName) {
+          const mBracket = pName.match(/\[([A-Z0-9_\-\.\/]{3,35})\]/i);
+          if (mBracket && !/^(copy|sp|sku)$/i.test(mBracket[1])) {
+            sku = mBracket[1].trim();
+          }
+        }
+
+        // Số lượng
+        let qty = 1;
+        const textWrapper = wrapper.innerText || wrapper.textContent || "";
+        const mQty = textWrapper.match(/[xX*x]\s*([1-9]\d{0,3})/);
+        if (mQty) {
+          qty = parseInt(mQty[1], 10) || 1;
+        }
+
+        if (pName || imgUrl || sku) {
+          products.push({ pName, imgUrl, sku, qty });
+        }
+      });
+    }
+
+    if (products.length === 0) {
+      products.push({ pName: "", imgUrl: "", sku: "", qty: 1 });
+    }
+
+    return {
+      orderId,
+      returnId,
+      forwardTracking,
+      returnTracking,
+      reason,
+      hoanTra,
+      products
+    };
+  }
+
+  function buildHhShopDienRows(details, maGian) {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const dd = pad(now.getDate());
+    const mm = pad(now.getMonth() + 1);
+    const yyyy = now.getFullYear();
+    const hh = pad(now.getHours());
+    const min = pad(now.getMinutes());
+    const ss = pad(now.getSeconds());
+
+    const ngay_tao = `${hh}:${min}:${ss} ${dd}/${mm}/${yyyy}`;
+    const ngay_tra = `${dd}/${mm}/${yyyy}`;
+    const cleanGian = String(maGian || "").trim().toUpperCase() || "BCE";
+
+    const rows = [];
+    const baseId = Date.now();
+
+    details.products.forEach((p, idx) => {
+      const rowId = String(baseId + idx);
+      const skuVal = p.sku || "";
+      const skuTra = p.sku || "";
+      const tenSp = p.pName || "";
+      const sl = String(p.qty || 1);
+      const anh = p.imgUrl || "";
+
+      // 16 cột tương ứng chính xác với sheet HH_SHOP_DIEN (A:P)
+      rows.push([
+        rowId,                                    // Col A (0): id
+        ngay_tao,                                 // Col B (1): ngay_tao
+        ngay_tra,                                 // Col C (2): ngay_tra
+        details.forwardTracking || "",            // Col D (3): mvd
+        details.orderId || "",                    // Col E (4): mdh
+        cleanGian,                                // Col F (5): ma_gian
+        skuVal,                                   // Col G (6): sku
+        tenSp,                                    // Col H (7): ten_sp
+        details.returnTracking || "",             // Col I (8): mvd_tra
+        skuTra,                                   // Col J (9): sku_tra
+        sl,                                       // Col K (10): sl
+        details.hoanTra || "Trả",                 // Col L (11): hoan_tra
+        details.reason || "",                     // Col M (12): ghi_chu
+        "CHỜ XÁC NHẬN",                           // Col N (13): xac_nhan
+        "SHOP ĐIỀN",                              // Col O (14): nguoi_nhap
+        anh                                       // Col P (15): anh
+      ]);
+    });
+
+    return rows;
+  }
+
+  async function handleHhShopDienAction(orderIdEl, btn) {
+    if (!orderIdEl || !btn) return;
+    const details = extractFullReturnOrderDetails(orderIdEl);
+    if (!details.orderId && !details.returnTracking) {
+      alert("Không tìm thấy thông tin mã đơn hàng hoặc mã vận đơn!");
+      return;
+    }
+
+    const origText = btn.innerHTML;
+    btn.innerHTML = "⏳...";
+    btn.disabled = true;
+
+    try {
+      const storageRes = await new Promise(resolve => {
+        chrome.storage.local.get(["maGian", "dhHoanTextValue"], resolve);
+      });
+      const maGian = (storageRes?.maGian || storageRes?.dhHoanTextValue || "BCE").trim().toUpperCase();
+
+      const rows = buildHhShopDienRows(details, maGian);
+      if (!rows.length) throw new Error("Không có dữ liệu sản phẩm để điền.");
+
+      chrome.runtime.sendMessage({
+        type: "APPEND_HH_SHOP_DIEN",
+        spreadsheetId: "1cnA33cHHMhcOSaXa9l4Jeu6qw8QnXlUnEU4Bqtkj9wo",
+        sheetName: "HH_SHOP_DIEN",
+        rows
+      }, (res) => {
+        if (chrome.runtime.lastError || !res?.ok) {
+          const err = chrome.runtime.lastError?.message || res?.error || "Lỗi không xác định";
+          alert("Lỗi điền vào HH_SHOP_DIEN:\n" + err);
+          btn.innerHTML = "❌ Thử lại";
+          setTimeout(() => { btn.innerHTML = origText; btn.disabled = false; }, 2500);
+          return;
+        }
+
+        btn.innerHTML = "✓ Đã điền";
+        btn.style.backgroundColor = "#10b981";
+        btn.style.borderColor = "#059669";
+        btn.style.color = "#ffffff";
+        btn.dataset.shopeeQlspHhShopDienFilled = "1";
+
+        if (typeof showWebchatToast === "function") {
+          showWebchatToast(`Đã điền ${rows.length} sản phẩm (đơn ${details.orderId || details.returnTracking}) vào HH_SHOP_DIEN thành công!`, "success");
+        }
+
+        setTimeout(() => {
+          btn.innerHTML = origText;
+          btn.style.backgroundColor = "#059669";
+          btn.disabled = false;
+        }, 4000);
+      });
+    } catch (err) {
+      alert("Lỗi: " + (err.message || String(err)));
+      btn.innerHTML = origText;
+      btn.disabled = false;
+    }
+  }
+
+  async function handleBatchHhShopDienAction(btn, askConfirm = true) {
+    const rawOrderNodes = Array.from(document.querySelectorAll('.order-id, .id.order-id, [class*="order-id"]'))
+      .filter(el => !el.closest('.shopee-ext-return-btn-container'));
+
+    const seenOrderIds = new Set();
+    const orderIdElements = [];
+    for (const el of rawOrderNodes) {
+      const oId = extractShopeeCode(el.textContent);
+      if (oId && !seenOrderIds.has(oId)) {
+        seenOrderIds.add(oId);
+        orderIdElements.push(el);
+      }
+    }
+
+    if (!orderIdElements.length) {
+      alert("Không tìm thấy đơn hoàn nào trên trang này!");
+      return { ok: false, error: "Không tìm thấy đơn hoàn" };
+    }
+
+    if (askConfirm) {
+      const confirmMsg = `Bạn có chắc muốn điền tất cả ${orderIdElements.length} đơn hoàn trên trang này vào Sheet HH_SHOP_DIEN (WAMELI KHO-SHOP)?`;
+      if (!confirm(confirmMsg)) return { ok: false, cancelled: true };
+    }
+
+    const origText = btn.innerHTML;
+    btn.innerHTML = "⏳ Đang chuẩn bị...";
+    btn.disabled = true;
+
+    try {
+      const storageRes = await new Promise(resolve => {
+        chrome.storage.local.get(["maGian", "dhHoanTextValue"], resolve);
+      });
+      const maGian = (storageRes?.maGian || storageRes?.dhHoanTextValue || "BCE").trim().toUpperCase();
+
+      const allRows = [];
+      const rowButtons = [];
+
+      for (const el of orderIdElements) {
+        const details = extractFullReturnOrderDetails(el);
+        if (details.orderId || details.returnTracking) {
+          const rows = buildHhShopDienRows(details, maGian);
+          allRows.push(...rows);
+        }
+        const rowBtn = el.parentElement?.querySelector('.btn-hh-shop-dien-action') ||
+                       el.closest('.return-row-item, tr, div')?.querySelector('.btn-hh-shop-dien-action');
+        if (rowBtn) rowButtons.push(rowBtn);
+      }
+
+      if (!allRows.length) {
+        throw new Error("Không trích xuất được đơn hàng nào.");
+      }
+
+      btn.innerHTML = `⏳ Đang gửi ${allRows.length} dòng...`;
+
+      return await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          type: "APPEND_HH_SHOP_DIEN",
+          spreadsheetId: "1cnA33cHHMhcOSaXa9l4Jeu6qw8QnXlUnEU4Bqtkj9wo",
+          sheetName: "HH_SHOP_DIEN",
+          rows: allRows
+        }, (res) => {
+          if (chrome.runtime.lastError || !res?.ok) {
+            const err = chrome.runtime.lastError?.message || res?.error || "Lỗi không xác định";
+            alert("Lỗi điền vào HH_SHOP_DIEN:\n" + err);
+            btn.innerHTML = "❌ Thử lại";
+            setTimeout(() => { btn.innerHTML = origText; btn.disabled = false; }, 2500);
+            resolve({ ok: false, error: err });
+            return;
+          }
+
+          btn.innerHTML = `✓ Đã điền ${allRows.length} dòng!`;
+          btn.style.backgroundColor = "#10b981";
+
+          rowButtons.forEach(rb => {
+            rb.innerHTML = "✓ Đã điền";
+            rb.style.backgroundColor = "#10b981";
+            rb.style.borderColor = "#059669";
+            rb.style.color = "#ffffff";
+            rb.dataset.shopeeQlspHhShopDienFilled = "1";
+          });
+
+          if (typeof showWebchatToast === "function") {
+            showWebchatToast(`Đã điền thành công ${allRows.length} dòng vào Sheet HH_SHOP_DIEN!`, "success");
+          }
+
+          setTimeout(() => {
+            btn.innerHTML = origText;
+            btn.style.backgroundColor = "#059669";
+            btn.disabled = false;
+          }, 4000);
+
+          resolve({ ok: true, count: allRows.length });
+        });
+      });
+    } catch (err) {
+      alert("Lỗi: " + (err.message || String(err)));
+      btn.innerHTML = origText;
+      btn.disabled = false;
+      return { ok: false, error: err.message };
+    }
+  }
+
+  function renderTopHhShopDienButton() {
+    const href = (window.location.href || "").toLowerCase();
+    if (!href.includes('/portal/sale/returnrefundcancel') && !href.includes('/portal/sale/return')) return;
+
+    if (document.getElementById("btn-top-hh-shop-dien")) return;
+
+    const sortBtn = document.querySelector('.sort-button, button.sort-button, [class*="sort-button"]');
+    const targetParent = sortBtn ? sortBtn.parentElement : (document.querySelector('.eds-tabs__nav-wrap') || document.querySelector('.return-tab-container, .eds-tabs__header'));
+    if (!targetParent) return;
+
+    const topBtn = document.createElement("button");
+    topBtn.id = "btn-top-hh-shop-dien";
+    topBtn.type = "button";
+    topBtn.innerHTML = "📝 Điền vào HH Shop Điền";
+    topBtn.title = "Điền tất cả đơn hoàn hiển thị trên trang vào Sheet HH_SHOP_DIEN (WAMELI KHO-SHOP)";
+    topBtn.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 10px;
+      padding: 6px 14px;
+      background: #059669;
+      color: #ffffff;
+      border: 1px solid #047857;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+      vertical-align: middle;
+      z-index: 10;
+      transition: background 0.2s;
+    `;
+    topBtn.onmouseover = () => { topBtn.style.background = "#047857"; };
+    topBtn.onmouseout = () => { topBtn.style.background = "#059669"; };
+
+    topBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await handleBatchHhShopDienAction(topBtn, true);
+    });
+
+    if (sortBtn && sortBtn.nextSibling) {
+      sortBtn.parentElement.insertBefore(topBtn, sortBtn.nextSibling);
+    } else if (sortBtn) {
+      sortBtn.parentElement.appendChild(topBtn);
+    } else {
+      targetParent.appendChild(topBtn);
+    }
+  }
+
+
+
   function ensureReturnListCompactStyles() {
     const styleId = "shopee-qlsp-return-compact-style";
     if (document.getElementById(styleId)) return;
@@ -12214,6 +12933,11 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       const btnUpdate = createActionBtn("Cập nhật", "#64748b", () => handleDhHoanAction("Cập nhật", orderIdEl, btnUpdate));
       container.appendChild(btnUpdate);
 
+      const btnHhShopDien = createActionBtn("📝 HH Shop Điền", "#059669", () => handleHhShopDienAction(orderIdEl, btnHhShopDien));
+      btnHhShopDien.className = "btn-hh-shop-dien-action";
+      btnHhShopDien.title = "Điền đơn hàng này vào Sheet HH_SHOP_DIEN (WAMELI KHO-SHOP)";
+      container.appendChild(btnHhShopDien);
+
       // Thêm badge UD_CT vào container cạnh các nút thao tác
       const udCtBadge = document.createElement("span");
       udCtBadge.className = "ud-ct-badge";
@@ -12245,7 +12969,9 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       } else {
         orderIdEl.appendChild(container);
       }
-    }
+    
+
+    renderTopHhShopDienButton();}
   }
 
   window.setTimeout(refreshVisibleProductGallery, 1200);

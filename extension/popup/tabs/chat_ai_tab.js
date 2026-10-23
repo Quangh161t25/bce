@@ -110,7 +110,24 @@
 
   // Hàm chạy trực tiếp trong trang Shopee
   function extractShopeeChatDataInPage() {
-    const detailChat = document.querySelector('._3h5To4QZew, [data-cy="webchat-conversation-detail-chat"], ._2WZcuAW5Qo') || document.body;
+    const detailChat = document.querySelector('._3h5To4QZew, [data-cy="webchat-conversation-detail-chat"], ._2WZcuAW5Qo, [data-cy="webchat-conversation-detail"], [class*="conversation-detail"]') || document.body;
+
+    let buyerName = "";
+    try {
+      const activeItem = document.querySelector(
+        'div.SW7LUhQFDH[class*="active"], div.AV0w9P7wpj[class*="active"], div.flWmPLsUAa[class*="active"], [data-cy*="conversation-list-item"][class*="active"], [aria-selected="true"], [data-active="true"], [class*="conversation-item"][class*="selected"], [class*="conversation-item"][class*="active"]'
+      );
+      if (activeItem) {
+        const spanEl = activeItem.querySelector('span.nFvbiqyLrq, [class*="nFvbiqyLrq"], div.RWr1KSlda2, div.uvqQaOy6aO, [class*="username"], [class*="name"], [title]');
+        buyerName = (spanEl?.getAttribute('title') || spanEl?.textContent || activeItem.innerText.split('\n')[0] || '').trim();
+      }
+      if (!buyerName) {
+        const headerBuyer = detailChat.querySelector('[data-cy*="header"] [title], [class*="header"] [title], ._18Zp0y6q2t, [class*="header"] [class*="username"], [class*="header"] [class*="name"], [data-cy="webchat-conversation-detail-header"] [title]');
+        if (headerBuyer) {
+          buyerName = (headerBuyer.getAttribute('title') || headerBuyer.textContent || '').trim();
+        }
+      }
+    } catch (_) {}
 
     let productInfo = {
       name: "",
@@ -192,24 +209,31 @@
     const messages = [];
     let lastCustomerMessage = "";
 
-    const rawMsgElements = Array.from(detailChat.querySelectorAll('#messagesContainer .DEwekPN7v2, #messagesContainer .RtO616EACf, [data-cy^="webchat-message"]'));
+    const rawMsgElements = Array.from(detailChat.querySelectorAll(
+      '#messagesContainer .DEwekPN7v2, #messagesContainer .RtO616EACf, .DEwekPN7v2, .RtO616EACf, [data-cy^="webchat-message"], [data-cy="webchat-message-receive"], [data-cy="webchat-message-send"], .x_vjYCA89K, .IjkExKWyR_, [class*="message-item"], [class*="message_item"], [class*="messageRow"], [class*="MessageRow"]'
+    ));
     const msgElements = rawMsgElements.filter(el => !rawMsgElements.some(other => other !== el && other.contains(el)));
 
     msgElements.forEach(msgEl => {
-      const isReceive = msgEl.querySelector('[data-cy="webchat-message-receive"]') || msgEl.classList.contains('x_vjYCA89K') || msgEl.getAttribute('data-cy') === 'webchat-message-receive';
-      const isSend = msgEl.querySelector('[data-cy="webchat-message-send"]') || msgEl.classList.contains('IjkExKWyR_') || msgEl.getAttribute('data-cy') === 'webchat-message-send';
+      const isReceive = msgEl.querySelector('[data-cy="webchat-message-receive"]') || msgEl.classList.contains('x_vjYCA89K') || msgEl.getAttribute('data-cy') === 'webchat-message-receive' || msgEl.matches?.('[class*="receive"], [class*="incoming"]') || msgEl.querySelector?.('[class*="receive"], [class*="incoming"]');
+      const isSend = msgEl.querySelector('[data-cy="webchat-message-send"]') || msgEl.classList.contains('IjkExKWyR_') || msgEl.getAttribute('data-cy') === 'webchat-message-send' || msgEl.matches?.('[class*="send"], [class*="outgoing"]') || msgEl.querySelector?.('[class*="send"], [class*="outgoing"]');
 
       const sender = isReceive ? "customer" : (isSend ? "shop" : "system");
-      const isAutoReply = !!msgEl.querySelector('.ufjjFujTb2, [class*="autoreply"]');
+      const isAutoReply = !!msgEl.querySelector('.ufjjFujTb2, [class*="autoreply"]') || (msgEl.textContent || "").includes("Tin nhắn tự động");
 
-      const timeEl = msgEl.querySelector('.sSIhmxFOh6, .pE0ax8leZo, .ps7_zN15iV');
+      const timeEl = msgEl.querySelector('.sSIhmxFOh6, .pE0ax8leZo, .ps7_zN15iV, [class*="time"]');
       const timeStr = timeEl ? timeEl.textContent.trim() : "";
 
       let text = "";
-      const textContainer = msgEl.querySelector('.w2C67vtnXi, .FkK7VxR2qX, .i6xFxbUJy0');
+      const textContainer = msgEl.querySelector('.w2C67vtnXi, .FkK7VxR2qX, .i6xFxbUJy0, [class*="message-text"], [class*="text-content"], [class*="bubble-content"]');
       if (textContainer) {
         const clone = textContainer.cloneNode(true);
-        clone.querySelectorAll('.sSIhmxFOh6, .pE0ax8leZo, .ujrf_CG21r, .ChatbotUI-icon, svg').forEach(x => x.remove());
+        clone.querySelectorAll('.sSIhmxFOh6, .pE0ax8leZo, .ujrf_CG21r, .ChatbotUI-icon, svg, button').forEach(x => x.remove());
+        text = clone.textContent.trim();
+      }
+      if (!text) {
+        const clone = msgEl.cloneNode(true);
+        clone.querySelectorAll('.sSIhmxFOh6, .pE0ax8leZo, .ujrf_CG21r, .ChatbotUI-icon, svg, button, img, [class*="time"], [class*="avatar"]').forEach(x => x.remove());
         text = clone.textContent.trim();
       }
 
@@ -247,6 +271,7 @@
 
     return {
       ok: true,
+      buyerName,
       url: window.location.href,
       product: productInfo,
       messages: messages.slice(-20),
@@ -256,30 +281,52 @@
 
   // Hàm điền chat trực tiếp trong trang
   function fillShopeeChatInPageDirect(text, autoSend) {
-    const textarea = document.querySelector('textarea.E2MWg3w8y6, [data-cy="webchat-conversation-detail-input"] textarea, #inputField textarea, textarea[placeholder*="tin nhắn"], textarea');
-    if (!textarea) {
+    const inputEl = document.querySelector(
+      'textarea.E2MWg3w8y6, [data-cy="webchat-conversation-detail-input"] textarea, #inputField textarea, textarea[placeholder*="tin nhắn"], textarea[placeholder*="Nhập"], [contenteditable="true"], .ProseMirror, textarea'
+    );
+    if (!inputEl) {
       return { ok: false, error: "Không tìm thấy ô nhập tin nhắn trên Shopee Chat" };
     }
 
-    textarea.focus();
-    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-    if (nativeSetter) {
-      nativeSetter.call(textarea, text);
+    inputEl.focus();
+    if (inputEl.tagName === 'TEXTAREA' || inputEl.tagName === 'INPUT') {
+      const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+      if (nativeSetter) {
+        nativeSetter.call(inputEl, text);
+      } else {
+        inputEl.value = text;
+      }
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      inputEl.dispatchEvent(new Event('change', { bubbles: true }));
     } else {
-      textarea.value = text;
+      document.execCommand('selectAll', false, null);
+      document.execCommand('insertText', false, text);
+      inputEl.dispatchEvent(new Event('input', { bubbles: true }));
     }
-
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    textarea.dispatchEvent(new Event('change', { bubbles: true }));
 
     if (autoSend) {
       setTimeout(() => {
-        const sendBtn = document.querySelector('.XsR3zIeGOc, .kgP1yPCqxR, [data-cy="webchat-conversation-detail-input"] [class*="send"]');
+        try {
+          window.postMessage({ channel: 'SPLQ_CLICK_SEND_BUTTON' }, '*');
+        } catch (_) {}
+
+        const sendBtn = document.querySelector(
+          '.XsR3zIeGOc, .kgP1yPCqxR, [data-cy="webchat-conversation-detail-input"] [class*="send"], button[class*="send"], [data-cy="send-btn"], button[type="submit"]'
+        );
         if (sendBtn) {
-          sendBtn.click();
-        } else {
-          textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+          ['mouseenter', 'mouseover', 'pointerdown', 'mousedown', 'focus', 'pointerup', 'mouseup', 'click'].forEach(evt => {
+            try {
+              if (evt.startsWith('pointer')) sendBtn.dispatchEvent(new PointerEvent(evt, { bubbles: true, cancelable: true, view: window }));
+              else sendBtn.dispatchEvent(new MouseEvent(evt, { bubbles: true, cancelable: true, view: window }));
+            } catch (_) {}
+          });
+          try { sendBtn.click(); } catch (_) {}
         }
+        setTimeout(() => {
+          inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+          inputEl.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+          inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', which: 13, keyCode: 13, bubbles: true }));
+        }, 150);
       }, 300);
     }
 
@@ -561,17 +608,17 @@
     const DEFAULT_XKIRO_KEY = "sk-xt-27e56ff5d3d864c86e4993e85cf95f1695698217d913faf3";
     const res = await chrome.storage.local.get(["xkiroApiKey", "xkiroModel", "xkiroModels"]);
     const apiKey = (res.xkiroApiKey || "").trim() || DEFAULT_XKIRO_KEY;
-    const configuredModel = (res.xkiroModel || "").trim() || "deepseek/deepseek-v4-flash";
+    const configuredModel = (res.xkiroModel || "").trim();
 
     const fallbackList = [
-      configuredModel,
-      "deepseek/deepseek-v4-pro",
+      ...(configuredModel ? [configuredModel] : []),
       "qwen/qwen3.8-max:free",
-      "deepseek/deepseek-v4-flash",
+      "google/gemini-2.5-flash",
       "qwen/qwen3.7-max:free",
       "qwen/qwen3.7-plus:free",
       "qwen/qwen3.6-plus:free",
-      "minimax/minimax-m2.7-highspeed:free"
+      "minimax/minimax-m2.7-highspeed:free",
+      "deepseek/deepseek-v4.1-flash"
     ];
     const modelsToTry = [...new Set(fallbackList)];
 
@@ -1240,5 +1287,8 @@ QUY TẮC BẮT BUỘC TRẢ LỜI:
 
   // Bắt đầu scanner ngay khi mở popup
   startRealtimeScanner();
+
+  // Dùng chung cho chat_auto_reply.js (tự động trả lời các cuộc chat chưa đọc)
+  window.__chatAi = { extractShopeeChatDataInPage, fillShopeeChatInPageDirect, callXkiroDeepseekChat, STYLE_PROMPTS };
 
 })();

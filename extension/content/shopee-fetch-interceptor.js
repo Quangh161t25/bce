@@ -9,16 +9,29 @@
   const CHANNEL_FETCH_REQUEST = 'SPLQ_FETCH_REQUEST';
   const CHANNEL_FETCH_REPLY = 'SPLQ_FETCH_REPLY';
 
+  const origFetch = window.fetch;
+
   // Lắng nghe yêu cầu fetch từ content script
   window.addEventListener('message', async (e) => {
     if (e.source !== window || !e.data || e.data.channel !== CHANNEL_FETCH_REQUEST) return;
     const { messageId, url, headers } = e.data;
     try {
-      const res = await fetch(url, {
+      const finalHeaders = Object.assign({
+        'accept': 'application/json, text/plain, */*',
+        'x-api-source': 'pc',
+        'x-shopee-language': 'vi',
+        'x-requested-with': 'XMLHttpRequest'
+      }, window.__LAST_SHOPEE_BUYER_HEADERS__ || {}, headers || {});
+
+      const res = await origFetch.call(window, url, {
         method: 'GET',
-        headers: headers || {},
+        headers: finalHeaders,
         credentials: 'include'
       });
+      if (!res.ok) {
+        window.postMessage({ channel: CHANNEL_FETCH_REPLY, messageId, data: null, error: `HTTP ${res.status}` }, '*');
+        return;
+      }
       const json = await res.json();
       window.postMessage({ channel: CHANNEL_FETCH_REPLY, messageId, data: json }, '*');
     } catch (err) {
@@ -298,80 +311,251 @@
     }
   });
 
-  // Chặn fetch để bắt các request đến Shopee API
-  const originalFetch = window.fetch;
-  const capturedRequests = {};
-
-  const patchedFetch = async function (...args) {
-    const result = await originalFetch.apply(this, args);
+  // ============================================================
+  // Tải Ảnh Shopee PDP Parser
+  // ============================================================
+  function parsePdpData(f) {
     try {
-      const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-      
-      // Bắt các request Order API của Shopee Seller
-      if (url.includes('/api/') && (url.includes('/order') || url.includes('/sale') || url.includes('order_list') || url.includes('search_order'))) {
-        let reqHeaders = args[1]?.headers || {};
-        if (reqHeaders instanceof Headers) {
-          const h = {};
-          reqHeaders.forEach((val, key) => { h[key] = val; });
-          reqHeaders = h;
-        } else if (Array.isArray(reqHeaders)) {
-          const h = {};
-          reqHeaders.forEach(([key, val]) => { h[key] = val; });
-          reqHeaders = h;
-        }
-        window.__LAST_SHOPEE_ORDER_API__ = {
-          url,
-          headers: reqHeaders,
-          timestamp: Date.now()
-        };
+      const data = f?.data || {};
+      const title = data?.item?.title || '';
+
+      let categoryImages = [];
+      const variations = data?.product_images?.first_tier_variations;
+      if (Array.isArray(variations)) {
+        categoryImages = variations.map(k => ({
+          sku: k?.name || '',
+          name: k?.name || '',
+          image: k?.image ? 'https://down-id.img.susercontent.com/file/' + k.image : ''
+        })).filter(x => x.image);
       }
 
-      if (url.includes('/api/') && (url.includes('item_id') || url.includes('shop_id') || url.includes('/pdp/'))) {
-        const cloned = result.clone();
-        cloned.json().then(json => {
-          let reqHeaders = args[1]?.headers || {};
-          if (reqHeaders instanceof Headers) {
-            const h = {};
-            reqHeaders.forEach((val, key) => { h[key] = val; });
-            reqHeaders = h;
-          } else if (Array.isArray(reqHeaders)) {
-            const h = {};
-            reqHeaders.forEach(([key, val]) => { h[key] = val; });
-            reqHeaders = h;
-          }
-          window.postMessage({
-            channel: CHANNEL_INTERCEPT,
-            url: url,
-            headers: reqHeaders,
-            data: json
-          }, '*');
-        }).catch(() => {});
+      let mainImages = [];
+      const images = data?.product_images?.images;
+      if (Array.isArray(images)) {
+        mainImages = images.map(k => 'https://down-id.img.susercontent.com/file/' + k);
       }
-    } catch (_) {}
-    return result;
+
+      let descriptionImages = [];
+      let pList = data?.rich_text_description?.paragraph_list || data?.item?.rich_text_description?.paragraph_list;
+      if (Array.isArray(pList)) {
+        descriptionImages = pList.filter(k => k?.img_id).map(k => 'https://down-id.img.susercontent.com/file/' + k.img_id);
+      }
+
+      let videos = [];
+      const vid = data?.product_images?.video;
+      if (vid && vid.video_id) {
+        videos = [{
+          src: 'https://cvf.shopee.com/file/' + vid.video_id,
+          cover: vid.thumb_url ? 'https://down-id.img.susercontent.com/file/' + vid.thumb_url : ''
+        }];
+      }
+
+      const productData = {
+        isProduct: true,
+        title: title || document.title || '',
+        mainImages,
+        categoryImages,
+        descriptionImages,
+        videos
+      };
+      window.postMessage({ action: 'sendShopeeProductDataExt', data: productData }, '*');
+    } catch (e) {
+      console.warn('[Shopee MAIN Interceptor] Pdp parse error:', e);
+    }
+  }
+
+  // ============================================================
+  // Địa chỉ lấy hàng (address_id) cho Order Tool
+  // ============================================================
+  const CHANNEL_PICKUP = 'SPLQ_PICKUP_ADDRESS';
+  const isPickupUrl = (u) => /get_pickup_time_slots|batch_init_orders|init_order|mass_ship|pickup/i.test(u || '');
+  const isAddressUrl = (u) => /address|pickup/i.test(u || '');
+
+  const postPickupAddresses = (list) => {
+    if (list && list.length) window.postMessage({ channel: CHANNEL_PICKUP, list }, '*');
   };
 
-  Object.defineProperty(window, 'fetch', {
-    configurable: true,
-    get() { return patchedFetch; },
-    set(newFetch) {
-      // Khi Shopee thay thế fetch, vẫn wrap lại
-      Object.defineProperty(window, 'fetch', {
-        configurable: true,
-        get() { return async function (...args) {
-          const result = await newFetch.apply(this, args);
-          try {
-            const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-            if (url.includes('/api/') && (url.includes('item_id') || url.includes('shop_id') || url.includes('/pdp/'))) {
-              const cloned = result.clone();
-              cloned.json().then(json => {
-                window.postMessage({ channel: CHANNEL_INTERCEPT, url, headers: args[1]?.headers || {}, data: json }, '*');
-              }).catch(() => {});
-            }
-          } catch (_) {}
-          return result;
-        }; }
-      });
+  function fromBody(url, body) {
+    if (!isPickupUrl(url) || typeof body !== 'string') return;
+    try {
+      const j = JSON.parse(body);
+      const id = Number(j.address_id || j.pickup_address_id || 0);
+      if (id > 0) postPickupAddresses([{ id: String(id), name: '' }]);
+    } catch (_) {}
+  }
+
+  function fromResponse(url, text) {
+    if (!isAddressUrl(url) || !text) return;
+    let json;
+    try { json = JSON.parse(text); } catch (_) { return; }
+    const found = [];
+    (function walk(o, depth) {
+      if (!o || typeof o !== 'object' || depth > 8) return;
+      if (Array.isArray(o)) { o.forEach((x) => walk(x, depth + 1)); return; }
+      const id = Number(o.address_id || o.pickup_address_id || 0);
+      const label = [o.name, o.address_name, o.full_address, o.address, o.district, o.city, o.state]
+        .filter((v) => typeof v === 'string' && v.trim()).join(', ');
+      if (id > 0 && label) found.push({ id: String(id), name: label.slice(0, 120) });
+      for (const k of Object.keys(o)) walk(o[k], depth + 1);
+    })(json, 0);
+    postPickupAddresses(found);
+  }
+
+  // ============================================================
+  // Header capture helper
+  // ============================================================
+  function captureHeadersFromOptions(url, options) {
+    if (!url || typeof url !== 'string' || !url.includes('/api/')) return;
+    let reqHeaders = options?.headers || {};
+    let h = {};
+    if (reqHeaders instanceof Headers) {
+      reqHeaders.forEach((val, key) => { h[key] = val; });
+    } else if (Array.isArray(reqHeaders)) {
+      reqHeaders.forEach(([key, val]) => { h[key] = val; });
+    } else if (reqHeaders && typeof reqHeaders === 'object') {
+      Object.assign(h, reqHeaders);
     }
-  });
+    if (Object.keys(h).length > 0) {
+      window.__LAST_SHOPEE_BUYER_HEADERS__ = Object.assign({}, window.__LAST_SHOPEE_BUYER_HEADERS__ || {}, h);
+    }
+  }
+
+  // ============================================================
+  // Intercept window.fetch (Single, Non-recursive, Safe)
+  // ============================================================
+  if (typeof origFetch === 'function') {
+    window.fetch = async function (...args) {
+      const url = typeof args[0] === 'string' ? args[0] : (args[0]?.url || '');
+      const init = args[1];
+
+      try {
+        captureHeadersFromOptions(url, init);
+      } catch (_) {}
+
+      try {
+        fromBody(url, init && init.body);
+      } catch (_) {}
+
+      // Gọi native fetch gốc - an toàn tuyệt đối, không đệ quy
+      const result = await origFetch.apply(this, args);
+
+      try {
+        // Bắt Order API của Shopee Seller
+        if (url.includes('/api/') && (url.includes('/order') || url.includes('/sale') || url.includes('order_list') || url.includes('search_order'))) {
+          let reqHeaders = init?.headers || {};
+          let h = {};
+          if (reqHeaders instanceof Headers) {
+            reqHeaders.forEach((val, key) => { h[key] = val; });
+          } else if (Array.isArray(reqHeaders)) {
+            reqHeaders.forEach(([key, val]) => { h[key] = val; });
+          } else if (reqHeaders && typeof reqHeaders === 'object') {
+            Object.assign(h, reqHeaders);
+          }
+          window.__LAST_SHOPEE_ORDER_API__ = {
+            url,
+            headers: h,
+            timestamp: Date.now()
+          };
+        }
+
+        // Bắt địa chỉ lấy hàng
+        if (isAddressUrl(url)) {
+          result.clone().text().then((t) => fromResponse(url, t)).catch(() => {});
+        }
+
+        // Bắt thông tin PDP cho tải ảnh & đọc sản phẩm
+        if (url.includes('/api/v4/pdp/get_pc')) {
+          result.clone().json().then(json => parsePdpData(json)).catch(() => {});
+        }
+
+        // Bắt thông tin sản phẩm / shop để lưu cache
+        if (url.includes('/api/') && (
+          url.includes('item_id') || url.includes('itemid') ||
+          url.includes('shop_id') || url.includes('shopid') ||
+          url.includes('/pdp/') || url.includes('/shop/') ||
+          url.includes('search_items') || url.includes('rcmd_items') ||
+          url.includes('recommend')
+        )) {
+          const mShop = url.match(/[?&](?:shop_?id|match_id)=(\d+)/i) || url.match(/\/shop\/(\d+)/i);
+          if (mShop && mShop[1]) {
+            window.__LAST_DETECTED_SHOP_ID__ = mShop[1];
+          }
+
+          result.clone().json().then(json => {
+            let reqHeaders = init?.headers || {};
+            let h = {};
+            if (reqHeaders instanceof Headers) {
+              reqHeaders.forEach((val, key) => { h[key] = val; });
+            } else if (Array.isArray(reqHeaders)) {
+              reqHeaders.forEach(([key, val]) => { h[key] = val; });
+            } else if (reqHeaders && typeof reqHeaders === 'object') {
+              Object.assign(h, reqHeaders);
+            }
+
+            const sid = json?.data?.shopid || json?.data?.shop_id || json?.shopid || json?.shop_id;
+            if (sid) {
+              window.__LAST_DETECTED_SHOP_ID__ = String(sid);
+            }
+
+            window.postMessage({
+              channel: CHANNEL_INTERCEPT,
+              url: url,
+              headers: h,
+              data: json
+            }, '*');
+          }).catch(() => {});
+        }
+      } catch (_) {}
+
+      return result;
+    };
+  }
+
+  // ============================================================
+  // Intercept XMLHttpRequest (Prototype-based, Safe)
+  // ============================================================
+  const origOpen = XMLHttpRequest.prototype.open;
+  const origSend = XMLHttpRequest.prototype.send;
+  const origSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+
+  XMLHttpRequest.prototype.open = function (method, url) {
+    this.__splqUrl = String(url || '');
+    this.__splqHeaders = {};
+    return origOpen.apply(this, arguments);
+  };
+
+  XMLHttpRequest.prototype.setRequestHeader = function (header, value) {
+    if (!this.__splqHeaders) this.__splqHeaders = {};
+    this.__splqHeaders[header] = value;
+    if (header && typeof header === 'string' && (/^af-ac-enc|^x-sap-|^x-sz-|^x-csrftoken/i.test(header) || header.toLowerCase().includes('af-ac-enc'))) {
+      window.__LAST_SHOPEE_BUYER_HEADERS__ = window.__LAST_SHOPEE_BUYER_HEADERS__ || {};
+      window.__LAST_SHOPEE_BUYER_HEADERS__[header] = value;
+    }
+    return origSetRequestHeader.apply(this, arguments);
+  };
+
+  XMLHttpRequest.prototype.send = function (body) {
+    try {
+      const url = this.__splqUrl || '';
+      if (this.__splqHeaders && Object.keys(this.__splqHeaders).length > 0 && url.includes('/api/')) {
+        window.__LAST_SHOPEE_BUYER_HEADERS__ = Object.assign({}, window.__LAST_SHOPEE_BUYER_HEADERS__ || {}, this.__splqHeaders);
+      }
+      fromBody(url, body);
+      if (isAddressUrl(url)) {
+        this.addEventListener('load', () => {
+          try {
+            fromResponse(url, (this.responseType === '' || this.responseType === 'text') ? this.responseText : '');
+          } catch (_) {}
+        });
+      }
+      if (url.includes('/api/v4/pdp/get_pc')) {
+        this.addEventListener('load', () => {
+          try {
+            parsePdpData(JSON.parse(this.responseText));
+          } catch (_) {}
+        });
+      }
+    } catch (_) {}
+    return origSend.apply(this, arguments);
+  };
 })();

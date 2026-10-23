@@ -3173,7 +3173,7 @@
             const lastErrMsg = chrome.runtime.lastError.message || "";
             chrome.scripting?.executeScript({
               target: { tabId: tabId },
-              files: ["extension/lib/xlsx.full.min.js", "extension/lib/html2pdf.bundle.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
+              files: ["extension/lib/xlsx.full.min.js", "extension/lib/pdf-lib.min.js", "extension/content/content.js"]
             }, () => {
               if (chrome.runtime.lastError) {
                 resolve({ ok: false, error: lastErrMsg });

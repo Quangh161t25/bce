@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "TOPCARE - Đọc đơn hàng",
+  "version": "3.4.1",
+  "description": "Bảng bên cạnh đọc đơn Shopee, tự xác nhận lấy hàng, in phiếu, tải PDF + Excel, nạp Wameli, báo động âm thanh, gửi Telegram và tổng kết cuối ngày.",
+  "icons": {
+    "128": "icon.png"
+  },
+  "action": {
+    "default_title": "Mở/đóng bảng Đọc đơn",
+    "default_icon": {
+      "128": "icon.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "sidePanel",
+    "tabs",
+    "scripting",
+    "downloads",
+    "alarms",
+    "notifications",
+    "storage",
+    "offscreen"
+  ],
+  "host_permissions": [
+    "https://banhang.shopee.vn/*",
+    "https://*.susercontent.com/*",
+    "https://phanmem.wameli.vn/*",
+    "https://api.telegram.org/*"
+  ]
+}

@@ -15,7 +15,8 @@ export default function HeaderActions({
     onUploadFiles,
     onAddNew,
     onBatchMinPrice,
-    onBatchDefaultFees
+    onBatchDefaultFees,
+    onSyncDsSp
 }) {
     const fileInputRef = useRef(null);
 
@@ -112,6 +113,29 @@ export default function HeaderActions({
 
             {isTinhGiaTab && (
                 <>
+                    <button
+                        id="syncDsSpBtn"
+                        type="button"
+                        style={{
+                            height: '36px',
+                            padding: '6px 14px',
+                            background: '#2563eb',
+                            color: '#fff',
+                            fontWeight: 600,
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                        }}
+                        onClick={onSyncDsSp}
+                        title="Đồng bộ sản phẩm mới & cập nhật giá từ sheet DS_SP sang TÍNH GIÁ, tự động tính toán các cột công thức và lưu dữ liệu thực vào Google Sheets"
+                    >
+                        <RefreshCw style={{ width: 16, height: 16 }} />
+                        <span>🔄 Đồng Bộ Từ DS_SP & Tính Lại</span>
+                    </button>
+
                     <button
                         id="updateGiaDangMinBtn"
                         type="button"

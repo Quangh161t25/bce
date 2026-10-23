@@ -31,6 +31,14 @@ export function recalculateTinhGiaRowData(sourceRow) {
     let laiMongMuon = giaDang - phiAds - phiAff - phiCoDinh - phiGiaoDich - xtra - thue - phiHaTang - phiPiship - giaBan;
     let loiNhuanPt = giaDang > 0 ? (laiMongMuon / giaDang) : 0;
 
+    // Đảm bảo các cột tỷ lệ % không bị rỗng khi ghi dữ liệu thực vào Google Sheets
+    if (!row[10] || String(row[10]).trim() === '') row[10] = +(rAds * 100).toFixed(2) + '%';
+    if (!row[11] || String(row[11]).trim() === '') row[11] = +(rAff * 100).toFixed(2) + '%';
+    if (!row[12] || String(row[12]).trim() === '') row[12] = +(rCd * 100).toFixed(2) + '%';
+    if (!row[14] || String(row[14]).trim() === '') row[14] = +(rGd * 100).toFixed(2) + '%';
+    if (!row[16] || String(row[16]).trim() === '') row[16] = +(rXt * 100).toFixed(2) + '%';
+    if (!row[18] || String(row[18]).trim() === '') row[18] = +(rTh * 100).toFixed(2) + '%';
+
     row[8] = Math.round(laiMongMuon);
     row[7] = +(loiNhuanPt * 100).toFixed(2) + '%';
     row[13] = phiCoDinh;
@@ -42,6 +50,18 @@ export function recalculateTinhGiaRowData(sourceRow) {
 
     if (sourceRow._sheetRow) row._sheetRow = sourceRow._sheetRow;
     return row;
+}
+
+export function hasTinhGiaRowChanges(before, after) {
+    if (!before || !after) return true;
+    for (let i = 2; i <= 21; i++) {
+        const b = String(before[i] ?? '').trim();
+        const a = String(after[i] ?? '').trim();
+        if (b !== a) {
+            return true;
+        }
+    }
+    return false;
 }
 
 export function recalculateTinhGiaRowByProfitRate(sourceRow, targetProfitRateNum) {

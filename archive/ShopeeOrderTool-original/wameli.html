@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Wameli – Shopee Order Tool</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🏬 Wameli</div>
+    <div class="conn">
+      <a class="btn small" href="app.html">← Đơn Shopee</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="toolbar">
+        <label>Dữ liệu
+          <select id="wKind">
+            <option value="orders">Đơn xuất kho</option>
+            <option value="products">Sản phẩm</option>
+          </select>
+        </label>
+        <span id="dateOpts" class="row">
+          <label>Từ ngày <input id="wFrom" type="date"></label>
+          <label>Đến ngày <input id="wTo" type="date"></label>
+        </span>
+        <input id="wKeyword" placeholder="Từ khoá (mã đơn, mã vận đơn, SKU, tên SP...)" style="width:260px">
+        <label>Cách lấy
+          <select id="wMode"></select>
+        </label>
+        <span id="pageOpts" class="row hidden">
+          <label>Nghỉ giữa các trang <input id="wDelay" type="number" min="3" value="5" style="width:60px"> giây</label>
+          <label>Tối đa <input id="wMaxPages" type="number" min="1" value="20" style="width:70px"> trang</label>
+        </span>
+        <button id="wLoad" class="btn primary">Lấy dữ liệu</button>
+        <button id="wStop" class="btn danger hidden">Dừng</button>
+      </div>
+      <div class="toolbar">
+        <label>Hoặc nhập file Excel đã xuất từ Wameli <input id="wFile" type="file" accept=".xlsx"></label>
+      </div>
+      <div id="wStatus" class="hint">Cần đăng nhập Wameli trước. Extension lấy dữ liệu tuần tự và nghỉ giữa các lần để tránh bị Wameli chặn.</div>
+    </div>
+
+    <div class="card" id="upCard">
+      <div class="card-head">
+        <h3>⬆ Tải đơn lên Wameli (Đơn hàng → Thêm mới)</h3>
+        <button id="upLoadForm" class="btn small">Tải danh sách Shop / Giờ</button>
+      </div>
+      <div class="toolbar" style="margin-top:10px">
+        <label>Sàn <select id="upPlatform"></select></label>
+        <label>Kho <select id="upWarehouse"></select></label>
+        <label>Shop <input id="upShopFilter" placeholder="Lọc shop..." style="width:110px"> <select id="upShop" style="max-width:240px"></select></label>
+        <label>Ngày <input id="upDate" type="date"></label>
+        <label>Giờ <select id="upHour"></select></label>
+      </div>
+      <div class="toolbar">
+        <label>File name <input id="upName" style="width:220px"></label>
+        <span id="upSeeding" class="row"></span>
+      </div>
+      <div class="toolbar">
+        <label>Hoá đơn PDF (nhiều file) <input id="upPdf" type="file" accept=".pdf,application/pdf" multiple></label>
+        <label>Đơn hàng Excel <input id="upXlsx" type="file" accept=".xlsx,.xls"></label>
+        <button id="upSave" class="btn primary">Tải lên Wameli</button>
+      </div>
+      <div id="upInfo" class="hint">Bấm "Tải danh sách Shop / Giờ" để lấy các lựa chọn từ Wameli. Lựa chọn lần trước được nhớ lại.</div>
+      <div id="upLog" class="log-box"></div>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <input id="wSearch" placeholder="Lọc trong kết quả..." style="width:300px">
+        <span class="muted">Số dòng: <b id="wCount">0</b></span>
+        <span id="wSource" class="muted"></span>
+        <button id="wCsv" class="btn small">⬇ Xuất Excel (CSV)</button>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="wTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="wPager" class="row" style="justify-content:center;margin-top:10px"></div>
+    </div>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="wameli.js"></script>
+  <script type="module" src="wameli-upload.js"></script>
+</body>
+</html>

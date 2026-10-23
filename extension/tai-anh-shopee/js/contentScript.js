@@ -36,25 +36,24 @@
         });
     };
 
-    const origXHR = window.XMLHttpRequest;
-    window.XMLHttpRequest = function() {
-        const xhr = new origXHR();
-        xhr.addEventListener('load', function() {
-            if (xhr._url && xhr._url.includes('/api/v4/pdp/get_pc')) {
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(method, url) {
+        this._splqTaiAnhUrl = url;
+        return origOpen.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function() {
+        if (this._splqTaiAnhUrl && String(this._splqTaiAnhUrl).includes('/api/v4/pdp/get_pc')) {
+            this.addEventListener('load', () => {
                 try {
-                    const j = JSON.parse(xhr.responseText);
+                    const j = JSON.parse(this.responseText);
                     b(j);
                 } catch (e) {
                     console.error('XHR parse error:', e);
                 }
-            }
-        });
-        const origOpen = xhr.open;
-        xhr.open = function(method, url) {
-            xhr._url = url;
-            return origOpen.apply(this, arguments);
-        };
-        return xhr;
+            });
+        }
+        return origSend.apply(this, arguments);
     };
 
     function d(e, f, g = null) {

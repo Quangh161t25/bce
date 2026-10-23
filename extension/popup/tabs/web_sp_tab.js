@@ -19,6 +19,79 @@
     const inputGia08 = document.getElementById('web-sp-gia-08');
     const btnCopy = document.getElementById('web-sp-btn-copy');
 
+    const DEFAULT_WEB_SP_COLS = [
+        { id: 'chk', label: 'Chọn', defaultWidth: 36, defaultAlign: 'center', defaultWrap: false, defaultFixed: true },
+        { id: 'view', label: 'Xem', defaultWidth: 40, defaultAlign: 'center', defaultWrap: false, defaultFixed: false },
+        { id: 'link', label: 'Link', defaultWidth: 60, defaultAlign: 'center', defaultWrap: false, defaultFixed: false },
+        { id: 'gian', label: 'Gian', defaultWidth: 70, defaultAlign: 'left', defaultWrap: false, defaultFixed: false },
+        { id: 'sku', label: 'SKU (Cột C)', defaultWidth: 100, defaultAlign: 'left', defaultWrap: false, defaultFixed: false },
+        { id: 'phan_loai', label: 'Phân loại', defaultWidth: 110, defaultAlign: 'left', defaultWrap: true, defaultFixed: false },
+        { id: 'ten_sp', label: 'Tên sản phẩm', defaultWidth: 180, defaultAlign: 'left', defaultWrap: true, defaultFixed: false }
+    ];
+    let webSpCols = [];
+    if (window.TableCustomizer) {
+        webSpCols = window.TableCustomizer.getTableConfig('table-web-sp', DEFAULT_WEB_SP_COLS);
+        window.TableCustomizer.applyTableStyles('table-web-sp', webSpCols);
+    } else {
+        webSpCols = DEFAULT_WEB_SP_COLS;
+    }
+
+    const btnCustomWebSp = document.getElementById('btn-col-custom-web-sp');
+    if (btnCustomWebSp) {
+        btnCustomWebSp.addEventListener('click', openWebSpCustomizer);
+    }
+
+    function openWebSpCustomizer() {
+        if (!window.TableCustomizer) return;
+        window.TableCustomizer.openColumnCustomizerModal({
+            tableId: 'table-web-sp',
+            tableName: 'Bảng Web SP',
+            defaultCols: DEFAULT_WEB_SP_COLS,
+            currentConfig: webSpCols,
+            onSave: (newCfg) => {
+                webSpCols = newCfg;
+                renderWebSpThead();
+                renderTable();
+            }
+        });
+    }
+
+    function renderWebSpThead() {
+        const thead = document.getElementById('web-sp-thead');
+        if (!thead) return;
+        const activeCols = webSpCols.filter(c => c.visible !== false);
+        let theadHtml = '<tr>';
+        activeCols.forEach(c => {
+            if (c.id === 'chk') {
+                theadHtml += `<th data-col="chk" style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; width: 34px; text-align: center;"><input type="checkbox" id="check-all-web-sp" title="Chọn tất cả để xóa" style="cursor: pointer; width: 14px; height: 14px; vertical-align: middle;"></th>`;
+            } else if (c.id === 'view') {
+                theadHtml += `<th data-col="view" style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; width: 40px; text-align: center;">Xem</th>`;
+            } else {
+                theadHtml += `<th data-col="${c.id}" style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; cursor: pointer;" title="Bấm để tùy chỉnh cột">${c.label}</th>`;
+            }
+        });
+        theadHtml += `<th class="th-settings-gear" style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; width: 32px; text-align: center; cursor: pointer; color: #0284c7;" title="Tùy chỉnh chi tiết các cột">⚙️</th>`;
+        theadHtml += '</tr>';
+        thead.innerHTML = theadHtml;
+
+        const gear = thead.querySelector('.th-settings-gear');
+        if (gear) gear.onclick = openWebSpCustomizer;
+
+        const checkAllWebSp = document.getElementById("check-all-web-sp");
+        checkAllWebSp?.addEventListener("change", () => {
+            const isChecked = checkAllWebSp.checked;
+            const checkboxes = tbody.querySelectorAll(".check-row-web-sp");
+            checkboxes.forEach(cb => { cb.checked = isChecked; });
+        });
+
+        if (window.TableCustomizer) {
+            window.TableCustomizer.attachColumnResizers('table-web-sp', (newCfg) => {
+                webSpCols = newCfg;
+            });
+        }
+    }
+    renderWebSpThead();
+
     let allRows = [];
     let dataLoaded = false;
     let colIndices = {
@@ -156,9 +229,11 @@
             filtered = allRows.slice(0, 10);
         }
 
+        const activeCols = webSpCols.filter(c => c.visible !== false);
+
         tbody.innerHTML = '';
         if (filtered.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="padding: 10px; text-align: center; color: #64748b;">Không tìm thấy dòng phù hợp với SKU.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${activeCols.length + 1}" style="padding: 10px; text-align: center; color: #64748b;">Không tìm thấy dòng phù hợp với SKU.</td></tr>`;
             return;
         }
 
@@ -174,23 +249,23 @@
             const phanLoaiVal = row[colIndices.phan_loai] || '';
             const tenVal = row[colIndices.ten_sp] || '';
 
-            tr.innerHTML = `
-                <td style="padding: 6px; text-align: center;">
-                    <input type="checkbox" class="check-row-web-sp" data-idx="${idx}" data-id="${escapeHtml(rowId)}" data-sku="${escapeHtml(skuVal)}" data-pl="${escapeHtml(phanLoaiVal)}" style="cursor: pointer; width: 14px; height: 14px;">
-                </td>
-                <td style="padding: 6px; text-align: center;">
-                    <button class="btn-view-row" data-idx="${idx}" style="cursor: pointer; border: none; background: transparent; font-size: 14px;" title="Xem chi tiết">👁️</button>
-                </td>
-                <td style="padding: 6px; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${renderShopeeLink(linkVal)}</td>
-                <td style="padding: 6px; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(gianVal)}</td>
-                <td style="padding: 6px; max-width: 100px; font-weight: 600; color: #2563eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(skuVal)}</td>
-                <td style="padding: 6px; max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(phanLoaiVal)}</td>
-                <td style="padding: 6px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(tenVal)}">${escapeHtml(tenVal)}</td>
-            `;
+            const cellMakers = {
+                chk: () => `<td data-col="chk" style="padding: 6px; text-align: center;"><input type="checkbox" class="check-row-web-sp" data-idx="${idx}" data-id="${escapeHtml(rowId)}" data-sku="${escapeHtml(skuVal)}" data-pl="${escapeHtml(phanLoaiVal)}" style="cursor: pointer; width: 14px; height: 14px;"></td>`,
+                view: () => `<td data-col="view" style="padding: 6px; text-align: center;"><button class="btn-view-row" data-idx="${idx}" style="cursor: pointer; border: none; background: transparent; font-size: 14px;" title="Xem chi tiết">👁️</button></td>`,
+                link: () => `<td data-col="link" style="padding: 6px;">${renderShopeeLink(linkVal)}</td>`,
+                gian: () => `<td data-col="gian" style="padding: 6px;">${escapeHtml(gianVal)}</td>`,
+                sku: () => `<td data-col="sku" style="padding: 6px; font-weight: 600; color: #2563eb;">${escapeHtml(skuVal)}</td>`,
+                phan_loai: () => `<td data-col="phan_loai" style="padding: 6px;">${escapeHtml(phanLoaiVal)}</td>`,
+                ten_sp: () => `<td data-col="ten_sp" style="padding: 6px;" title="${escapeHtml(tenVal)}">${escapeHtml(tenVal)}</td>`
+            };
+
+            let rowHtml = activeCols.map(c => (cellMakers[c.id] ? cellMakers[c.id]() : `<td data-col="${c.id}" style="padding: 6px;"></td>`)).join('');
+            rowHtml += `<td style="padding: 6px; text-align: center;"></td>`;
+            tr.innerHTML = rowHtml;
 
             // Attach row data to button element for easy access
             const btn = tr.querySelector('.btn-view-row');
-            btn._rowData = row;
+            if (btn) btn._rowData = row;
 
             fragment.appendChild(tr);
         });

@@ -172,7 +172,7 @@ export async function writeRecordRow(tabName, row, sheetRow, startColIndex = 0) 
     const startColStr = colName(startColIndex);
     const endColStr = colName(headers.length - 1);
 
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${tabName}!${startColStr}${rowNum}:${endColStr}${rowNum}?valueInputOption=RAW`, {
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${tabName}!${startColStr}${rowNum}:${endColStr}${rowNum}?valueInputOption=USER_ENTERED`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: [cleanRow] })
@@ -185,40 +185,102 @@ export async function writeRecordRow(tabName, row, sheetRow, startColIndex = 0) 
 
 export async function batchWriteRecordRows(tabName, items) {
     if (!items || !items.length) return;
-    let token = await getAccessToken();
     const headers = CONFIG.tabs[tabName]?.headers || [];
     const endCol = colName(headers.length - 1);
 
-    const data = items.map(item => ({
-        range: `${tabName}!A${item.sheetRow}:${endCol}${item.sheetRow}`,
-        values: [normalizeRow(item.row, tabName)]
-    }));
+    const CHUNK_SIZE = 400;
+    for (let c = 0; c < items.length; c += CHUNK_SIZE) {
+        const chunk = items.slice(c, c + CHUNK_SIZE);
+        const data = chunk.map(item => ({
+            range: `${tabName}!A${item.sheetRow}:${endCol}${item.sheetRow}`,
+            values: [normalizeRow(item.row, tabName)]
+        }));
 
-    let retries = 0;
-    const maxRetries = 4;
-    while (retries < maxRetries) {
-        try {
-            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values:batchUpdate`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data })
-            });
-            if (res.status === 429) {
+        let token = await getAccessToken();
+        let retries = 0;
+        const maxRetries = 4;
+        let success = false;
+        while (retries < maxRetries) {
+            try {
+                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values:batchUpdate`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data })
+                });
+                if (res.status === 429) {
+                    retries++;
+                    const waitMs = retries * 2500;
+                    await new Promise(r => setTimeout(r, waitMs));
+                    token = await getAccessToken();
+                    continue;
+                }
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error?.message || 'Cập nhật dòng dữ liệu thất bại.');
+                }
+                success = true;
+                break;
+            } catch (err) {
                 retries++;
-                const waitMs = retries * 2500;
-                await new Promise(r => setTimeout(r, waitMs));
-                token = await getAccessToken();
-                continue;
+                if (retries >= maxRetries) throw err;
+                await new Promise(r => setTimeout(r, retries * 1500));
             }
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.error?.message || 'Cập nhật dòng dữ liệu thất bại.');
+        }
+    }
+}
+
+export async function writeDsSpGiaDang(sheetRow, giaDang) {
+    const rowNum = Number(sheetRow);
+    if (!rowNum || rowNum < 2) throw new Error('Không xác định được dòng cần cập nhật.');
+    const token = await getAccessToken();
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/DS_SP!L${rowNum}?valueInputOption=USER_ENTERED`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [[giaDang]] })
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error?.message || 'Cập nhật giá đăng thất bại.');
+    }
+}
+
+export async function batchWriteDsSpGiaDang(items) {
+    if (!items || !items.length) return;
+    const CHUNK_SIZE = 500;
+    for (let c = 0; c < items.length; c += CHUNK_SIZE) {
+        const chunk = items.slice(c, c + CHUNK_SIZE);
+        const data = chunk.map(item => ({
+            range: `DS_SP!L${item.sheetRow}`,
+            values: [[item.giaDang]]
+        }));
+
+        let token = await getAccessToken();
+        let retries = 0;
+        const maxRetries = 4;
+        while (retries < maxRetries) {
+            try {
+                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values:batchUpdate`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data })
+                });
+                if (res.status === 429) {
+                    retries++;
+                    const waitMs = retries * 2000;
+                    await new Promise(r => setTimeout(r, waitMs));
+                    token = await getAccessToken();
+                    continue;
+                }
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error?.message || 'Cập nhật hàng loạt giá đăng thất bại.');
+                }
+                break;
+            } catch (err) {
+                retries++;
+                if (retries >= maxRetries) throw err;
+                await new Promise(r => setTimeout(r, retries * 1500));
             }
-            return await res.json();
-        } catch (err) {
-            retries++;
-            if (retries >= maxRetries) throw err;
-            await new Promise(r => setTimeout(r, retries * 1500));
         }
     }
 }
@@ -272,15 +334,19 @@ export async function deleteSheetRows(sheetTitle, sheetRows) {
 
 export async function appendRecordRows(tabName, rows) {
     if (!rows || !rows.length) return;
-    const token = await getAccessToken();
-    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${tabName}!A2:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: rows.map(r => normalizeRow(r, tabName)) })
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || 'Thêm dòng thất bại.');
+    const CHUNK_SIZE = 500;
+    for (let c = 0; c < rows.length; c += CHUNK_SIZE) {
+        const chunk = rows.slice(c, c + CHUNK_SIZE);
+        const token = await getAccessToken();
+        const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${tabName}!A2:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: chunk.map(r => normalizeRow(r, tabName)) })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error?.message || 'Thêm dòng thất bại.');
+        }
     }
 }
 

@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Order Tool",
+  "version": "0.7.2",
+  "description": "Xem và xuất toàn bộ thông tin đơn hàng của shop trên Kênh Người Bán Shopee và đơn xuất kho trên Wameli",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "scripting",
+    "tabs",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://banhang.shopee.vn/*",
+    "https://phanmem.wameli.vn/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Shopee Order Tool",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "128": "icon.png"
+  }
+}

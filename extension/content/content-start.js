@@ -25,6 +25,11 @@ window.addEventListener('message', (e) => {
     shopId = data.data.shop_id;
   }
 
+  const sid = shopId || data?.data?.shopid || data?.data?.shop_id || data?.shopid || data?.shop_id || url.match(/[?&](?:shop_?id|match_id)=(\d+)/i)?.[1];
+  if (sid) {
+    window.__LAST_DETECTED_SHOP_ID__ = String(sid);
+  }
+
   if (itemId && shopId) {
     const key = `${itemId}-${shopId}`;
     if (!window.splqInterceptedByProduct[key]) window.splqInterceptedByProduct[key] = [];

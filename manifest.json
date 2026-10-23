@@ -20,7 +20,10 @@
     "scripting",
     "sidePanel",
     "tabs",
-    "contextMenus"
+    "contextMenus",
+    "cookies",
+    "notifications",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -73,7 +76,6 @@
       ],
       "js": [
         "extension/lib/xlsx.full.min.js",
-        "extension/lib/html2pdf.bundle.min.js",
         "extension/lib/pdf-lib.min.js",
         "extension/content/content.js"
       ],
@@ -147,6 +149,34 @@
         "extension/content/universal-image-hover.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://shopee.vn/*"
+      ],
+      "js": [
+        "extension/clone-tool/content/shopee-hook.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://shopee.vn/*"
+      ],
+      "js": [
+        "extension/clone-tool/content/shopee-relay.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "extension/clone-tool/content/ai-chat.js"
+      ]
     }
   ],
   "web_accessible_resources": [
@@ -154,6 +184,7 @@
       "resources": [
         "dist/*",
         "dist/assets/*",
+        "extension/flash-sale/*",
         "extension/popup/images/*",
         "extension/content/shopee-fetch-interceptor.js",
         "extension/tai-anh-shopee/js/contentScript.js",

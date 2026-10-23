@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shopee Clone Tool</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <header>
+    <strong>Shopee Clone Tool</strong>
+    <span id="shopStatus" class="pill">Đang kiểm tra shop...</span>
+  </header>
+
+  <section class="card" id="productCard">
+    <div id="productEmpty" class="hint">
+      Mở một trang sản phẩm trên <b>shopee.vn</b> (nếu đã mở thì bấm F5) để lấy dữ liệu.
+    </div>
+    <div id="productBox" hidden>
+      <div class="product">
+        <img id="pImage" alt="" />
+        <div>
+          <div id="pName" class="pname"></div>
+          <div id="pMeta" class="hint"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="mediaCard" hidden>
+    <div class="row between">
+      <b>🖼 Ảnh &amp; Video <span id="mediaCount" class="hint"></span></b>
+      <div class="row gap">
+        <button id="btnDlAll" class="btn">⬇ Tải tất cả</button>
+        <button id="btnToggleMedia" class="btn">Thu gọn</button>
+      </div>
+    </div>
+    <div id="mediaGrid" class="media-groups"></div>
+  </section>
+
+  <section class="card">
+    <div class="row between" style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--border);">
+      <label style="display: flex; align-items: center; gap: 6px; font-weight: bold; margin: 0; color: #1e293b;">
+        🏬 Mã gian:
+        <input id="cloneMaGian" list="cloneMaGianList" placeholder="Nhập mã gian..." style="width: 130px; margin: 0; padding: 4px 8px; font-weight: bold; border-color: #3b82f6; border-radius: 4px;" />
+        <datalist id="cloneMaGianList"></datalist>
+      </label>
+      <div id="caiDatCoverStatus" class="small" style="display: flex; align-items: center; gap: 4px; color: #64748b;">
+        <span class="hint">Đang đọc Cột D...</span>
+      </div>
+    </div>
+    <div class="grid3">
+      <label>Cân nặng (g)<input data-opt="weight" type="number" min="1" /></label>
+      <label>Tồn kho<input data-opt="stock" type="number" min="0" /></label>
+      <label>Hạn sử dụng (ngày)<input data-opt="expiryDays" type="number" min="1" /></label>
+    </div>
+    <div class="grid3">
+      <label>Tăng giảm giá<input data-opt="priceChange" placeholder="+10% / -5% / +20000 / =99000" /></label>
+      <label>Giá hiện tại<input id="priceNow" readonly /></label>
+      <label>Giá sau tăng giảm<input id="priceAfter" readonly /></label>
+    </div>
+    <div class="row" style="margin-top: 4px;">
+      <label style="flex: 1; margin: 0;">
+        SKU sản phẩm (mã chung)
+        <input data-opt="parentSku" id="parentSkuInput" placeholder="Để trống = ID sản phẩm gốc" />
+      </label>
+    </div>
+
+    <div id="variationSection" style="margin-top: 8px;" hidden>
+      <div class="row between" style="margin-bottom: 4px;">
+        <b class="small" style="color: #1e293b;">📋 Phân loại &amp; SKU (<span id="varCount">0</span> phân loại):</b>
+        <div class="row gap">
+          <a href="#" id="btnAutoFillSku" class="small" style="color: #2563eb; text-decoration: underline;" title="Tự điền SKU theo mẫu: [SKU chung]-[Tên phân loại]">⚡ Điền nhanh SKU</a>
+        </div>
+      </div>
+      <div id="variationTableWrap" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: #fff;">
+        <div id="variationList"></div>
+      </div>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" data-opt="dropCover" /> Xóa ảnh bìa gốc</label>
+      <label><input type="checkbox" data-opt="usePriceBefore" /> Lấy giá trước KM</label>
+      <label><input type="checkbox" data-opt="skipDuplicate" /> Không trùng SP</label>
+      <label><input type="checkbox" data-opt="keepStock" /> Giữ tồn kho gốc</label>
+      <label><input type="checkbox" data-opt="copyVideo" /> Sao chép video</label>
+      <label><input type="checkbox" data-opt="descImages" /> Ảnh trong mô tả</label>
+      <label><input type="checkbox" data-opt="unlisted" /> Ẩn sản phẩm</label>
+    </div>
+    <div class="shopset">
+      <div class="row between">
+        <b class="small">🚚 Đơn vị vận chuyển</b>
+        <a href="#" id="reloadShop" class="small">↻ Tải lại</a>
+      </div>
+      <div id="channelList" class="chips"><span class="hint small">Đang tải...</span></div>
+      <b class="small">🏬 Kho</b>
+      <div id="locationList" class="chips"><span class="hint small">Đang tải...</span></div>
+      <div class="row gap scanrow">
+        <button id="btnScan" class="btn" disabled>Quét tồn kho (0/0)</button>
+        <span class="hint small">Đọc tồn kho thật từng phân loại trên trang shopee.vn</span>
+      </div>
+    </div>
+    <details>
+      <summary>Nâng cao</summary>
+      <label>ID sản phẩm mẫu (lấy cài đặt vận chuyển)<input data-opt="templateId" placeholder="Để trống = sản phẩm mới nhất của shop" /></label>
+      <label>Thêm vào đầu mô tả<textarea data-opt="descPrefix" rows="2"></textarea></label>
+      <label>Thêm vào cuối mô tả<textarea data-opt="descSuffix" rows="2"></textarea></label>
+    </details>
+  </section>
+
+  <section class="card ai" id="aiCard">
+    <div class="row between" style="margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+      <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: bold; cursor: pointer; color: #1e40af; margin: 0; font-size: 12px;">
+        <input type="checkbox" data-opt="enableAiCover" id="enableAiCover" /> Tạo ảnh AI làm ảnh bìa
+        <span class="hint small" style="font-weight: normal; color: #64748b;">(không tích = tự đăng lên luôn)</span>
+      </label>
+      <div class="row gap" style="align-items: center; flex-wrap: wrap;">
+        <div style="display: inline-flex; align-items: center; gap: 8px; background: #f1f5f9; padding: 2px 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+          <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: bold; cursor: pointer; color: #1d4ed8; margin: 0;">
+            <input type="radio" name="aiProvider" value="gemini" checked /> Gemini
+          </label>
+          <label style="display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: bold; cursor: pointer; color: #15803d; margin: 0;">
+            <input type="radio" name="aiProvider" value="chatgpt" /> ChatGPT
+          </label>
+        </div>
+        <button id="btnOpenAi" class="btn blue" style="padding: 3px 8px; font-size: 11px;">Mở AI</button>
+        <button id="btnAuto" class="btn red" style="padding: 3px 8px; font-size: 11px;" title="Mở AI đã chọn, tự gửi ảnh & prompt, đợi ảnh bìa rồi tự sao chép sang Shopee">⚡ Tự động</button>
+      </div>
+    </div>
+    <input data-opt="aiImage1" placeholder="Dán link ảnh 1 (ảnh mẫu) vào đây..." />
+    <div class="grid2 previews">
+      <div class="preview">
+        <div class="cap green-t">Ảnh 1: Ảnh mẫu</div>
+        <img id="aiImg1" alt="" hidden />
+        <div id="aiImg1Empty" class="empty">Dán link ảnh ở trên</div>
+      </div>
+      <div class="preview">
+        <div class="cap blue-t">Ảnh 2: Ảnh sản phẩm (bấm ảnh nhỏ để đổi)</div>
+        <img id="aiImg2" alt="" hidden />
+        <div id="aiImg2Empty" class="empty">Chưa có sản phẩm</div>
+        <div id="aiThumbs" class="thumbs"></div>
+      </div>
+    </div>
+    <div class="row between small">
+      <span class="hint">Câu lệnh prompt ({ten_sp} = tên sản phẩm):</span>
+      <a href="#" id="resetPrompt">↺ Prompt mặc định</a>
+    </div>
+    <textarea data-opt="aiPrompt" rows="3"></textarea>
+
+    <div class="cover">
+      <div class="row between">
+        <span class="green-t"><b>Ảnh bìa mới khi sao chép</b></span>
+        <div class="row gap">
+          <button id="btnPickCover" class="btn">Chọn ảnh từ máy</button>
+          <button id="btnClearCover" class="btn danger" hidden>Bỏ</button>
+        </div>
+      </div>
+      <div id="coverBox" class="row gap" hidden>
+        <img id="coverImg" alt="" />
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span id="coverText" class="green-t small">✔ Ảnh này sẽ làm ảnh bìa khi bấm "Sao chép sang Shopee"</span>
+          <span class="hint small" style="color: #64748b; font-size: 10px;">(Có thể kéo ảnh khác vào hoặc bấm Ctrl+V để thay thế)</span>
+        </div>
+      </div>
+      <div id="coverEmpty" class="hint small" style="padding: 6px 0; text-align: center; color: #64748b;">
+        🖱️ <b>Kéo thả ảnh vào đây</b> hoặc nhấn <b>Ctrl+V</b> để dán ảnh bìa nhanh (hoặc bấm Mở AI / chọn từ máy).
+      </div>
+      <input id="coverFile" type="file" accept="image/*" hidden />
+    </div>
+  </section>
+
+  <section class="card">
+    <button id="btnClone" class="btn primary big" disabled>Sao chép sang Shopee</button>
+    <div id="log" class="log"></div>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

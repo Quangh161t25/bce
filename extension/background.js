@@ -1,6 +1,12 @@
 self.window = self;
 self.navigator = { userAgent: "Node" };
 importScripts("lib/jsrsasign-all-min.js", "../shared/google-config.js");
+// Flash Sale Tool: tự động đăng ký Flash Sale (bản đóng gói từ extension/flash-sale/)
+importScripts("flash-sale/fs-background.bundle.js");
+// Sao chép sản phẩm (Shopee Clone Tool): lấy ảnh Gemini làm ảnh bìa (extension/clone-tool/)
+importScripts("clone-tool/background.js");
+// AutoIn (TOPCARE – Đọc đơn hàng): tự xác nhận lấy hàng, in phiếu, nạp Wameli, Telegram (extension/autoin/)
+importScripts("autoin/background.js");
 
 let GOOGLE_SHEET_CONFIG = {
   spreadsheetId: self.SHARED_GOOGLE_CONFIG.extensionSpreadsheetId,
@@ -264,12 +270,29 @@ async function uploadImageToFreeImageHost(imageUrl) {
   }
 
   if (message?.type === "UPLOAD_SP_SHOPEE") {
-    getGoogleAccessToken()
-      .then(async (token) => {
-         await ensureSheetExists("SP_SHOPEE", token);
+    Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
+      .then(async ([token, sheetId]) => {
+         await ensureSheetExists("SP_SHOPEE", token, sheetId);
          
+         // Đảm bảo header chuẩn nếu dòng 1 còn trống
+         try {
+             const headerRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A1:O1")}`, {
+                 headers: { Authorization: `Bearer ${token}` }
+             });
+             if (!headerRes.res.ok || !headerRes.data.values || !headerRes.data.values.length || !headerRes.data.values[0].length) {
+                 const defaultHeaders = [["Mã Sản phẩm", "Tên Sản phẩm", "Mã Phân loại", "Tên phân loại", "SKU Sản phẩm", "SKU", "Giá", "Kho hàng", "Tồn kho thực tế", "", "", "Mã gian", "Giá KM", "Tồn kho", "Ngày tạo"]];
+                 await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A1:O1")}?valueInputOption=USER_ENTERED`, {
+                     method: "PUT",
+                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                     body: JSON.stringify({ values: defaultHeaders })
+                 });
+             }
+         } catch (hErr) {
+             console.warn("Lỗi kiểm tra header SP_SHOPEE:", hErr);
+         }
+
          if (message.maGian) {
-             const existingRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/SP_SHOPEE!A2:Z`, {
+             const existingRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A2:Z")}`, {
                  headers: { Authorization: `Bearer ${token}` }
              });
              let existingRows = [];
@@ -277,28 +300,177 @@ async function uploadImageToFreeImageHost(imageUrl) {
                  existingRows = existingRes.data.values;
              }
              const filteredRows = existingRows.filter(row => {
-                 const rowGian = (row[11] || "").trim().toLowerCase();
+                 const rowGian = ((row[11] !== undefined && row[11] !== "") ? row[11] : (row[6] || "")).trim().toLowerCase();
                  return rowGian !== message.maGian.toLowerCase();
              });
              const finalRows = filteredRows.concat(message.values || []);
              
-             await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/${encodeURIComponent("SP_SHOPEE!A2:Z")}:clear`, {
+             await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A2:Z")}:clear`, {
                  method: "POST",
                  headers: { Authorization: `Bearer ${token}` }
              });
              
              if (finalRows.length > 0) {
-                 await updateSheetValues("SP_SHOPEE!A2", finalRows, token);
+                 await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A2")}?valueInputOption=USER_ENTERED`, {
+                     method: "PUT",
+                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                     body: JSON.stringify({ values: finalRows })
+                 });
              }
          } else {
-             const clearRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_CONFIG.spreadsheetId}/values/${encodeURIComponent("SP_SHOPEE!A2:Z")}:clear`, {
+             const clearRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A2:Z")}:clear`, {
                 method: "POST",
                 headers: { Authorization: `Bearer ${token}` }
              });
              if (!clearRes.res.ok) console.warn("Khong the clear SP_SHOPEE: ", clearRes.data);
 
              if (message.values && message.values.length > 0) {
-               await updateSheetValues("SP_SHOPEE!A2", message.values, token);
+               await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A2")}?valueInputOption=USER_ENTERED`, {
+                   method: "PUT",
+                   headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                   body: JSON.stringify({ values: message.values })
+               });
+             }
+         }
+         sendResponse({ ok: true });
+      })
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "UPLOAD_SP_SHOPEE_DAY_DU") {
+    Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
+      .then(async ([token, sheetId]) => {
+         const metadata = await fetchSpreadsheetMetadata(token, sheetId);
+         let targetSheet = (metadata.sheets || []).find((s) => {
+           const t = (s.properties?.title || "").trim().toLowerCase();
+           return t === "sp_shopee_day_du" || t === "sp shopee day du" || t === "sp shopee đầy đủ" || t === "sp_shopee_full" || t.includes("day_du") || t.includes("đầy đủ");
+         });
+         let targetTitle = targetSheet ? targetSheet.properties.title : "SP_SHOPEE_DAY_DU";
+         if (!targetSheet) {
+           await addSheet(targetTitle, token, sheetId);
+         }
+
+         // Đảm bảo header chuẩn nếu dòng 1 còn trống
+         try {
+             const headerRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(targetTitle + "!A1:U1")}`, {
+                 headers: { Authorization: `Bearer ${token}` }
+             });
+             if (!headerRes.res.ok || !headerRes.data.values || !headerRes.data.values.length || !headerRes.data.values[0].length) {
+                 const defaultHeaders = [["Mã Sản phẩm", "Tên Sản phẩm", "Mã Phân loại", "Tên phân loại", "SKU Sản phẩm", "SKU", "Giá", "Kho hàng", "Tồn kho thực tế", "", "", "Mã gian", "Giá KM", "Tồn kho", "Ngày tạo", "Link SP", "Mô tả SP", "Ảnh chính", "Ảnh mô tả", "Ảnh phân loại", "Video"]];
+                 await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(targetTitle + "!A1:U1")}?valueInputOption=USER_ENTERED`, {
+                     method: "PUT",
+                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                     body: JSON.stringify({ values: defaultHeaders })
+                 });
+             }
+         } catch (hErr) {
+             console.warn("Lỗi kiểm tra header SP_SHOPEE_DAY_DU:", hErr);
+         }
+
+         if (message.maGian) {
+             const existingRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(targetTitle + "!A2:Z")}`, {
+                 headers: { Authorization: `Bearer ${token}` }
+             });
+             let existingRows = [];
+             if (existingRes.res.ok && existingRes.data.values) {
+                 existingRows = existingRes.data.values;
+             }
+             const filteredRows = existingRows.filter(row => {
+                 const rowGian = ((row[11] !== undefined && row[11] !== "") ? row[11] : (row[6] || "")).trim().toLowerCase();
+                 return rowGian !== message.maGian.toLowerCase();
+             });
+             const finalRows = filteredRows.concat(message.values || []);
+             
+             await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(targetTitle + "!A2:Z")}:clear`, {
+                 method: "POST",
+                 headers: { Authorization: `Bearer ${token}` }
+             });
+             
+             if (finalRows.length > 0) {
+                 await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(targetTitle + "!A2")}?valueInputOption=USER_ENTERED`, {
+                     method: "PUT",
+                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                     body: JSON.stringify({ values: finalRows })
+                 });
+             }
+         } else {
+             const clearRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(targetTitle + "!A2:Z")}:clear`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` }
+             });
+
+             if (message.values && message.values.length > 0) {
+               await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(targetTitle + "!A2")}?valueInputOption=USER_ENTERED`, {
+                   method: "PUT",
+                   headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                   body: JSON.stringify({ values: message.values })
+               });
+             }
+         }
+         sendResponse({ ok: true, sheetTitle: targetTitle });
+      })
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "UPLOAD_WEB_SP") {
+    Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
+      .then(async ([token, sheetId]) => {
+         await ensureSheetExists("WEB_SP", token, sheetId);
+         
+         const headerRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A1:O1")}`, {
+             headers: { Authorization: `Bearer ${token}` }
+         });
+         if (!headerRes.res.ok || !headerRes.data.values || !headerRes.data.values.length || !headerRes.data.values[0].length) {
+             const defaultHeaders = [["ID", "Mã gian", "SKU phân loại", "Tên phân loại", "Tên sản phẩm", "Ngành hàng", "Mô tả sản phẩm", "Ảnh chính", "Ảnh mô tả", "Ảnh phân loại", "Video", "Giá", "Giá KM", "ID Shopee", "Link sản phẩm"]];
+             await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A1:O1")}?valueInputOption=USER_ENTERED`, {
+                 method: "PUT",
+                 headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                 body: JSON.stringify({ values: defaultHeaders })
+             });
+         }
+         
+         if (message.maGian) {
+             const existingRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A2:O")}`, {
+                 headers: { Authorization: `Bearer ${token}` }
+             });
+             let existingRows = [];
+             if (existingRes.res.ok && existingRes.data.values) {
+                 existingRows = existingRes.data.values;
+             }
+             // Cột B (index 1) là Mã gian
+             const filteredRows = existingRows.filter(row => {
+                 const rowGian = (row[1] || "").trim().toLowerCase();
+                 return rowGian !== message.maGian.trim().toLowerCase();
+             });
+             const finalRows = filteredRows.concat(message.values || []);
+             
+             await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A2:Z")}:clear`, {
+                 method: "POST",
+                 headers: { Authorization: `Bearer ${token}` }
+             });
+             
+             if (finalRows.length > 0) {
+                 await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A2")}?valueInputOption=USER_ENTERED`, {
+                     method: "PUT",
+                     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                     body: JSON.stringify({ values: finalRows })
+                 });
+             }
+         } else {
+             const clearRes = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A2:Z")}:clear`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` }
+             });
+             if (!clearRes.res.ok) console.warn("Không thể clear WEB_SP: ", clearRes.data);
+
+             if (message.values && message.values.length > 0) {
+               await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A2")}?valueInputOption=USER_ENTERED`, {
+                   method: "PUT",
+                   headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                   body: JSON.stringify({ values: message.values })
+               });
              }
          }
          sendResponse({ ok: true });
@@ -457,6 +629,74 @@ async function uploadImageToFreeImageHost(imageUrl) {
     return true;
   }
 
+  if (message?.type === "GET_SPREADSHEET_ID") {
+    getSpreadsheetId()
+      .then(sheetId => sendResponse({ ok: true, spreadsheetId: sheetId }))
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "APPEND_IN_DON_WML") {
+    (async () => {
+      try {
+        const [token, sheetId] = await Promise.all([getGoogleAccessToken(), getSpreadsheetId()]);
+        await ensureSheetExists("IN_DON_WML", token, sheetId);
+
+        // Đảm bảo hàng tiêu đề chuẩn nếu chưa có
+        try {
+          const { res: hRes, data: hData } = await fetchJsonWithTimeout(
+            `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("IN_DON_WML!A1:S1")}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const existingHeader = (hRes.ok && hData.values && hData.values[0]) || [];
+          if (!existingHeader.length || !existingHeader[0]) {
+            const defaultHeaders = [[
+              "Thời gian in", "Lô Wameli", "Khung giờ", "Kho hàng", "Mã gian", "Tên shop",
+              "Mã đơn hàng", "Mã kiện hàng", "Mã vận đơn", "Đơn vị vận chuyển",
+              "SKU sản phẩm", "SKU phân loại", "Tên sản phẩm", "Số lượng", "Đơn giá",
+              "Tổng tiền đơn", "Trạng thái Wameli", "Nguồn xử lý", "Ghi chú"
+            ]];
+            await fetchJsonWithTimeout(
+              `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("IN_DON_WML!A1:S1")}?valueInputOption=USER_ENTERED`,
+              {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ values: defaultHeaders })
+              }
+            );
+          }
+        } catch (hErr) {
+          console.warn("Lỗi kiểm tra/tạo header IN_DON_WML:", hErr);
+        }
+
+        const validRows = (message.values || message.rows || []).filter(r => Array.isArray(r) && r.some(cell => String(cell ?? "").trim() !== ""));
+        if (!validRows.length) {
+          sendResponse({ ok: false, error: "Không có dữ liệu hợp lệ để ghi vào sheet IN_DON_WML." });
+          return;
+        }
+
+        const { res: appRes, data: appData } = await fetchJsonWithTimeout(
+          `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("IN_DON_WML!A:S")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: validRows })
+          }
+        );
+
+        if (!appRes.ok) {
+          throw new Error(appData.error?.message || "Lỗi ghi dữ liệu vào sheet IN_DON_WML");
+        }
+
+        sendResponse({ ok: true, count: validRows.length, spreadsheetId: sheetId });
+      } catch (err) {
+        console.error("Lỗi APPEND_IN_DON_WML:", err);
+        sendResponse({ ok: false, error: err.message || String(err) });
+      }
+    })();
+    return true;
+  }
+
   if (message?.type === "GET_AUTH_TOKEN") {
     getGoogleAccessToken()
       .then(token => sendResponse({ ok: true, token }))
@@ -498,9 +738,61 @@ async function uploadImageToFreeImageHost(imageUrl) {
 
   if (message?.type === "FETCH_SP_SHOPEE") {
     Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
-      .then(([token, sheetId]) => fetchSheetValues("SP_SHOPEE!A:Z", token, GOOGLE_REQUEST_TIMEOUT_MS, sheetId))
-      .then(values => sendResponse({ ok: true, values }))
-      .catch(error => sendResponse({ ok: false, error: error.message }));
+      .then(async ([token, sheetId]) => {
+        const metadata = await fetchSpreadsheetMetadata(token, sheetId);
+        const found = (metadata.sheets || []).find((s) => {
+          const t = (s.properties?.title || "").trim().toLowerCase();
+          return t === "sp_shopee" || t === "sp shopee" || t === "spshopee";
+        });
+        if (!found) {
+          sendResponse({ ok: true, values: [], sheetTitle: "SP_SHOPEE" });
+          return;
+        }
+        const targetSheetTitle = found.properties.title;
+        const values = await fetchSheetValues(`${targetSheetTitle}!A:AZ`, token, GOOGLE_REQUEST_TIMEOUT_MS, sheetId);
+        sendResponse({ ok: true, values, sheetTitle: targetSheetTitle });
+      })
+      .catch(error => sendResponse({ ok: false, error: error.message, values: [] }));
+    return true;
+  }
+
+  if (message?.type === "FETCH_SP_SHOPEE_DAY_DU") {
+    Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
+      .then(async ([token, sheetId]) => {
+        const metadata = await fetchSpreadsheetMetadata(token, sheetId);
+        const found = (metadata.sheets || []).find((s) => {
+          const t = (s.properties?.title || "").trim().toLowerCase();
+          return t === "sp_shopee_day_du" || t === "sp shopee day du" || t === "sp shopee đầy đủ" || t === "sp_shopee_full" || t.includes("day_du") || t.includes("đầy đủ");
+        });
+        if (!found) {
+          sendResponse({ ok: true, values: [], sheetTitle: "SP_SHOPEE_DAY_DU" });
+          return;
+        }
+        const targetSheetTitle = found.properties.title;
+        const values = await fetchSheetValues(`${targetSheetTitle}!A:AZ`, token, GOOGLE_REQUEST_TIMEOUT_MS, sheetId);
+        sendResponse({ ok: true, values, sheetTitle: targetSheetTitle });
+      })
+      .catch(error => sendResponse({ ok: false, error: error.message, values: [] }));
+    return true;
+  }
+
+  if (message?.type === "FETCH_QUET_SP") {
+    Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
+      .then(async ([token, sheetId]) => {
+        const metadata = await fetchSpreadsheetMetadata(token, sheetId);
+        const found = (metadata.sheets || []).find((s) => {
+          const t = (s.properties?.title || "").trim().toLowerCase();
+          return t === "quet_sp" || t === "quet sp" || t === "quét sp" || t === "quét_sp" || t === "quet_shop" || t === "quét shop" || t === "quet shop" || t.includes("quet_sp") || t.includes("quet_shop");
+        });
+        if (!found) {
+          sendResponse({ ok: true, values: [], sheetTitle: "QUET_SP" });
+          return;
+        }
+        const targetSheetTitle = found.properties.title;
+        const values = await fetchSheetValues(`${targetSheetTitle}!A:AZ`, token, GOOGLE_REQUEST_TIMEOUT_MS, sheetId);
+        sendResponse({ ok: true, values, sheetTitle: targetSheetTitle });
+      })
+      .catch(error => sendResponse({ ok: false, error: error.message, values: [] }));
     return true;
   }
 
@@ -539,6 +831,206 @@ async function uploadImageToFreeImageHost(imageUrl) {
     Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
       .then(([token, sheetId]) => fetchSheetValues("cai_dat!A:Z", token, GOOGLE_REQUEST_TIMEOUT_MS, sheetId))
       .then(values => sendResponse({ ok: true, values }))
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  // Ghi giá trị vào sheet cai_dat theo TÊN CỘT ở dòng 1 (giá trị ở dòng 2).
+  // Chưa có cột thì thêm vào cột trống đầu tiên, không đè dữ liệu khác. values: { ten_cot: gia_tri }
+  if (message?.type === "SAVE_CAI_DAT_VALUES") {
+    (async () => {
+      const token = await getGoogleAccessToken();
+      const sheetId = await getSpreadsheetId();
+      const rows = await fetchSheetValues("cai_dat!1:2", token, GOOGLE_REQUEST_TIMEOUT_MS, sheetId);
+      const header = (rows[0] || []).map(h => String(h || "").trim());
+      const colLetter = (idx) => {
+        let n = idx + 1, s = "";
+        while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+        return s;
+      };
+      for (const [key, value] of Object.entries(message.values || {})) {
+        let idx = header.findIndex(h => h.toLowerCase() === key.toLowerCase());
+        if (idx === -1) {
+          idx = header.length;
+          header.push(key);
+          await updateSheetValues(`cai_dat!${colLetter(idx)}1`, [[key]], token);
+        }
+        await updateSheetValues(`cai_dat!${colLetter(idx)}2`, [[String(value ?? "")]], token);
+      }
+    })()
+      .then(() => sendResponse({ ok: true }))
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  // Đọc danh sách link làm việc nhanh từ Sheet cai_dat (cột link_mo theo định dạng JSON cho từng shop)
+  if (message?.type === "FETCH_CAI_DAT_QUICK_LINKS") {
+    (async () => {
+      const token = await getGoogleAccessToken();
+      const sheetId = await getSpreadsheetId();
+      const actualSheetName = await ensureSheetExists("cai_dat", token, sheetId);
+      const rows = await fetchSheetValues(`${actualSheetName}!A1:AZ100`, token, GOOGLE_REQUEST_TIMEOUT_MS, sheetId);
+      if (!rows || rows.length < 1) {
+        return { ok: true, links: [] };
+      }
+
+      // Xác định shop hiện tại (từ message hoặc storage)
+      let targetShop = String(message.maGian || "").trim();
+      if (!targetShop) {
+        const st = await chrome.storage.local.get(["maGian", "dhHoanTextValue"]);
+        targetShop = String(st.maGian || st.dhHoanTextValue || "").trim();
+      }
+
+      const header = (rows[0] || []).map(h => String(h || "").trim().toLowerCase());
+      const linkMoColIdx = header.findIndex(h => h === "link_mo" || h === "linkmo");
+      const shopColIdx = header.findIndex(h => ["gian", "ma_gian", "shop", "ma_shop"].includes(h));
+      const colBIdx = shopColIdx !== -1 ? shopColIdx : 1; // Mặc định cột B (index 1) là mã gian
+
+      let links = [];
+      let foundInLinkMo = false;
+
+      // 1. Tìm theo cột link_mo (JSON)
+      if (linkMoColIdx !== -1 && rows.length >= 2) {
+        let targetRow = null;
+        if (targetShop) {
+          targetRow = rows.slice(1).find(r => String(r[colBIdx] || "").trim().toLowerCase() === targetShop.toLowerCase());
+        }
+        // Nếu không tìm thấy dòng của shop cụ thể, lấy dòng có link_mo đầu tiên
+        if (!targetRow) {
+          targetRow = rows.slice(1).find(r => String(r[linkMoColIdx] || "").trim().length > 2) || rows[1];
+        }
+
+        if (targetRow && targetRow[linkMoColIdx]) {
+          const rawJson = String(targetRow[linkMoColIdx] || "").trim();
+          if (rawJson.startsWith("[") || rawJson.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(rawJson);
+              const arr = Array.isArray(parsed) ? parsed : [parsed];
+              links = arr.map((item, idx) => ({
+                id: item.id || `link_${idx}_${Date.now()}`,
+                name: String(item.name || "Trang làm việc").trim(),
+                url: String(item.url || "").trim(),
+                enabled: item.enabled !== false
+              })).filter(l => Boolean(l.url));
+              foundInLinkMo = true;
+            } catch (err) {
+              console.warn("Lỗi parse JSON cột link_mo:", err);
+            }
+          }
+        }
+      }
+
+      // 2. Fallback: Nếu chưa có trong link_mo, đọc từ các cột cũ (ten_link, url_link, bat_tat)
+      if (!foundInLinkMo) {
+        const nameColIdx = header.findIndex(h => ["ten_link", "ten_trang", "link_nhanh_ten", "ten_web"].includes(h));
+        const urlColIdx = header.findIndex(h => ["url_link", "link_trang", "link_nhanh_url", "link_web"].includes(h));
+        const statusColIdx = header.findIndex(h => ["bat_tat", "trang_thai", "trang_thai_link", "enable", "enabled"].includes(h));
+
+        if (nameColIdx !== -1 && urlColIdx !== -1) {
+          for (let i = 1; i < rows.length; i++) {
+            const r = rows[i] || [];
+            const name = String(r[nameColIdx] || "").trim();
+            const url = String(r[urlColIdx] || "").trim();
+            let enabled = true;
+            if (statusColIdx !== -1) {
+              const st = String(r[statusColIdx] || "").trim().toUpperCase();
+              if (st === "TAT" || st === "0" || st === "FALSE" || st === "OFF") {
+                enabled = false;
+              }
+            }
+            if (name && url) {
+              links.push({ id: `link_${i}_${Date.now()}`, name, url, enabled });
+            }
+          }
+        }
+      }
+
+      return { ok: true, links, shop: targetShop };
+    })()
+      .then(res => sendResponse(res))
+      .catch(error => sendResponse({ ok: false, error: error.message, links: [] }));
+    return true;
+  }
+
+  // Lưu danh sách link làm việc nhanh vào Sheet cai_dat (cột link_mo dạng JSON, mỗi shop 1 dòng riêng)
+  if (message?.type === "SAVE_CAI_DAT_QUICK_LINKS") {
+    (async () => {
+      const token = await getGoogleAccessToken();
+      const sheetId = await getSpreadsheetId();
+      const actualSheetName = await ensureSheetExists("cai_dat", token, sheetId);
+      const rows = await fetchSheetValues(`${actualSheetName}!1:100`, token, GOOGLE_REQUEST_TIMEOUT_MS, sheetId);
+      const header = (rows[0] || []).map(h => String(h || "").trim());
+
+      const colLetter = (idx) => {
+        let n = idx + 1, s = "";
+        while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+        return s;
+      };
+
+      // 1. Đảm bảo cột link_mo tồn tại ở hàng tiêu đề
+      let linkMoColIdx = header.findIndex(h => h.toLowerCase() === "link_mo" || h.toLowerCase() === "linkmo");
+      if (linkMoColIdx === -1) {
+        linkMoColIdx = header.length;
+        header.push("link_mo");
+        await updateSheetValues(`${actualSheetName}!${colLetter(linkMoColIdx)}1`, [["link_mo"]], token);
+      }
+
+      // 2. Xác định cột chứa mã shop (cột B hoặc header có tên gian, ma_gian, shop)
+      let shopColIdx = header.findIndex(h => ["gian", "ma_gian", "shop", "ma_shop"].includes(h.toLowerCase()));
+      if (shopColIdx === -1) {
+        shopColIdx = 1; // Cột B (index 1)
+      }
+
+      // 3. Xác định shop hiện tại
+      let currentShop = String(message.maGian || "").trim();
+      if (!currentShop) {
+        const st = await chrome.storage.local.get(["maGian", "dhHoanTextValue"]);
+        currentShop = String(st.maGian || st.dhHoanTextValue || "").trim();
+      }
+
+      // 4. Chuẩn bị chuỗi JSON lưu trữ
+      const rawLinks = Array.isArray(message.links) ? message.links : [];
+      const cleanLinks = rawLinks.map(l => ({
+        name: String(l.name || "").trim(),
+        url: String(l.url || "").trim(),
+        enabled: l.enabled !== false
+      })).filter(l => Boolean(l.url));
+      const jsonStr = JSON.stringify(cleanLinks);
+
+      // 5. Tìm dòng của shop này trong sheet (từ dòng 2 trở đi)
+      let targetRowNum = 2; // Mặc định dòng 2
+      let foundShopRow = false;
+
+      if (currentShop) {
+        for (let i = 1; i < rows.length; i++) {
+          const rowShop = String(rows[i]?.[shopColIdx] || "").trim();
+          if (rowShop.toLowerCase() === currentShop.toLowerCase()) {
+            targetRowNum = i + 1; // 1-based row index
+            foundShopRow = true;
+            break;
+          }
+        }
+
+        // Nếu shop chưa có dòng nào trong sheet, tạo dòng mới cho shop này
+        if (!foundShopRow) {
+          targetRowNum = Math.max(2, rows.length + 1);
+          await updateSheetValues(`${actualSheetName}!${colLetter(shopColIdx)}${targetRowNum}`, [[currentShop]], token);
+        }
+      }
+
+      // 6. Ghi JSON vào cột link_mo tại đúng dòng của mã shop đó
+      const linkMoCol = colLetter(linkMoColIdx);
+      await updateSheetValues(`${actualSheetName}!${linkMoCol}${targetRowNum}`, [[jsonStr]], token);
+
+      // 7. Lưu vào storage cục bộ
+      await chrome.storage.local.set({
+        order_tool_quick_links: rawLinks,
+        [`order_tool_quick_links_${currentShop || "default"}`]: rawLinks
+      });
+
+      return { ok: true, count: cleanLinks.length, shop: currentShop, row: targetRowNum };
+    })()
+      .then(res => sendResponse(res))
       .catch(error => sendResponse({ ok: false, error: error.message }));
     return true;
   }
@@ -611,6 +1103,23 @@ async function uploadImageToFreeImageHost(imageUrl) {
     return true;
   }
 
+  if (message?.type === "FETCH_DON_KHO_NHAN") {
+    getGoogleAccessToken().then(async token => {
+      try {
+        const spreadsheetId = message.spreadsheetId || "1cnA33cHHMhcOSaXa9l4Jeu6qw8QnXlUnEU4Bqtkj9wo";
+        const sheetName = message.sheetName || "HH_BH";
+        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error(data.error?.message || `Không đọc được sheet ${sheetName}.`);
+        sendResponse({ ok: true, values: data.values || [] });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    }).catch(err => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
   if (message?.type === "FETCH_UD_CT_MDH") {
     getGoogleAccessToken().then(async token => {
       try {
@@ -621,6 +1130,39 @@ async function uploadImageToFreeImageHost(imageUrl) {
         sendResponse({ ok: true, values: data.values || [] });
       } catch (err) {
         sendResponse({ ok: false, error: err.message });
+      }
+    }).catch(err => sendResponse({ ok: false, error: err.message }));
+    return true;
+  }
+
+  if (message?.type === "APPEND_HH_SHOP_DIEN") {
+    getGoogleAccessToken().then(async token => {
+      try {
+        const spreadsheetId = message.spreadsheetId || "1cnA33cHHMhcOSaXa9l4Jeu6qw8QnXlUnEU4Bqtkj9wo";
+        const sheetName = message.sheetName || "HH_SHOP_DIEN";
+        const validRows = (message.values || message.rows || []).filter(r => Array.isArray(r) && r.some(cell => String(cell ?? "").trim() !== ""));
+        if (!validRows.length) {
+          sendResponse({ ok: false, error: "Không có dữ liệu hợp lệ để ghi vào sheet " + sheetName });
+          return;
+        }
+
+        const { res: appRes, data: appData } = await fetchJsonWithTimeout(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName + "!A:P")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+          {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: validRows })
+          }
+        );
+
+        if (!appRes.ok) {
+          throw new Error(appData.error?.message || `Lỗi ghi dữ liệu vào sheet ${sheetName}`);
+        }
+
+        sendResponse({ ok: true, count: validRows.length, spreadsheetId, updatedRows: appData.updates?.updatedRows || validRows.length });
+      } catch (err) {
+        console.error("Lỗi APPEND_HH_SHOP_DIEN:", err);
+        sendResponse({ ok: false, error: err.message || String(err) });
       }
     }).catch(err => sendResponse({ ok: false, error: err.message }));
     return true;
@@ -1855,7 +2397,7 @@ async function uploadImageToFreeImageHost(imageUrl) {
     return true;
   }
 
-  if (message?.type === "APPEND_SP_SHOPEE") {
+  if (message?.type === "APPEND_SP_SHOPEE" || message?.type === "UPSERT_SP_SHOPEE") {
     Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
       .then(async ([token, sheetId]) => {
         await ensureSheetExists("SP_SHOPEE", token, sheetId);
@@ -1875,8 +2417,96 @@ async function uploadImageToFreeImageHost(imageUrl) {
         }
 
         if (lastUsedRow === 0) {
-          const defaultHeaders = [["Mã sản phẩm", "Tên sản phẩm", "Mô tả sản phẩm", "Tên phân loại", "Giá trước giảm", "SKU phân loại", "Giá", "Kho hàng", "Hình ảnh", "Phân loại 1", "Phân loại 2", "Mã gian"]];
-          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A1:L1")}?valueInputOption=USER_ENTERED`, {
+          const defaultHeaders = [["Mã Sản phẩm", "Tên Sản phẩm", "Mã Phân loại", "Tên phân loại", "SKU Sản phẩm", "SKU", "Giá", "Kho hàng", "Tồn kho thực tế", "", "", "Mã gian", "Giá KM", "Tồn kho", "Ngày tạo"]];
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("SP_SHOPEE!A1:O1")}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: defaultHeaders })
+          });
+          lastUsedRow = 1;
+        }
+
+        const toUpdate = [];
+        const toAppend = [];
+
+        for (const vRow of validRows) {
+          const incomingItemId = String(vRow[0] ?? "").trim();
+          const incomingModelId = String(vRow[2] ?? "").trim();
+
+          let foundIdx = -1;
+          for (let i = 1; i < existingRows.length; i++) {
+            const ex = existingRows[i];
+            if (!ex) continue;
+            const exItemId = String(ex[0] ?? "").trim();
+            const exModelId = String(ex[2] ?? "").trim();
+
+            if (incomingItemId && exItemId === incomingItemId) {
+              if (!incomingModelId && !exModelId) {
+                foundIdx = i;
+                break;
+              } else if (incomingModelId && exModelId === incomingModelId) {
+                foundIdx = i;
+                break;
+              }
+            }
+          }
+
+          if (foundIdx > 0) {
+            toUpdate.push({ rowNum: foundIdx + 1, values: vRow });
+          } else {
+            toAppend.push(vRow);
+          }
+        }
+
+        for (const item of toUpdate) {
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`SP_SHOPEE!A${item.rowNum}:O${item.rowNum}`)}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: [item.values] })
+          });
+        }
+
+        if (toAppend.length > 0) {
+          const startRowNum = lastUsedRow + 1;
+          const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`SP_SHOPEE!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ values: toAppend })
+          });
+          if (!res.ok) throw new Error(data.error?.message || "Không thêm được vào SP_SHOPEE.");
+        }
+
+        sendResponse({ ok: true, updated: toUpdate.length, appended: toAppend.length });
+      })
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "APPEND_WEB_SP") {
+    Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
+      .then(async ([token, sheetId]) => {
+        await ensureSheetExists("WEB_SP", token, sheetId);
+        const validRows = (message.values || []).filter(r => Array.isArray(r) && r.some(cell => String(cell ?? "").trim() !== ""));
+        if (!validRows.length) throw new Error("Không có dữ liệu hợp lệ để thêm vào sheet WEB_SP.");
+
+        const { res: readRes, data: readData } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A:O")}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const existingRows = (readRes.ok && readData.values) ? readData.values : [];
+        let lastUsedRow = 0;
+        for (let i = 0; i < existingRows.length; i++) {
+          const r = existingRows[i];
+          if (r && r.some(cell => String(cell ?? "").trim() !== "")) {
+            lastUsedRow = i + 1;
+          }
+        }
+
+        if (lastUsedRow === 0) {
+          const defaultHeaders = [["ID", "Mã gian", "SKU phân loại", "Tên phân loại", "Tên sản phẩm", "Ngành hàng", "Mô tả sản phẩm", "Ảnh chính", "Ảnh mô tả", "Ảnh phân loại", "Video", "Giá", "Giá KM", "ID Shopee", "Link sản phẩm"]];
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent("WEB_SP!A1:O1")}?valueInputOption=USER_ENTERED`, {
             method: "PUT",
             headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             body: JSON.stringify({ values: defaultHeaders })
@@ -1885,7 +2515,7 @@ async function uploadImageToFreeImageHost(imageUrl) {
         }
 
         const startRowNum = lastUsedRow + 1;
-        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`SP_SHOPEE!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
+        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`WEB_SP!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -1893,10 +2523,151 @@ async function uploadImageToFreeImageHost(imageUrl) {
           },
           body: JSON.stringify({ values: validRows })
         });
-        if (!res.ok) throw new Error(data.error?.message || "Không thêm được vào SP_SHOPEE.");
+        if (!res.ok) throw new Error(data.error?.message || "Không thêm được vào WEB_SP.");
         sendResponse({ ok: true, data });
       })
       .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "APPEND_QUET_SP") {
+    Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
+      .then(async ([token, sheetId]) => {
+        const metadata = await fetchSpreadsheetMetadata(token, sheetId);
+        const found = (metadata.sheets || []).find((s) => {
+          const t = (s.properties?.title || "").trim().toLowerCase();
+          return t === "quet_sp" || t === "quet sp" || t === "quét sp" || t === "quét_sp" || t === "quet_shop" || t === "quét shop" || t === "quet shop" || t.includes("quet_sp") || t.includes("quet_shop");
+        });
+        const targetSheetTitle = found ? found.properties.title : "QUET_SP";
+
+        await ensureSheetExists(targetSheetTitle, token, sheetId);
+
+        const { res: readRes, data: readData } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${targetSheetTitle}!A:AZ`)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const existingRows = (readRes.ok && readData.values) ? readData.values : [];
+        let lastUsedRow = 0;
+        for (let i = 0; i < existingRows.length; i++) {
+          const r = existingRows[i];
+          if (r && r.some(cell => String(cell ?? "").trim() !== "")) {
+            lastUsedRow = i + 1;
+          }
+        }
+
+        let headerRow = (existingRows.length > 0 && Array.isArray(existingRows[0])) ? existingRows[0] : null;
+
+        if (!headerRow || !headerRow.length) {
+          headerRow = [
+            "ID", "Tên shop", "ID Shopee", "Tên sản phẩm", "Tên phân loại", "SKU phân loại",
+            "Giá gốc", "Giá KM", "Tồn kho", "Đã bán", "Đánh giá", "Ngành hàng",
+            "Thương hiệu", "Link sản phẩm", "Ảnh phân loại", "Ảnh chính", "Ảnh mô tả",
+            "Video", "Mô tả sản phẩm", "Thời gian lưu", "Voucher của Shop", "Giá sau Shopee Voucher"
+          ];
+          await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${targetSheetTitle}!A1:V1`)}?valueInputOption=USER_ENTERED`, {
+            method: "PUT",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ values: [headerRow] })
+          });
+          lastUsedRow = 1;
+        } else {
+          // If existing header doesn't have voucher columns, append them to row 1
+          const hasVoucher = headerRow.some(h => {
+            const lower = String(h || '').toLowerCase();
+            return lower.includes('voucher') || lower.includes('giá sau');
+          });
+          if (!hasVoucher) {
+            headerRow.push("Voucher của Shop", "Giá sau Shopee Voucher");
+            await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${targetSheetTitle}!A1:AZ1`)}?valueInputOption=USER_ENTERED`, {
+              method: "PUT",
+              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ values: [headerRow] })
+            });
+          }
+        }
+
+        function mapFieldByHeader(h) {
+          const s = String(h || '').trim().toLowerCase();
+          if (s === 'id') return 'id';
+          if (s === 'tên shop' || s === 'ten shop' || s === 'shop') return 'shopName';
+          if (s === 'id shopee' || s === 'id sản phẩm' || s === 'mã sản phẩm' || s === 'ma san pham') return 'itemId';
+          if (s === 'tên sản phẩm' || s === 'ten san pham' || s === 'tên sp') return 'name';
+          if (s === 'tên phân loại' || s === 'ten phan loai' || s === 'phân loại') return 'modelName';
+          if (s === 'sku phân loại' || s === 'sku') return 'sku';
+          if (s === 'giá gốc' || s === 'gia goc' || s === 'giá bán' || s === 'giá') return 'price';
+          if (s === 'giá km' || s === 'gia km') return 'promoPrice';
+          if (s === 'voucher của shop' || s === 'voucher') return 'voucherDesc';
+          if (s === 'giá sau shopee voucher' || s === 'giá sau voucher') return 'priceAfterVoucher';
+          if (s === 'tồn kho' || s === 'ton kho' || s === 'kho hàng' || s === 'kho') return 'stock';
+          if (s === 'đã bán' || s === 'da ban') return 'sold';
+          if (s === 'đánh giá' || s === 'danh gia') return 'rating';
+          if (s === 'ngành hàng' || s === 'nganh hang') return 'category';
+          if (s === 'thương hiệu' || s === 'thuong hieu') return 'brand';
+          if (s === 'link sản phẩm' || s === 'link') return 'url';
+          if (s === 'ảnh phân loại' || s === 'anh phan loai') return 'modelImg';
+          if (s === 'ảnh chính' || s === 'anh chinh') return 'mainImages';
+          if (s === 'ảnh mô tả' || s === 'anh mo ta') return 'descImages';
+          if (s === 'video') return 'video';
+          if (s === 'mô tả sản phẩm' || s === 'mo ta san pham' || s === 'mô tả' || s === 'mo ta') return 'description';
+          if (s === 'thời gian lưu' || s === 'thoi gian luu' || s === 'thời gian' || s === 'thoi gian') return 'timestamp';
+          return null;
+        }
+
+        const validRows = (message.values || []).map(item => {
+          if (!item) return [];
+          if (Array.isArray(item)) return item;
+          if (typeof item === 'object') {
+            return headerRow.map(h => {
+              const field = mapFieldByHeader(h);
+              return field ? (item[field] ?? '') : '';
+            });
+          }
+          return [];
+        }).filter(r => Array.isArray(r) && r.length > 0 && r.some(cell => String(cell ?? "").trim() !== ""));
+
+        if (!validRows.length) throw new Error("Không có dữ liệu hợp lệ để thêm vào sheet " + targetSheetTitle);
+
+        const startRowNum = lastUsedRow + 1;
+        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${targetSheetTitle}!A${startRowNum}`)}?valueInputOption=USER_ENTERED`, {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ values: validRows })
+        });
+        if (!res.ok) throw new Error(data.error?.message || `Không thêm được vào ${targetSheetTitle}.`);
+        sendResponse({ ok: true, data, sheetTitle: targetSheetTitle, count: validRows.length });
+      })
+      .catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message?.type === "GET_SAVED_QUET_SP_IDS") {
+    Promise.all([getGoogleAccessToken(), getSpreadsheetId()])
+      .then(async ([token, sheetId]) => {
+        const metadata = await fetchSpreadsheetMetadata(token, sheetId);
+        const found = (metadata.sheets || []).find((s) => {
+          const t = (s.properties?.title || "").trim().toLowerCase();
+          return t === "quet_sp" || t === "quet sp" || t === "quét sp" || t === "quét_sp" || t === "quet_shop";
+        });
+        if (!found) {
+          sendResponse({ ok: true, savedIds: [], sheetTitle: "QUET_SP" });
+          return;
+        }
+        const targetSheetTitle = found.properties.title;
+        const { res, data } = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`${targetSheetTitle}!C2:C`)}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const savedIds = [];
+        if (res.ok && Array.isArray(data.values)) {
+          data.values.forEach(row => {
+            const id = String(row[0] || "").trim();
+            if (id && !savedIds.includes(id)) savedIds.push(id);
+          });
+        }
+        sendResponse({ ok: true, savedIds, sheetTitle: targetSheetTitle });
+      })
+      .catch(err => sendResponse({ ok: false, error: err.message, savedIds: [] }));
     return true;
   }
 
@@ -2607,6 +3378,81 @@ async function uploadImageToFreeImageHost(imageUrl) {
     return true;
   }
 
+  // =========================================================================
+  // MODULE: ORDER TOOL - Tự động dọn tab & kiểm soát tab
+  // =========================================================================
+  if (message?.type === "ORDER_TOOL_TRIGGER_CLEAN_NOW") {
+    executeAutoCleanTabs().then(res => {
+      sendResponse(res);
+    }).catch(err => {
+      sendResponse({ ok: false, error: err.message, closedCount: 0 });
+    });
+    return true;
+  }
+
+  if (message?.type === "ORDER_TOOL_TOGGLE_AUTO_CLEAN") {
+    (async () => {
+      try {
+        const enabled = !!message.enabled;
+        const res = await chrome.storage.local.get(["order_tool_auto_clean_config"]);
+        const cfg = Object.assign({}, res.order_tool_auto_clean_config || {}, { enabled });
+        await chrome.storage.local.set({ order_tool_auto_clean_config: cfg });
+
+        if (enabled) {
+          try { await chrome.alarms.clear("ALARM_AUTO_CLEAN_TABS"); } catch (e) {}
+          chrome.alarms.create("ALARM_AUTO_CLEAN_TABS", {
+            delayInMinutes: 30,
+            periodInMinutes: 30
+          });
+          const nextRunAt = Date.now() + 30 * 60 * 1000;
+          await chrome.storage.local.set({ order_tool_next_run_at: nextRunAt });
+          sendResponse({ ok: true, enabled: true, nextRunAt });
+        } else {
+          try { await chrome.alarms.clear("ALARM_AUTO_CLEAN_TABS"); } catch (e) {}
+          await chrome.storage.local.remove(["order_tool_next_run_at"]);
+          sendResponse({ ok: true, enabled: false });
+        }
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message?.type === "ORDER_TOOL_GET_STATUS") {
+    (async () => {
+      try {
+        const alarm = await chrome.alarms.get("ALARM_AUTO_CLEAN_TABS");
+        const store = await chrome.storage.local.get([
+          "order_tool_auto_clean_config",
+          "order_tool_last_clean",
+          "order_tool_next_run_at"
+        ]);
+        const cfg = Object.assign({
+          enabled: false,
+          keepOrder: true,
+          keepAllProduct: true,
+          keepWameli: true,
+          keepActiveTab: true,
+          keepTabIds: [],
+          keepTabUrls: []
+        }, store.order_tool_auto_clean_config || {});
+
+        sendResponse({
+          ok: true,
+          enabled: !!cfg.enabled,
+          alarm: !!alarm,
+          scheduledTime: alarm ? alarm.scheduledTime : store.order_tool_next_run_at,
+          lastClean: store.order_tool_last_clean || null,
+          config: cfg
+        });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
+    })();
+    return true;
+  }
+
   return false;
 });
 
@@ -2862,10 +3708,22 @@ async function addSheet(sheetName, token, spreadsheetId = GOOGLE_SHEET_CONFIG.sp
 
 async function ensureSheetExists(sheetName, token, spreadsheetId = GOOGLE_SHEET_CONFIG.spreadsheetId) {
   const metadata = await fetchSpreadsheetMetadata(token, spreadsheetId);
-  const targetSheet = (metadata.sheets || []).find((sheet) => sheet.properties?.title === sheetName);
+  const targetSheet = (metadata.sheets || []).find((sheet) => 
+    (sheet.properties?.title || "").trim().toLowerCase() === sheetName.trim().toLowerCase()
+  );
 
   if (!targetSheet) {
-    await addSheet(sheetName, token, spreadsheetId);
+    try {
+      await addSheet(sheetName, token, spreadsheetId);
+      return sheetName;
+    } catch (e) {
+      if (String(e.message || "").toLowerCase().includes("already exists")) {
+        const metaRetry = await fetchSpreadsheetMetadata(token, spreadsheetId);
+        const retrySheet = (metaRetry.sheets || []).find((s) => (s.properties?.title || "").trim().toLowerCase() === sheetName.trim().toLowerCase());
+        return retrySheet?.properties?.title || sheetName;
+      }
+      throw e;
+    }
   } else if ((targetSheet.properties?.gridProperties?.columnCount || 0) < 30) {
     await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
       method: "POST",
@@ -2890,6 +3748,7 @@ async function ensureSheetExists(sheetName, token, spreadsheetId = GOOGLE_SHEET_
       })
     }).catch(err => console.warn("Lỗi mở rộng cột Sheet:", err));
   }
+  return targetSheet.properties?.title || sheetName;
 }
 
 async function ensureThuChiSheetReady(token) {
@@ -3205,5 +4064,188 @@ chrome.alarms?.onAlarm?.addListener(async (alarm) => {
     if (!config.autoRepeat || !config.ids) return;
     await runAutoBoostJob(null, 5);
   }
+
+  if (alarm?.name === "ALARM_AUTO_CLEAN_TABS") {
+    const res = await chrome.storage.local.get(["order_tool_auto_clean_config"]);
+    const config = res.order_tool_auto_clean_config || {};
+    if (config.enabled) {
+      const cleanRes = await executeAutoCleanTabs();
+      chrome.runtime.sendMessage({
+        type: "ORDER_TOOL_AUTO_CLEAN_DONE",
+        result: cleanRes
+      }).catch(() => {});
+    }
+  }
 });
+
+// Khởi tạo lại lịch dọn dẹp tab nếu đang bật khi khởi động extension/trình duyệt
+chrome.storage?.local?.get(["order_tool_auto_clean_config"], (res) => {
+  const cfg = res?.order_tool_auto_clean_config;
+  if (cfg && cfg.enabled) {
+    chrome.alarms.get("ALARM_AUTO_CLEAN_TABS", (alarm) => {
+      if (!alarm) {
+        chrome.alarms.create("ALARM_AUTO_CLEAN_TABS", {
+          delayInMinutes: 30,
+          periodInMinutes: 30
+        });
+        chrome.storage.local.set({
+          order_tool_next_run_at: Date.now() + 30 * 60 * 1000
+        });
+      }
+    });
+  }
+});
+
+// =========================================================================
+// HÀM SO KHỚP URL TAB VỚI LINK ĐÃ LƯU
+// =========================================================================
+function isTabUrlMatchingSavedLink(tabUrl, savedUrl) {
+  if (!tabUrl || !savedUrl) return false;
+  const tUrl = String(tabUrl).trim();
+  const sUrl = String(savedUrl).trim();
+  if (tUrl === sUrl) return true;
+
+  try {
+    const uTab = new URL(tUrl);
+    const uSaved = new URL(sUrl);
+
+    // 1. Phải cùng hostname (bỏ www.)
+    const hTab = uTab.hostname.replace(/^www\./, "").toLowerCase();
+    const hSaved = uSaved.hostname.replace(/^www\./, "").toLowerCase();
+    if (hTab !== hSaved) return false;
+
+    // 2. Google Spreadsheets: so khớp ID bảng tính
+    if (hTab.includes("docs.google.com") && uTab.pathname.includes("/spreadsheets/d/")) {
+      const matchTab = uTab.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      const matchSaved = uSaved.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (matchTab && matchSaved && matchTab[1] === matchSaved[1]) {
+        return true;
+      }
+    }
+
+    // 3. Chuẩn hoá pathname (bỏ dấu / ở cuối)
+    const pTab = uTab.pathname.replace(/\/+$/, "").toLowerCase();
+    const pSaved = uSaved.pathname.replace(/\/+$/, "").toLowerCase();
+
+    // Trang quản trị Wameli: tab trong admin/ coi là khớp
+    if (hSaved.includes("wameli.vn") && (pSaved === "/admin" || pSaved.startsWith("/admin/"))) {
+      if (pTab === "/admin" || pTab.startsWith("/admin/")) return true;
+    }
+
+    // Nếu pathname khác nhau -> khác trang hoàn toàn (VD /portal/sale/order vs /portal/product/list)
+    if (pTab !== pSaved) {
+      return false;
+    }
+
+    // 4. Cùng pathname: kiểm tra tham số quan trọng nếu có (ví dụ type trong Shopee order)
+    const sType = uSaved.searchParams.get("type");
+    const tType = uTab.searchParams.get("type");
+    if (sType && tType && sType.toLowerCase() !== tType.toLowerCase()) {
+      return false;
+    }
+
+    return true;
+  } catch (e) {
+    return tUrl.toLowerCase() === sUrl.toLowerCase();
+  }
+}
+
+// =========================================================================
+// HÀM TỰ ĐỘNG DỌN DẸP TAB TRÌNH DUYỆT (CHỈ GIỮ LẠI CÁC TAB ĐƯỢC LƯU)
+// =========================================================================
+async function executeAutoCleanTabs() {
+  try {
+    const res = await chrome.storage.local.get(["order_tool_auto_clean_config", "order_tool_quick_links"]);
+    const cfg = Object.assign({
+      enabled: true,
+      keepOrder: true,
+      keepActiveTab: true,
+      keepTabIds: [],
+      keepTabUrls: []
+    }, res.order_tool_auto_clean_config || {});
+
+    let quickLinks = Array.isArray(res.order_tool_quick_links) ? res.order_tool_quick_links : [];
+    if (!quickLinks.length) {
+      const shopRes = await chrome.storage.local.get(["maGian", "dhHoanTextValue"]);
+      const shopCode = (shopRes.maGian || shopRes.dhHoanTextValue || "").trim();
+      if (shopCode) {
+        const subRes = await chrome.storage.local.get([`order_tool_quick_links_${shopCode}`]);
+        if (Array.isArray(subRes[`order_tool_quick_links_${shopCode}`])) {
+          quickLinks = subRes[`order_tool_quick_links_${shopCode}`];
+        }
+      }
+    }
+
+    const tabs = await chrome.tabs.query({});
+    if (!tabs || tabs.length === 0) {
+      return { ok: true, closedCount: 0, remainingCount: 0 };
+    }
+
+    const idsToClose = [];
+    for (const tab of tabs) {
+      const url = tab.url || tab.pendingUrl || "";
+
+      // 1. Không bao giờ đóng tab ghim hoặc trang hệ thống, tiện ích nội bộ
+      if (tab.pinned ||
+          url.startsWith("chrome://") ||
+          url.startsWith("chrome-extension://") ||
+          url.startsWith("edge://") ||
+          url.startsWith("about:") ||
+          url.startsWith("devtools://") ||
+          url.startsWith("view-source:")) {
+        continue;
+      }
+
+      // 2. Giữ tab đang xem nếu được cấu hình
+      if (cfg.keepActiveTab && tab.active) {
+        continue;
+      }
+
+      // 3. Giữ tab được người dùng đánh dấu thủ công qua ID hoặc URL
+      if (Array.isArray(cfg.keepTabIds) && cfg.keepTabIds.includes(tab.id)) {
+        continue;
+      }
+      if (Array.isArray(cfg.keepTabUrls) && cfg.keepTabUrls.some(u => isTabUrlMatchingSavedLink(url, u))) {
+        continue;
+      }
+
+      // 4. CHỈ GIỮ LẠI TAB NẾU KHỚP VỚI LINK ĐÃ LƯU (quickLinks đang BẬT)
+      if (cfg.keepOrder !== false && quickLinks.length > 0) {
+        const isQuickMatch = quickLinks.some(l => {
+          if (!l || !l.url || l.enabled === false) return false;
+          return isTabUrlMatchingSavedLink(url, l.url);
+        });
+        if (isQuickMatch) continue;
+      }
+
+      // Tab không nằm trong danh sách link đã lưu -> đóng (xóa hết những link không lưu)
+      idsToClose.push(tab.id);
+    }
+
+    if (idsToClose.length > 0) {
+      await chrome.tabs.remove(idsToClose).catch(err => {
+        console.warn("[executeAutoCleanTabs] Lỗi đóng tab:", err);
+      });
+    }
+
+    const lastClean = {
+      time: Date.now(),
+      closedCount: idsToClose.length,
+      remainingCount: tabs.length - idsToClose.length
+    };
+
+    const nextRunAt = Date.now() + 30 * 60 * 1000;
+    await chrome.storage.local.set({
+      order_tool_last_clean: lastClean,
+      order_tool_next_run_at: nextRunAt
+    });
+
+    console.log(`[executeAutoCleanTabs] Đã dọn ${idsToClose.length} tab, còn ${lastClean.remainingCount} tab.`);
+    return { ok: true, closedCount: lastClean.closedCount, remainingCount: lastClean.remainingCount };
+  } catch (err) {
+    console.error("[executeAutoCleanTabs] Lỗi:", err);
+    return { ok: false, error: err.message, closedCount: 0, remainingCount: 0 };
+  }
+}
+
 

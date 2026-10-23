@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Shopee Order Tool</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">📦 Shopee Order Tool</div>
+    <div class="conn">
+      <span id="connStatus" class="badge">Chưa kết nối</span>
+      <a class="btn small" href="wameli.html">🏬 Đơn Wameli</a>
+      <button id="btnConnect" class="btn small">Kết nối lại</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <div class="toolbar">
+        <label>Trạng thái
+          <select id="tabSelect">
+            <option value="100">Tất cả</option>
+            <option value="200">Chờ xác nhận / thanh toán</option>
+            <option value="300">Chờ lấy hàng</option>
+            <option value="400">Đang giao</option>
+            <option value="500">Đã giao</option>
+            <option value="600">Đơn huỷ</option>
+            <option value="700">Trả hàng / Hoàn tiền</option>
+            <option value="custom">Mã khác…</option>
+          </select>
+        </label>
+        <input id="tabCustom" type="number" class="hidden" placeholder="Mã tab" style="width:90px">
+        <label>Tối đa
+          <select id="maxOrders">
+            <option value="10" selected>10 đơn</option>
+            <option value="20">20 đơn</option>
+            <option value="50">50 đơn</option>
+            <option value="100">100 đơn</option>
+            <option value="500">500 đơn</option>
+            <option value="1000">1.000 đơn</option>
+            <option value="5000">5.000 đơn</option>
+            <option value="100000">Tất cả</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="autoIncome" checked> Lấy luôn doanh thu</label>
+        <button id="btnLoad" class="btn primary">Tải đơn hàng</button>
+        <button id="btnStop" class="btn danger hidden">Dừng</button>
+        <button id="btnClearSaved" class="btn small danger" title="Xoá tất cả đơn đã lưu trong bộ nhớ máy">🗑 Xoá đơn đã lưu (<span id="savedCount">0</span>)</button>
+        <span id="progress" class="muted"></span>
+      </div>
+      <div class="hint">Đơn đã tải được lưu tự động trên máy. Khi bấm <b>"Tải đơn hàng"</b>, hệ thống sẽ bỏ qua các đơn đã lưu và chỉ tải thêm các đơn mới chưa lưu (tối đa theo số đơn chọn).</div>
+    </div>
+
+    <div id="summary" class="stats hidden"></div>
+
+    <div class="card">
+      <div class="toolbar">
+        <input id="fSearch" placeholder="Tìm mã đơn, người mua, sản phẩm, SKU, mã vận đơn..." style="width:340px">
+        <label>Từ <input id="fFrom" type="date"></label>
+        <label>Đến <input id="fTo" type="date"></label>
+        <label>Sắp xếp
+          <select id="fSort">
+            <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất</option>
+            <option value="totalDesc">Tổng tiền cao nhất</option>
+            <option value="totalAsc">Tổng tiền thấp nhất</option>
+          </select>
+        </label>
+        <span class="muted">Khớp: <b id="matchCount">0</b> đơn</span>
+      </div>
+      <div class="toolbar">
+        <label><input type="checkbox" id="withBuyer" checked> Kèm thông tin người mua khi xuất</label>
+        <button id="btnDetailAll" class="btn small">🔍 Tải chi tiết &amp; doanh thu các đơn đang lọc</button>
+        <button id="btnCsv" class="btn small">⬇ Xuất Excel (CSV)</button>
+        <button id="btnJson" class="btn small">⬇ Xuất JSON đầy đủ</button>
+        <button id="btnTop" class="btn small">📊 Sản phẩm bán chạy</button>
+        <button id="btnArrange" class="btn small" disabled>🚚 Chuẩn bị hàng (<span id="pickCount2">0</span>)</button>
+        <button id="btnShip" class="btn small primary" disabled>📦 In phiếu + Wameli (<span id="pickCount">0</span>)</button>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="orderTable">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="pickAll" title="Chọn tất cả đơn đang lọc"></th>
+              <th class="sticky">Mã đơn</th>
+              <th>Ngày đặt</th>
+              <th>Người mua</th>
+              <th>Trạng thái</th>
+              <th>Sản phẩm</th>
+              <th>Phân loại</th>
+              <th>SKU sản phẩm</th>
+              <th>SKU phân loại</th>
+              <th>SL</th>
+              <th>Đơn giá</th>
+              <th>Tổng đơn</th>
+              <th class="income-h">Tổng tiền SP</th>
+              <th class="income-h">Phí VC người mua trả</th>
+              <th class="income-h">Phí VC ước tính</th>
+              <th class="income-h">Shopee trợ giá VC</th>
+              <th class="income-h">Phí cố định</th>
+              <th class="income-h">Phí dịch vụ</th>
+              <th class="income-h">Phí xử lý GD</th>
+              <th class="income-h">Thuế GTGT</th>
+              <th class="income-h">Thuế TNCN</th>
+              <th class="income-h">Doanh thu ước tính</th>
+              <th>Thanh toán</th>
+              <th>Vận chuyển</th>
+              <th>Mã vận đơn</th>
+              <th>Hạn giao</th>
+              <th>Ghi chú</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="pager" class="row" style="justify-content:center;margin-top:10px"></div>
+    </div>
+  </main>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <div class="card-head">
+        <h3 id="modalTitle"></h3>
+        <div class="row">
+          <button id="btnCopyJson" class="btn small">Copy JSON</button>
+          <button id="btnModalClose" class="btn small">✕ Đóng</button>
+        </div>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="vendor/pdf-lib.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

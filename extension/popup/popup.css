@@ -516,40 +516,55 @@ textarea {
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
 }
 
-/* Tab System */
+/* Tab System: các tab dạng nút bo tròn, chữ 1 dòng, tự xuống hàng để không tab nào bị khuất */
 .tab-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
   position: sticky;
   top: -12px;  /* bù cho padding 12px của .panel */
   z-index: 100;
   margin: -12px -12px 12px -12px;
-  background: #fff;
-  border-bottom: 2px solid #e6e9ef;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid #e6e9ef;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
 }
 
 .tab-btn {
-  flex: 1;
-  min-height: 40px;
-  background: transparent;
-  color: #667085;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  font-size: 13px;
-  transition: all 0.2s;
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 26px;
+  padding: 4px 8px;
+  background: #f2f4f7;
+  color: #475467;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .tab-btn:hover {
-  background: #f8fafc;
-  color: #2673dd;
+  background: #fff1ec;
+  color: #c2410c;
+  border-color: #fdd5c8;
+}
+
+.tab-btn:focus-visible {
+  outline: 2px solid #ee4d2d;
+  outline-offset: 2px;
 }
 
 .tab-btn.active,
 .tab-btn.active:hover {
-  color: #ee4d2d;
-  background: #feeeea;
-  border-bottom-color: #ee4d2d;
+  color: #fff;
+  background: linear-gradient(135deg, #ee4d2d, #f05d40);
+  border-color: #ee4d2d;
+  box-shadow: 0 2px 6px rgba(238, 77, 45, 0.35);
   font-weight: 700;
 }
 
@@ -1852,3 +1867,103 @@ textarea {
 #api-img-dropzone * {
   pointer-events: none;
 }
+
+/* =========================================================================
+   FLASH SALE TOOL TAB (EMBEDDED)
+   ========================================================================= */
+#tab-fs-tool .tool-section {
+  padding: 10px 10px 8px;
+}
+
+.fs-iframe-container {
+  width: 100%;
+  height: calc(100vh - 170px);
+  min-height: 620px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  resize: vertical;
+}
+
+.fs-iframe-container iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+/* =========================================================================
+   TABLE COLUMN CUSTOMIZER BUTTONS
+   ========================================================================= */
+.btn-col-customizer {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: #0284c7;
+  color: #ffffff;
+  border: 1px solid #0284c7;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.btn-col-customizer:hover {
+  background: #0369a1;
+  border-color: #0369a1;
+}
+.btn-col-customizer:active {
+  transform: scale(0.97);
+}
+.btn-th-config {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.btn-th-config:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+/* =========================================================================
+   COLUMN HEADER RESIZER (KÉO CHỈNH KÍCH THƯỚC TRỰC TIẾP TRÊN BẢNG)
+   ========================================================================= */
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 7px;
+  bottom: 0;
+  cursor: col-resize !important;
+  user-select: none;
+  z-index: 25;
+  touch-action: none;
+  transition: background 0.15s;
+}
+.col-resizer:hover,
+.col-resizer.is-resizing {
+  background: #0284c7 !important;
+  box-shadow: 0 0 4px rgba(2, 132, 199, 0.5);
+}
+#table-resize-guideline {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #0284c7;
+  box-shadow: 0 0 6px rgba(2, 132, 199, 0.7);
+  z-index: 9999999;
+  pointer-events: none;
+  display: none;
+}
+
