@@ -40,7 +40,8 @@ export default function RecordModal({
 
     const handleChange = (header, val, isPrice) => {
         if (isPrice) {
-            const num = parseMoney(val);
+            const clean = String(val ?? '').trim();
+            const num = clean === '' ? '' : parseMoney(clean);
             setFormData(prev => ({ ...prev, [header]: num }));
         } else {
             setFormData(prev => ({ ...prev, [header]: val }));
@@ -135,7 +136,7 @@ export default function RecordModal({
                         const label = displayHeaders[idx] || h;
                         const isPrice = priceCols.includes(idx);
                         const val = formData[h] ?? '';
-                        const displayVal = isPrice ? formatDisplayNumber(val) : val;
+                        const displayVal = (val === '' || val === null || val === undefined) ? '' : (isPrice ? formatDisplayNumber(val) : val);
 
                         return (
                             <div

@@ -12330,19 +12330,65 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
   // =========================================================================
   // ĐIỀN VÀO SHEET HH_SHOP_DIEN (WAMELI KHO-SHOP)
   // =========================================================================
-  function extractFullReturnOrderDetails(targetEl) {
-    let rowContainer = targetEl.closest ? targetEl.closest('.return-row-item, a.return-row-item, tr, [class*="return-row"]') : null;
-    if (!rowContainer) {
-      let current = targetEl;
-      rowContainer = targetEl;
-      while (current && current.parentElement && current.parentElement !== document.body) {
-        if (current.parentElement.querySelectorAll(".id.order-id, .order-id, .return-row-item").length > 1) {
-          break;
-        }
-        current = current.parentElement;
-        rowContainer = current;
+  function extractReturnDateFromText(text) {
+    if (!text) return "";
+    const clean = String(text).replace(/\s+/g, " ").trim();
+    // 1. Ngày đi kèm với "đã giao hàng" / "giao hàng" / "đã nhận" / "thành công"
+    const mPriority = clean.match(/(?:đã giao hàng|giao hàng|đã nhận|giao thành công|thành công)\s*(?:ngày|vào|lúc)?\s*(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/i);
+    if (mPriority) {
+      const d = String(mPriority[1]).padStart(2, "0");
+      const m = String(mPriority[2]).padStart(2, "0");
+      const y = mPriority[3];
+      return `${d}/${m}/${y}`;
+    }
+    // 2. "ngày DD-MM-YYYY" hoặc "ngày DD/MM/YYYY"
+    const mNgay = clean.match(/(?:ngày|vào|lúc)\s*(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/i);
+    if (mNgay) {
+      const d = String(mNgay[1]).padStart(2, "0");
+      const m = String(mNgay[2]).padStart(2, "0");
+      const y = mNgay[3];
+      return `${d}/${m}/${y}`;
+    }
+    // 3. DD-MM-YYYY hoặc DD/MM/YYYY
+    const m1 = clean.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/);
+    if (m1) {
+      const d = String(m1[1]).padStart(2, "0");
+      const m = String(m1[2]).padStart(2, "0");
+      const y = m1[3];
+      return `${d}/${m}/${y}`;
+    }
+    return "";
+  }
+
+  function findReturnCardContainer(targetEl) {
+    if (!targetEl) return null;
+    let current = targetEl;
+    let card = targetEl;
+    while (current && current !== document.body && current.parentElement) {
+      if (current.querySelector && (current.querySelector('.item-return-logistic') || current.querySelector('.tracking-number') || current.querySelector('.logistics-hint-text'))) {
+        card = current;
+        break;
+      }
+      if (current.parentElement.querySelectorAll('.id.order-id, .order-id').length > 1) {
+        card = current;
+        break;
+      }
+      current = current.parentElement;
+      card = current;
+    }
+
+    if (card && !card.querySelector('.item-return-logistic, .tracking-number, .logistics-hint-text')) {
+      const parentCard = targetEl.closest('.order-list-section .order-item, .return-list-wrapper > div, .eds-table__row, tr, [class*="order-item"]');
+      if (parentCard && parentCard.querySelector('.item-return-logistic, .tracking-number, .logistics-hint-text')) {
+        card = parentCard;
       }
     }
+
+    return card;
+  }
+
+  function extractFullReturnOrderDetails(targetEl) {
+    const rowContainer = findReturnCardContainer(targetEl) || targetEl;
 
     // 1. Order ID
     let orderId = "";
@@ -12371,37 +12417,90 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       }
     }
 
-    // 3. Return tracking (mvd_tra) & Ngày trả (ngayTra) từ cột Vận chuyển hàng hoàn (Image 1 & Image 2)
-    let returnTracking = "";
-    let ngayTra = "";
-    if (rowContainer) {
-      const logisticCol = rowContainer.querySelector(".item-return-logistic, [class*='return-logistic'], .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(8), .return-item-main-content > .eds-col:nth-child(8)") || rowContainer;
-      
-      const trackingEl = (logisticCol && logisticCol.querySelector(".tracking-number, [class*=\"tracking\"]")) ||
-                         rowContainer.querySelector(".item-return-logistic .tracking-number, .tracking-number, [class*=\"tracking\"]");
-      if (trackingEl) {
-        const clone = trackingEl.cloneNode(true);
-        clone.querySelectorAll("span, .hh-bh-info, [class*='info']").forEach(s => s.remove());
-        returnTracking = clone.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+    // Đảm bảo orderId không bị lấy nhầm thành returnId
+    if (orderId && returnId && orderId === returnId) {
+      const distinctOrderNode = rowContainer?.querySelector(".order-id .id-content");
+      if (distinctOrderNode) {
+        orderId = extractShopeeCode(distinctOrderNode.textContent);
       }
+    }
 
-      if (!returnTracking && logisticCol) {
-        const fullText = logisticCol.innerText || logisticCol.textContent || "";
-        const m = fullText.match(/\b(SPXVN[0-9A-Z]+|VN[0-9A-Z]+|[A-Z0-9]{12,20})\b/i);
-        if (m) {
-          returnTracking = m[1].trim();
+    // 3. Khối Vận chuyển hàng hoàn (Return logistic column)
+    const logisticCol = (rowContainer && rowContainer.querySelector(
+      '.item-return-logistic, [class*="return-logistic"], .scrollable-content-wrapper > .eds-row > .eds-col:nth-child(8), .return-item-main-content > .eds-col:nth-child(8)'
+    )) || null;
+
+    // A. Trích xuất mã vận đơn hàng hoàn (mvd_tra):
+    let returnTracking = "";
+
+    // Ưu tiên 1: .tracking-number trong logisticCol
+    if (logisticCol) {
+      const trkEl = logisticCol.querySelector('.tracking-number, [class*="tracking"]');
+      if (trkEl) {
+        const clone = trkEl.cloneNode(true);
+        clone.querySelectorAll("span, .hh-bh-info, [class*='info']").forEach(s => s.remove());
+        const raw = clone.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+        if (raw && raw.toUpperCase() !== (orderId || "").toUpperCase() && raw.toUpperCase() !== (returnId || "").toUpperCase()) {
+          const m = raw.match(/\b(SPXVN[0-9A-Z]+|VN[0-9A-Z]+|[A-Z]{2,4}[0-9]{8,15}[A-Z0-9]?|[0-9]{10,22})\b/i);
+          if (m && m[1].toUpperCase() !== (orderId || "").toUpperCase() && m[1].toUpperCase() !== (returnId || "").toUpperCase()) {
+            returnTracking = m[1].trim();
+          } else {
+            returnTracking = raw;
+          }
         }
       }
 
-      // Trích xuất ngày trả từ cột vận chuyển hàng hoàn (Image 2: ví dụ "Đã giao hàng ngày 19-10-2026")
-      const searchBox = (logisticCol !== rowContainer ? logisticCol : null) || rowContainer.querySelector(".item-return-logistic, [class*='return-logistic']") || rowContainer;
-      const logText = searchBox ? (searchBox.innerText || searchBox.textContent || "") : "";
-      const mDateMatch = logText.match(/(?:ngày|vào|lúc)?\s*(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2})\b/i);
-      if (mDateMatch) {
-        const d = String(mDateMatch[1]).padStart(2, '0');
-        const m = String(mDateMatch[2]).padStart(2, '0');
-        const y = mDateMatch[3];
-        ngayTra = `${d}/${m}/${y}`;
+      // Ưu tiên 2: Tìm mã trong toàn bộ text của logisticCol (loại trừ orderId và returnId)
+      if (!returnTracking) {
+        const fullText = logisticCol.innerText || logisticCol.textContent || "";
+        const allMatches = fullText.match(/\b(SPXVN[0-9A-Z]+|VN[0-9A-Z]+|[A-Z]{2,4}[0-9]{8,15}[A-Z0-9]?|[0-9]{10,22})\b/gi) || [];
+        const valid = allMatches.filter(code => code.toUpperCase() !== (orderId || "").toUpperCase() && code.toUpperCase() !== (returnId || "").toUpperCase());
+        if (valid.length > 0) {
+          returnTracking = valid[0].trim();
+        }
+      }
+    }
+
+    // Ưu tiên 3: Tìm .item-return-logistic .tracking-number từ rowContainer
+    if (!returnTracking && rowContainer) {
+      const trkEl = rowContainer.querySelector('.item-return-logistic .tracking-number, .tracking-number');
+      if (trkEl) {
+        const clone = trkEl.cloneNode(true);
+        clone.querySelectorAll("span, .hh-bh-info, [class*='info']").forEach(s => s.remove());
+        const raw = clone.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+        if (raw && raw.toUpperCase() !== (orderId || "").toUpperCase() && raw.toUpperCase() !== (returnId || "").toUpperCase()) {
+          const m = raw.match(/\b(SPXVN[0-9A-Z]+|VN[0-9A-Z]+|[A-Z]{2,4}[0-9]{8,15}[A-Z0-9]?|[0-9]{10,22})\b/i);
+          if (m && m[1].toUpperCase() !== (orderId || "").toUpperCase() && m[1].toUpperCase() !== (returnId || "").toUpperCase()) {
+            returnTracking = m[1].trim();
+          } else {
+            returnTracking = raw;
+          }
+        }
+      }
+    }
+
+    // Ưu tiên 4: Dùng extractReturnRowData
+    if (!returnTracking) {
+      const rData = extractReturnRowData(targetEl);
+      if (rData && rData.tracking && rData.tracking.toUpperCase() !== (orderId || "").toUpperCase() && rData.tracking.toUpperCase() !== (returnId || "").toUpperCase()) {
+        returnTracking = rData.tracking;
+      }
+    }
+
+    // B. Trích xuất Ngày trả (ngayTra):
+    let ngayTra = "";
+    const candidateTexts = [
+      logisticCol ? logisticCol.querySelector('.logistics-hint-text')?.textContent : "",
+      rowContainer ? rowContainer.querySelector('.item-return-logistic .logistics-hint-text, .logistics-hint-text')?.textContent : "",
+      logisticCol ? (logisticCol.innerText || logisticCol.textContent) : "",
+      rowContainer ? rowContainer.querySelector('.item-return-logistic')?.innerText : ""
+    ].filter(Boolean);
+
+    for (const t of candidateTexts) {
+      const parsed = extractReturnDateFromText(t);
+      if (parsed) {
+        ngayTra = parsed;
+        break;
       }
     }
 
@@ -12412,17 +12511,17 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       if (fwdEl) {
         const clone = fwdEl.cloneNode(true);
         clone.querySelectorAll("span, .hh-bh-info").forEach(s => s.remove());
-        forwardTracking = clone.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+        const raw = clone.textContent.replace(/#\s*/, "").replace(/copy|sao\s*ch[eé]p/gi, "").trim();
+        if (raw && raw.toUpperCase() !== (orderId || "").toUpperCase()) forwardTracking = raw;
       }
     }
     if (!forwardTracking && orderId && typeof cachedUdCtMdhIds !== "undefined") {
       const udVal = cachedUdCtMdhIds.get(orderId) || (orderId && cachedUdCtMdhIds.get(orderId.toUpperCase()));
       if (udVal) {
         const m = udVal.match(/(SPXVN[0-9A-Z]+|VN[0-9A-Z]+|[0-9]{10,18})/i);
-        if (m) forwardTracking = m[1];
+        if (m && m[1].toUpperCase() !== (orderId || "").toUpperCase()) forwardTracking = m[1];
       }
     }
-    // Fallback: Nếu không có mã vận đơn chiều đi riêng, dùng mã vận đơn trả hàng
     if (!forwardTracking) {
       forwardTracking = returnTracking;
     }
@@ -12527,7 +12626,7 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
     const ss = pad(now.getSeconds());
 
     const ngay_tao = `${hh}:${min}:${ss} ${dd}/${mm}/${yyyy}`;
-    // Ưu tiên ngày trả trích xuất từ cột Vận chuyển hàng hoàn (Image 2), nếu không có fallback về ngày hiện tại
+    // Ưu tiên ngày trả trích xuất từ cột Vận chuyển hàng hoàn (Image 2: ví dụ 19/10/2026), fallback ngày hiện tại
     const ngay_tra = details.ngayTra || `${dd}/${mm}/${yyyy}`;
     const cleanGian = String(maGian || "").trim().toUpperCase() || "BCE";
 
@@ -12536,6 +12635,12 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
 
     const orderId = String(details.orderId || "").trim();
     const udItems = (orderId && (cachedUdCtItemsByMdh.get(orderId) || cachedUdCtItemsByMdh.get(orderId.toUpperCase()))) || [];
+
+    // Đảm bảo mvd_tra không bao giờ là mã đơn hàng!
+    let mvdTra = details.returnTracking || "";
+    if (mvdTra.toUpperCase() === orderId.toUpperCase() || mvdTra.toUpperCase() === (details.returnId || "").toUpperCase()) {
+      mvdTra = "";
+    }
 
     // Nếu tìm thấy đơn hàng trong sheet UD_CT:
     // Đọc tất cả sku cùng mdh, ten_sp ăn theo các sku, mvd_tra là mã trong ảnh, sku_tra và slg tương tự như sku
@@ -12546,7 +12651,13 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
         const skuTra = item.sku || "";
         const tenSp = item.ten_sp || "";
         const sl = String(item.so_luong || 1);
-        const mvdChieuDi = item.mvd || details.forwardTracking || "";
+        
+        let mvdChieuDi = item.mvd || details.forwardTracking || "";
+        if (mvdChieuDi.toUpperCase() === orderId.toUpperCase()) {
+          mvdChieuDi = "";
+        }
+        // Nếu mvdTra rỗng nhưng UD_CT có mvd, fallback sang item.mvd
+        const finalMvdTra = mvdTra || item.mvd || "";
         const itemGian = item.ma_gian ? item.ma_gian.toUpperCase() : cleanGian;
 
         // Trích xuất link ảnh từ sản phẩm cào trên web nếu có
@@ -12567,7 +12678,7 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
           itemGian,                                 // Col F (5): ma_gian
           skuVal,                                   // Col G (6): sku
           tenSp,                                    // Col H (7): ten_sp
-          details.returnTracking || "",             // Col I (8): mvd_tra
+          finalMvdTra,                              // Col I (8): mvd_tra
           skuTra,                                   // Col J (9): sku_tra
           sl,                                       // Col K (10): sl
           details.hoanTra || "Trả",                 // Col L (11): hoan_tra
@@ -12586,17 +12697,22 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
         const tenSp = p.pName || "";
         const sl = String(p.qty || 1);
         const anh = p.imgUrl || "";
+        let mvdChieuDi = details.forwardTracking || "";
+        if (mvdChieuDi.toUpperCase() === orderId.toUpperCase()) {
+          mvdChieuDi = "";
+        }
+        const finalMvdTra = mvdTra || "";
 
         rows.push([
           rowId,                                    // Col A (0): id
           ngay_tao,                                 // Col B (1): ngay_tao
           ngay_tra,                                 // Col C (2): ngay_tra
-          details.forwardTracking || "",            // Col D (3): mvd
+          mvdChieuDi,                               // Col D (3): mvd
           orderId,                                  // Col E (4): mdh
           cleanGian,                                // Col F (5): ma_gian
           skuVal,                                   // Col G (6): sku
           tenSp,                                    // Col H (7): ten_sp
-          details.returnTracking || "",             // Col I (8): mvd_tra
+          finalMvdTra,                              // Col I (8): mvd_tra
           skuTra,                                   // Col J (9): sku_tra
           sl,                                       // Col K (10): sl
           details.hoanTra || "Trả",                 // Col L (11): hoan_tra

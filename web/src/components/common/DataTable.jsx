@@ -774,7 +774,7 @@ export default function DataTable({
 
                                                 if (header === 'gia_đăng') {
                                                     const numGiaDang = parseMoney(cell);
-                                                    const val = formatDisplayNumber(cell);
+                                                    const val = (cell === '' || cell === null || cell === undefined) ? '' : formatDisplayNumber(cell);
                                                     const roundedVal = numGiaDang > 0 ? Math.round(numGiaDang / 0.8) : 0;
                                                     return (
                                                         <td key={header} style={{ padding: '4px 6px', ...colStyle }} onClick={(e) => e.stopPropagation()}>
@@ -791,7 +791,7 @@ export default function DataTable({
                                                                             onSaveInline && onSaveInline(rowIndex);
                                                                         }
                                                                     }}
-                                                                    style={{ width: '82px', textAlign: 'right', padding: '3px 6px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '12px', fontWeight: 700 }}
+                                                                    style={{ width: '95px', textAlign: 'right', padding: '3px 6px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '12px', fontWeight: 700 }}
                                                                 />
                                                                 <button
                                                                     type="button"
@@ -852,7 +852,9 @@ export default function DataTable({
                                                 const editableCols = ['lai_mong_muon', 'phi_ads_%', 'phi_aff_%', '11%_phi_co_dinh', '6%_phi_giao_dich', '5.5% xtra', '1,5%_thue'];
                                                 if (editableCols.includes(header)) {
                                                     const isCurrency = (header === 'lai_mong_muon');
-                                                    const val = isCurrency ? formatDisplayNumber(cell) : (cellStr.includes('%') ? cellStr : cellStr + (cellStr ? '%' : ''));
+                                                    const val = (cell === '' || cell === null || cell === undefined)
+                                                        ? ''
+                                                        : (isCurrency ? formatDisplayNumber(cell) : (cellStr.includes('%') ? cellStr : cellStr + (cellStr ? '%' : '')));
                                                     return (
                                                         <td key={header} style={{ padding: '4px 6px', ...colStyle }}>
                                                             <input

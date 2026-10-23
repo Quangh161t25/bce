@@ -21,13 +21,45 @@ export function parseMoney(value) {
     if (!raw) return 0;
     const normalized = raw.replace(/\s/g, '').replace(/[^\d,.-]/g, '');
     if (!normalized) return 0;
+
+    // Trường hợp có cả dấu chấm và phẩy (vd: 1.234.567,89 hoặc 1,234,567.89)
     if (normalized.includes(',') && normalized.includes('.')) {
-        return Number(normalized.lastIndexOf(',') > normalized.lastIndexOf('.')
-            ? normalized.replace(/\./g, '').replace(',', '.')
-            : normalized.replace(/,/g, '')) || 0;
+        const lastComma = normalized.lastIndexOf(',');
+        const lastDot = normalized.lastIndexOf('.');
+        if (lastComma > lastDot) {
+            // Chuẩn VN (1.000,5): chấm là phân cách nghìn, phẩy là thập phân
+            const clean = normalized.replace(/\./g, '').replace(',', '.');
+            return Math.round(Number(clean)) || 0;
+        } else {
+            // Chuẩn US (1,000.5): phẩy là phân cách nghìn, chấm là thập phân
+            const clean = normalized.replace(/,/g, '');
+            return Math.round(Number(clean)) || 0;
+        }
     }
-    if (/^-?\d{1,3}([.,]\d{3})+$/.test(normalized)) return Number(normalized.replace(/[.,]/g, '')) || 0;
-    return Number(normalized.replace(',', '.')) || 0;
+
+    // Nếu có nhiều hơn 1 dấu chấm hoặc dấu phẩy (vd: 1.000.000 hoặc 1,000,000) -> chắc chắn là phân cách phần nghìn
+    const dotCount = (normalized.match(/\./g) || []).length;
+    const commaCount = (normalized.match(/,/g) || []).length;
+    if (dotCount > 1 || commaCount > 1) {
+        return Math.round(Number(normalized.replace(/[.,]/g, ''))) || 0;
+    }
+
+    // Nếu chỉ có 1 dấu chấm hoặc 1 dấu phẩy:
+    // Đối với tiền tệ VNĐ (không có số lẻ), các dạng như 3.000, 30.000, 300.000, hoặc khi người dùng đang gõ
+    // thêm số 0 vào input đã format (vd: 3.000 gõ thêm 0 thành 3.0000, 30.0000...) đều là hàng nghìn trở lên!
+    const matchSingleSep = normalized.match(/^(-?\d+)[.,](\d+)$/);
+    if (matchSingleSep) {
+        const intPart = matchSingleSep[1];
+        const fracPart = matchSingleSep[2];
+        // Chỉ coi là số thập phân nếu phần nguyên trước dấu chấm >= 4 số và phần thập phân 1-2 số (vd: 12000.5 từ Excel)
+        if (intPart.length >= 4 && (fracPart.length === 1 || fracPart.length === 2)) {
+            return Math.round(Number(`${intPart}.${fracPart}`)) || 0;
+        }
+        // Còn lại (3.000, 3.0000, 30.000, 449.504...) đều là phân cách nghìn!
+        return Math.round(Number(`${intPart}${fracPart}`)) || 0;
+    }
+
+    return Math.round(Number(normalized)) || 0;
 }
 
 export function formatDisplayNumber(value, showZero = true) {
