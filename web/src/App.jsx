@@ -455,7 +455,8 @@ export default function App() {
     // -------------------------------------------------------------------------
     // Filtering Logic
     // -------------------------------------------------------------------------
-    const filteredRows = useMemo(() => {
+    // Dữ liệu đã lọc theo tìm kiếm, trường, gian hàng, bỏ SP_BO, v.v. (chưa áp dụng prefix filter)
+    const baseFilteredRows = useMemo(() => {
         const source = (currentTab === 'DH') ? dhMasterRows : allData;
         const term = searchTerm.toLowerCase().trim();
         const terms = term.split(',').map(s => s.trim()).filter(Boolean);
@@ -466,9 +467,15 @@ export default function App() {
                 const match = (currentTab === 'DH')
                     ? allData.some(item =>
                         String(item[3] || '').trim() === String(row[3] || '').trim() &&
-                        item.some(cell => String(cell || '').toLowerCase().includes(term))
+                        item.some(cell => {
+                            const cStr = String(cell || '').toLowerCase();
+                            return terms.some(t => cStr.includes(t));
+                        })
                     )
-                    : row.some(cell => String(cell || '').toLowerCase().includes(term));
+                    : row.some(cell => {
+                        const cStr = String(cell || '').toLowerCase();
+                        return terms.some(t => cStr.includes(t));
+                    });
                 if (!match) return false;
             }
 
@@ -496,18 +503,6 @@ export default function App() {
                 if (currentTab === 'TINH_GIA' && !String(row[0] || '').trim() && !String(row[1] || '').trim()) {
                     return false;
                 }
-
-                // 1-char and 2-char prefix filters
-                const code = String(row[1] || '').toUpperCase();
-                if (prefix1Filter && !code.startsWith(prefix1Filter)) return false;
-                if (prefix2Filter && !code.startsWith(prefix2Filter)) return false;
-            }
-
-            // WEB_SP Prefix filter
-            if (currentTab === 'WEB_SP') {
-                const skuCode = String(row[2] || '').trim().toUpperCase();
-                if (prefix1Filter && !skuCode.startsWith(prefix1Filter)) return false;
-                if (prefix2Filter && !skuCode.startsWith(prefix2Filter)) return false;
             }
 
             // DH Specific Filters
@@ -566,8 +561,6 @@ export default function App() {
         truongFilter,
         storeFilter,
         spBoSet,
-        prefix1Filter,
-        prefix2Filter,
         selectedDhGianSet,
         selectedDhTinhTrangSet,
         selectedDhTrangThaiSet,
@@ -575,6 +568,64 @@ export default function App() {
         dateFrom,
         dateTo
     ]);
+
+    // Dữ liệu cuối cùng sau khi áp dụng thêm bộ lọc tiền tố prefix1 / prefix2
+    const filteredRows = useMemo(() => {
+        if (!prefix1Filter && !prefix2Filter) {
+            return baseFilteredRows;
+        }
+
+        return baseFilteredRows.filter((row) => {
+            // DS_SP & TINH_GIA prefix filter
+            if (currentTab === 'DS_SP' || currentTab === 'TINH_GIA') {
+                const code = String(row[1] || '').trim().toUpperCase();
+                if (prefix1Filter && !code.startsWith(prefix1Filter)) return false;
+                if (prefix2Filter && !code.startsWith(prefix2Filter)) return false;
+            }
+
+            // WEB_SP Prefix filter
+            if (currentTab === 'WEB_SP') {
+                const skuCode = String(row[2] || '').trim().toUpperCase();
+                if (prefix1Filter && !skuCode.startsWith(prefix1Filter)) return false;
+                if (prefix2Filter && !skuCode.startsWith(prefix2Filter)) return false;
+            }
+
+            return true;
+        });
+    }, [baseFilteredRows, prefix1Filter, prefix2Filter, currentTab]);
+
+    // Reset pagination về trang 1 khi thay đổi bất kỳ bộ lọc nào
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, truongFilter, storeFilter, prefix1Filter, prefix2Filter, currentTab]);
+
+    // Tự động xoá tiền tố đã chọn nếu từ khoá tìm kiếm / bộ lọc không còn sản phẩm nào khớp
+    useEffect(() => {
+        if (!prefix1Filter) return;
+        const exists = baseFilteredRows.some(row => {
+            const code = currentTab === 'WEB_SP'
+                ? String(row[2] || '').trim().toUpperCase()
+                : String(row[1] || '').trim().toUpperCase();
+            return code.startsWith(prefix1Filter);
+        });
+        if (!exists) {
+            setPrefix1Filter('');
+            setPrefix2Filter('');
+        }
+    }, [baseFilteredRows, prefix1Filter, currentTab]);
+
+    useEffect(() => {
+        if (!prefix2Filter) return;
+        const exists = baseFilteredRows.some(row => {
+            const code = currentTab === 'WEB_SP'
+                ? String(row[2] || '').trim().toUpperCase()
+                : String(row[1] || '').trim().toUpperCase();
+            return code.startsWith(prefix2Filter);
+        });
+        if (!exists) {
+            setPrefix2Filter('');
+        }
+    }, [baseFilteredRows, prefix2Filter, currentTab]);
 
     // -------------------------------------------------------------------------
     // Sorting Logic
@@ -1625,7 +1676,7 @@ export default function App() {
                     {/* Tab DS_SP / TINH_GIA / WEB_SP: Prefix Filters Bar */}
                     {(currentTab === 'DS_SP' || currentTab === 'TINH_GIA' || currentTab === 'WEB_SP') && (
                         <DsSpPrefixFilters
-                            rows={allData}
+                            rows={baseFilteredRows}
                             currentTab={currentTab}
                             prefix1Filter={prefix1Filter}
                             onPrefix1Change={setPrefix1Filter}

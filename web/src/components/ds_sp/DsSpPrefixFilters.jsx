@@ -12,6 +12,10 @@ export default function DsSpPrefixFilters({
         return null;
     }
 
+    if (!rows || rows.length === 0) {
+        return null;
+    }
+
     const getCode = (r) => {
         if (currentTab === 'WEB_SP') return String(r[2] || '').trim().toUpperCase();
         return String(r[1] || '').trim().toUpperCase();
