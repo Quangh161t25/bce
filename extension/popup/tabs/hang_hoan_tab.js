@@ -7,6 +7,40 @@
     let activeReturnFilter = 'ALL'; // 'ALL', 'YES', 'NO'
     let allHangHoanData = [];
 
+    // Helper chuẩn hoá chuỗi mã (MVD, Mã đơn, Mã yêu cầu) để so sánh chính xác
+    function normalizeCode(str) {
+        if (!str) return '';
+        return String(str).replace(/[\s\-_]/g, '').trim().toUpperCase();
+    }
+
+    // Tạo Map tra cứu từ danh sách Đơn Shopee (để Đơn Kho Nhận đối chiếu)
+    function getShopeeLookupMap() {
+        const map = new Map();
+        if (!Array.isArray(allHangHoanData)) return map;
+        for (const item of allHangHoanData) {
+            const tr = normalizeCode(item.trackingNum);
+            const ord = normalizeCode(item.orderId);
+            const ret = normalizeCode(item.returnId);
+            if (tr) map.set(tr, item);
+            if (ord) map.set(ord, item);
+            if (ret) map.set(ret, item);
+        }
+        return map;
+    }
+
+    // Tạo Map tra cứu từ danh sách Đơn Kho Nhận (để Đơn Shopee đối chiếu)
+    function getKhoNhanLookupMap() {
+        const map = new Map();
+        if (!Array.isArray(allKhoNhanRows)) return map;
+        for (const row of allKhoNhanRows) {
+            const mvd = normalizeCode(row.mvd);
+            const mvd2 = normalizeCode(row.mvd_2);
+            if (mvd) map.set(mvd, row);
+            if (mvd2) map.set(mvd2, row);
+        }
+        return map;
+    }
+
     function ensureContentScriptInjected(tabId, callback) {
         chrome.tabs.sendMessage(tabId, { type: "PING" }, (res) => {
             if (chrome.runtime.lastError || !res || !res.ok) {
@@ -31,12 +65,25 @@
         if (!tbody) return;
         
         let filtered = allHangHoanData;
+        const khoMap = getKhoNhanLookupMap();
 
-        // 1. Filter by hhBhInfo (Thẻ thông tin)
+        // 1. Filter by hhBhInfo (Thẻ thông tin kho nhận)
         if (activeInfoFilter === 'NO') {
-            filtered = filtered.filter(item => !item.hhBhInfo || item.hhBhInfo === 'Chưa có');
+            filtered = filtered.filter(item => {
+                const cTr = normalizeCode(item.trackingNum);
+                const cOrd = normalizeCode(item.orderId);
+                const cRet = normalizeCode(item.returnId);
+                const hasKho = (cTr && khoMap.has(cTr)) || (cOrd && khoMap.has(cOrd)) || (cRet && khoMap.has(cRet));
+                return !hasKho && (!item.hhBhInfo || item.hhBhInfo === 'Chưa có');
+            });
         } else if (activeInfoFilter === 'YES') {
-            filtered = filtered.filter(item => item.hhBhInfo && item.hhBhInfo !== 'Chưa có');
+            filtered = filtered.filter(item => {
+                const cTr = normalizeCode(item.trackingNum);
+                const cOrd = normalizeCode(item.orderId);
+                const cRet = normalizeCode(item.returnId);
+                const hasKho = (cTr && khoMap.has(cTr)) || (cOrd && khoMap.has(cOrd)) || (cRet && khoMap.has(cRet));
+                return hasKho || (item.hhBhInfo && item.hhBhInfo !== 'Chưa có');
+            });
         }
 
         // 2. Filter by returnId (Mã YC trả hàng)
@@ -55,13 +102,22 @@
         filtered.forEach(item => {
             const tr = document.createElement('tr');
             
-            // hhBhStyle formatting
+            // Đối chiếu trực tiếp với danh sách Đơn Kho Nhận (sheet HH_BH)
+            const cTr = normalizeCode(item.trackingNum);
+            const cOrd = normalizeCode(item.orderId);
+            const cRet = normalizeCode(item.returnId);
+            const khoMatch = (cTr && khoMap.get(cTr)) || (cOrd && khoMap.get(cOrd)) || (cRet && khoMap.get(cRet)) || null;
+
             let hhBhStyle = "";
             let hhBhContent = item.hhBhInfo || 'Chưa có';
-            if (hhBhContent !== 'Chưa có') {
+            if (khoMatch) {
+                hhBhContent = `✓ Kho nhận: ${khoMatch.ngay_nhan || '-'} | ${khoMatch.kho || '-'} | ${khoMatch.tinh_trang || '-'}`;
+                hhBhStyle = "background-color: #e2f0d9; color: #155724; font-weight: bold; border: 1px solid #c3e6cb; padding: 2px 6px; border-radius: 4px; display: inline-block; font-size: 10px; word-break: break-word;";
+            } else if (hhBhContent !== 'Chưa có') {
                 hhBhStyle = "background-color: #e2f0d9; color: #155724; font-weight: bold; border: 1px solid #c3e6cb; padding: 2px 6px; border-radius: 4px; display: inline-block; font-size: 10px; word-break: break-word;";
             } else {
-                hhBhStyle = "color: #7f8c8d; font-style: italic;";
+                hhBhStyle = "background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 2px 6px; border-radius: 4px; display: inline-block; font-size: 10px; font-weight: 700;";
+                hhBhContent = '✗ Chưa có trong kho';
             }
 
             // Render product images and names
@@ -183,7 +239,9 @@
 
                         if (res && res.ok && res.data) {
                             allHangHoanData = res.data;
+                            chrome.storage.local.set({ cachedHangHoanShopeeData: allHangHoanData });
                             renderHangHoanTable();
+                            renderKhoNhanTable();
                         } else {
                             tbody.innerHTML = `<tr><td colspan="9" style="padding: 10px; text-align: center; color: red;">Lỗi đọc dữ liệu: ${res && res.error ? res.error : 'Không phản hồi'}</td></tr>`;
                         }
@@ -277,7 +335,9 @@
 
                 if (res && res.ok && res.data) {
                     allHangHoanData = res.data;
+                    chrome.storage.local.set({ cachedHangHoanShopeeData: allHangHoanData });
                     renderHangHoanTable();
+                    renderKhoNhanTable();
                     if (res.data.length === 0) {
                         tbody.innerHTML = `<tr><td colspan="9" style="padding: 14px; text-align: center; color: #64748b;">
                             Đã chuyển sang [<b>${tabName}</b>] (Sắp xếp: Ngày yêu cầu Mới - Cũ) · Hiện không có đơn nào.
@@ -515,6 +575,7 @@
 
     let allKhoNhanRows = [];
     let isSortKhoDesc = true; // Sắp xếp theo ngày lớn tới bé (mặc định)
+    let activeKhoShopeeFilter = 'ALL'; // 'ALL', 'YES', 'NO'
 
     function switchSubTab(mode) {
         if (mode === 'kho-nhan') {
@@ -604,7 +665,7 @@
     // Đọc dữ liệu từ Google Sheet HH_BH
     async function fetchDonKhoNhan() {
         if (!khoTbody) return;
-        khoTbody.innerHTML = `<tr><td colspan="9" style="padding: 16px; text-align: center; color: #059669; font-weight: bold;">
+        khoTbody.innerHTML = `<tr><td colspan="10" style="padding: 16px; text-align: center; color: #059669; font-weight: bold;">
             ⏳ Đang tải tất cả đơn từ Google Sheet HH_BH (ID: ${SPREADSHEET_ID_KHO})...
         </td></tr>`;
         if (khoStatusText) khoStatusText.textContent = "Đang kết nối Google Sheets...";
@@ -650,7 +711,7 @@
                 rawValues = data.values || [];
             } catch (directErr) {
                 console.error("[fetchDonKhoNhan] Direct fetch error:", directErr);
-                khoTbody.innerHTML = `<tr><td colspan="9" style="padding: 14px; text-align: center; color: red;">
+                khoTbody.innerHTML = `<tr><td colspan="10" style="padding: 14px; text-align: center; color: red;">
                     Lỗi đọc sheet HH_BH: ${directErr.message || String(directErr)}<br>
                     <button id="btn-retry-fetch-kho" type="button" style="margin-top: 8px; padding: 4px 10px; background: #059669; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🔄 Thử lại</button>
                 </td></tr>`;
@@ -660,7 +721,7 @@
         }
 
         if (rawValues.length <= 1) {
-            khoTbody.innerHTML = `<tr><td colspan="9" style="padding: 14px; text-align: center; color: #64748b;">
+            khoTbody.innerHTML = `<tr><td colspan="10" style="padding: 14px; text-align: center; color: #64748b;">
                 Sheet HH_BH chưa có dữ liệu nào.
             </td></tr>`;
             allKhoNhanRows = [];
@@ -693,60 +754,73 @@
         const colTinhTrang = findCol(['tinh_trang', 'tình trạng', 'trạng thái', 'status'], 14);
         const colKho = findCol(['kho', 'kho nhận', 'ten kho'], 20);
 
-            const parsedRows = [];
-            const uniqueGianSet = new Set();
+        const parsedRows = [];
+        const uniqueGianSet = new Set();
 
-            for (let i = 1; i < rawValues.length; i++) {
-                const r = rawValues[i];
-                if (!r || r.length === 0 || r.every(c => !String(c || "").trim())) continue;
+        for (let i = 1; i < rawValues.length; i++) {
+            const r = rawValues[i];
+            if (!r || r.length === 0 || r.every(c => !String(c || "").trim())) continue;
 
-                const ngay_nhan = String(r[colNgay] || "").trim();
-                const ma_gian = String(r[colGian] || "").trim();
-                const mvd = String(r[colMvd] || "").trim();
-                const mvd_2 = String(r[colMvd2] || "").trim();
-                const sku_ct = String(r[colSku] || "").trim();
-                const slg = String(r[colSlg] || "").trim();
-                const tinh_trang = String(r[colTinhTrang] || "").trim();
-                const kho = String(r[colKho] || "").trim();
+            const ngay_nhan = String(r[colNgay] || "").trim();
+            const ma_gian = String(r[colGian] || "").trim();
+            const mvd = String(r[colMvd] || "").trim();
+            const mvd_2 = String(r[colMvd2] || "").trim();
+            const sku_ct = String(r[colSku] || "").trim();
+            const slg = String(r[colSlg] || "").trim();
+            const tinh_trang = String(r[colTinhTrang] || "").trim();
+            const kho = String(r[colKho] || "").trim();
 
-                if (ma_gian) uniqueGianSet.add(ma_gian);
+            if (ma_gian) uniqueGianSet.add(ma_gian);
 
-                parsedRows.push({
-                    originalIndex: i,
-                    ngay_nhan,
-                    dateTimestamp: parseDateToTimestamp(ngay_nhan),
-                    ma_gian,
-                    mvd,
-                    mvd_2,
-                    sku_ct,
-                    slg,
-                    tinh_trang,
-                    kho
-                });
-            }
+            parsedRows.push({
+                originalIndex: i,
+                ngay_nhan,
+                dateTimestamp: parseDateToTimestamp(ngay_nhan),
+                ma_gian,
+                mvd,
+                mvd_2,
+                sku_ct,
+                slg,
+                tinh_trang,
+                kho
+            });
+        }
 
-            allKhoNhanRows = parsedRows;
+        allKhoNhanRows = parsedRows;
+        chrome.storage.local.set({ cachedKhoNhanRows: allKhoNhanRows });
 
-            // Cập nhật danh sách gợi ý gian
-            if (khoGianDatalist) {
-                khoGianDatalist.innerHTML = "";
-                Array.from(uniqueGianSet).sort().forEach(g => {
-                    const opt = document.createElement('option');
-                    opt.value = g;
-                    khoGianDatalist.appendChild(opt);
-                });
-            }
+        // Cập nhật danh sách gợi ý gian
+        if (khoGianDatalist) {
+            khoGianDatalist.innerHTML = "";
+            Array.from(uniqueGianSet).sort().forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                khoGianDatalist.appendChild(opt);
+            });
+        }
 
-            if (khoStatusText) {
-                khoStatusText.textContent = `Đã tải ${allKhoNhanRows.length} đơn từ sheet HH_BH`;
-            }
+        if (khoStatusText) {
+            khoStatusText.textContent = `Đã tải ${allKhoNhanRows.length} đơn từ sheet HH_BH`;
+        }
 
-            renderKhoNhanTable();
+        renderKhoNhanTable();
+        renderHangHoanTable(); // Cập nhật luôn thông tin đối chiếu cho tab Đơn Shopee
     }
 
-    // Hiển thị bảng đơn kho nhận (Lọc mã gian + Tìm kiếm + Sắp xếp ngày lớn tới bé)
+    // Hiển thị bảng đơn kho nhận (Lọc mã gian + Tìm kiếm + Lọc Shopee + Sắp xếp ngày lớn tới bé)
     function renderKhoNhanTable() {
         if (!khoTbody) return;
+
+        const shopeeMap = getShopeeLookupMap();
+
+        // 0. Gắn thông tin đối chiếu Shopee cho toàn bộ danh sách đơn kho
+        allKhoNhanRows.forEach(item => {
+            const c1 = normalizeCode(item.mvd);
+            const c2 = normalizeCode(item.mvd_2);
+            const match = (c1 && shopeeMap.get(c1)) || (c2 && shopeeMap.get(c2)) || null;
+            item.shopeeMatch = match;
+            item.hasShopee = !!match;
+        });
 
         let filtered = [...allKhoNhanRows];
 
@@ -759,7 +833,14 @@
             });
         }
 
-        // 2. Tìm kiếm theo từ khóa
+        // 2. Lọc theo đối chiếu Shopee (Có / Chưa / Tất cả)
+        if (activeKhoShopeeFilter === 'YES') {
+            filtered = filtered.filter(item => item.hasShopee);
+        } else if (activeKhoShopeeFilter === 'NO') {
+            filtered = filtered.filter(item => !item.hasShopee);
+        }
+
+        // 3. Tìm kiếm theo từ khóa
         const kw = (khoSearchInput ? khoSearchInput.value : "").trim().toLowerCase();
         if (kw) {
             filtered = filtered.filter(item => {
@@ -769,11 +850,16 @@
                        item.tinh_trang.toLowerCase().includes(kw) ||
                        item.kho.toLowerCase().includes(kw) ||
                        item.ma_gian.toLowerCase().includes(kw) ||
-                       item.ngay_nhan.toLowerCase().includes(kw);
+                       item.ngay_nhan.toLowerCase().includes(kw) ||
+                       (item.shopeeMatch && (
+                           String(item.shopeeMatch.orderId || '').toLowerCase().includes(kw) ||
+                           String(item.shopeeMatch.statusText || '').toLowerCase().includes(kw) ||
+                           String(item.shopeeMatch.solutionText || '').toLowerCase().includes(kw)
+                       ));
             });
         }
 
-        // 3. Sắp xếp theo ngày lớn tới bé (Mới nhất -> Cũ nhất)
+        // 4. Sắp xếp theo ngày lớn tới bé (Mới nhất -> Cũ nhất)
         filtered.sort((a, b) => {
             if (isSortKhoDesc) {
                 return (b.dateTimestamp - a.dateTimestamp) || (b.originalIndex - a.originalIndex);
@@ -782,14 +868,18 @@
             }
         });
 
-        // 4. Cập nhật nhãn số lượng
+        // 5. Cập nhật nhãn số lượng và thống kê khớp Shopee
+        const currentScope = (targetGian && targetGian !== "all") ? allKhoNhanRows.filter(r => r.ma_gian.toLowerCase() === targetGian || r.ma_gian.toLowerCase().includes(targetGian)) : allKhoNhanRows;
+        const matchedCount = currentScope.filter(r => r.hasShopee).length;
+        const notMatchedCount = currentScope.length - matchedCount;
+
         if (khoCountBadge) {
-            khoCountBadge.textContent = `${filtered.length} / ${allKhoNhanRows.length} đơn`;
+            khoCountBadge.innerHTML = `${filtered.length} / ${currentScope.length} đơn · <span style="color: #047857; font-weight: 700;" title="Số đơn khớp mã với tab Shopee">✓ Khớp Shopee: ${matchedCount}</span> · <span style="color: #dc2626; font-weight: 700;" title="Số đơn kho chưa tìm thấy trên Shopee">✗ Chưa có: ${notMatchedCount}</span>`;
         }
 
         if (filtered.length === 0) {
-            khoTbody.innerHTML = `<tr><td colspan="9" style="padding: 14px; text-align: center; color: #64748b;">
-                Không tìm thấy đơn nào phù hợp với bộ lọc (Mã gian: <b>${targetGian ? targetGian.toUpperCase() : 'Tất cả'}</b>).
+            khoTbody.innerHTML = `<tr><td colspan="10" style="padding: 14px; text-align: center; color: #64748b;">
+                Không tìm thấy đơn nào phù hợp với bộ lọc (Mã gian: <b>${targetGian ? targetGian.toUpperCase() : 'Tất cả'}</b> · Shopee: <b>${activeKhoShopeeFilter === 'YES' ? 'Đã có' : (activeKhoShopeeFilter === 'NO' ? 'Chưa có' : 'Tất cả')}</b>).
             </td></tr>`;
             return;
         }
@@ -812,16 +902,42 @@
                 tinhTrangBadge = `<span style="background: #fef3c7; color: #b45309; font-weight: 600; padding: 2px 6px; border-radius: 4px; font-size: 10px;">${item.tinh_trang}</span>`;
             }
 
+            // Đối chiếu Shopee badge & định dạng MVD
+            let shopeeCell = "";
+            let mvdDisplay = "";
+            if (item.hasShopee && item.shopeeMatch) {
+                const m = item.shopeeMatch;
+                const statusShort = m.statusText ? m.statusText.split('-')[0].trim() : '';
+                shopeeCell = `
+                    <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 3px 6px; border-radius: 4px; font-size: 10px; line-height: 1.3;" title="Khớp đơn Shopee: ${m.orderId || ''}\nTrạng thái: ${m.statusText || ''}\nPhương án: ${m.solutionText || ''}">
+                        <div style="color: #047857; font-weight: 800; display: flex; align-items: center; gap: 3px;">
+                            <span>✓ Có trên Shopee</span>
+                        </div>
+                        ${statusShort ? `<div style="color: #065f46; font-size: 9.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 125px;">${statusShort}</div>` : ''}
+                        ${m.orderId ? `<div style="font-size: 9px; font-family: monospace;"><a href="https://banhang.shopee.vn/portal/sale/order/${m.orderId}" target="_blank" style="color: #2563eb; text-decoration: none;" title="Bấm để mở đơn trên Shopee">Đơn: ${m.orderId} ↗</a></div>` : ''}
+                    </div>
+                `;
+                mvdDisplay = `<span style="color: #047857; font-weight: 800; background: #ecfdf5; padding: 1px 4px; border-radius: 3px; border: 1px solid #a7f3d0;"><span style="background: #22c55e; color: white; border-radius: 2px; padding: 0 3px; font-size: 9px; margin-right: 3px;">✓</span>${item.mvd || "-"}</span>`;
+            } else {
+                shopeeCell = `
+                    <span style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; display: inline-block;" title="Chưa tìm thấy mã vận đơn này trên tab Đơn Shopee">
+                        ✗ Chưa có
+                    </span>
+                `;
+                mvdDisplay = `<span style="color: #334155; font-weight: 700;">${item.mvd || "-"}</span>`;
+            }
+
             tr.innerHTML = `
                 <td style="padding: 6px; text-align: center; color: #64748b; font-weight: 500;">${idx + 1}</td>
                 <td style="padding: 6px; font-weight: 600; color: #0f172a; white-space: nowrap;">${item.ngay_nhan || "-"}</td>
                 <td style="padding: 6px; white-space: nowrap;">
                     <span style="background: #f3e8ff; color: #7e22ce; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 10.5px;">${item.ma_gian || "-"}</span>
                 </td>
-                <td style="padding: 6px; font-family: monospace; font-weight: 700; color: #047857; white-space: nowrap; cursor: pointer;" title="Bấm để sao chép MVD">
-                    ${item.mvd || "-"}
+                <td style="padding: 6px; font-family: monospace; white-space: nowrap; cursor: pointer;" title="Bấm để sao chép MVD">
+                    ${mvdDisplay}
                 </td>
                 <td style="padding: 6px; font-family: monospace; color: #64748b; font-size: 10.5px;">${item.mvd_2 || "-"}</td>
+                <td style="padding: 6px; vertical-align: top;">${shopeeCell}</td>
                 <td style="padding: 6px; font-weight: 600; color: #1e293b;">${item.sku_ct || "-"}</td>
                 <td style="padding: 6px; text-align: center; font-weight: 700; color: #2563eb;">${item.slg || "1"}</td>
                 <td style="padding: 6px;">${tinhTrangBadge}</td>
@@ -835,9 +951,9 @@
             if (mvdTd && item.mvd) {
                 mvdTd.addEventListener('click', () => {
                     navigator.clipboard.writeText(item.mvd).then(() => {
-                        const original = mvdTd.textContent;
-                        mvdTd.textContent = "✓ Đã copy!";
-                        setTimeout(() => mvdTd.textContent = original, 1200);
+                        const originalHtml = mvdTd.innerHTML;
+                        mvdTd.innerHTML = `<span style="color: #059669; font-weight: 800;">✓ Đã copy!</span>`;
+                        setTimeout(() => mvdTd.innerHTML = originalHtml, 1200);
                     });
                 });
             }
@@ -866,6 +982,113 @@
             btnKhoSortToggle.textContent = isSortKhoDesc ? "📅 Ngày: Lớn → Bé ▼" : "📅 Ngày: Bé → Lớn ▲";
         }
         renderKhoNhanTable();
+    });
+
+    // Nhóm nút lọc đối chiếu Shopee (Tất cả / Có / Chưa)
+    const khoShopeeBtns = document.querySelectorAll('.filter-kho-shopee-btn');
+    khoShopeeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            khoShopeeBtns.forEach(b => {
+                b.classList.remove('active');
+                b.style.background = 'white';
+                b.style.color = '#334155';
+                b.style.borderColor = '#cbd5e1';
+            });
+            btn.classList.add('active');
+            const v = btn.getAttribute('data-val');
+            activeKhoShopeeFilter = v;
+            if (v === 'YES') {
+                btn.style.background = '#059669';
+                btn.style.color = 'white';
+                btn.style.borderColor = '#047857';
+            } else if (v === 'NO') {
+                btn.style.background = '#dc2626';
+                btn.style.color = 'white';
+                btn.style.borderColor = '#b91c1c';
+            } else {
+                btn.style.background = '#6366f1';
+                btn.style.color = 'white';
+                btn.style.borderColor = '#4f46e5';
+            }
+            renderKhoNhanTable();
+        });
+    });
+
+    // Nút đối chiếu nhanh với tab Shopee bên cạnh
+    const btnSyncShopeeForKho = document.getElementById('btn-sync-shopee-for-kho');
+    btnSyncShopeeForKho?.addEventListener('click', () => {
+        const origText = btnSyncShopeeForKho.innerHTML;
+        btnSyncShopeeForKho.innerHTML = `<span>⏳ Đang quét...</span>`;
+        btnSyncShopeeForKho.disabled = true;
+
+        chrome.tabs.query({}, (tabs) => {
+            // Tìm tab Shopee trả hàng hoặc Kênh người bán đang mở
+            let targetTabObj = tabs.find(t => t.active && t.url && (t.url.includes("banhang.shopee.vn/portal/sale/return") || t.url.includes("banhang.shopee.vn/portal/sale/order")));
+            if (!targetTabObj) {
+                targetTabObj = tabs.find(t => t.url && t.url.includes("banhang.shopee.vn/portal/sale/return"));
+            }
+            if (!targetTabObj) {
+                targetTabObj = tabs.find(t => t.active && t.url && t.url.includes("banhang.shopee.vn"));
+            }
+            if (!targetTabObj) {
+                targetTabObj = tabs.find(t => t.url && t.url.includes("banhang.shopee.vn"));
+            }
+
+            if (!targetTabObj) {
+                alert("Không tìm thấy tab Kênh người bán Shopee nào đang mở trên trình duyệt. Bạn hãy mở tab Trả hàng/Hoàn tiền Shopee ở cửa sổ bên cạnh!");
+                btnSyncShopeeForKho.innerHTML = origText;
+                btnSyncShopeeForKho.disabled = false;
+                return;
+            }
+
+            ensureContentScriptInjected(targetTabObj.id, (injected) => {
+                if (!injected) {
+                    alert("Không thể kết nối tab Shopee. Vui lòng tải lại (F5) tab Shopee.");
+                    btnSyncShopeeForKho.innerHTML = origText;
+                    btnSyncShopeeForKho.disabled = false;
+                    return;
+                }
+
+                chrome.tabs.sendMessage(targetTabObj.id, { type: "READ_HANG_HOAN_LIST" }, (res) => {
+                    btnSyncShopeeForKho.innerHTML = origText;
+                    btnSyncShopeeForKho.disabled = false;
+
+                    if (res && res.ok && Array.isArray(res.data) && res.data.length > 0) {
+                        allHangHoanData = res.data;
+                        chrome.storage.local.set({ cachedHangHoanShopeeData: allHangHoanData });
+                        renderHangHoanTable();
+                        renderKhoNhanTable();
+
+                        const matched = allKhoNhanRows.filter(r => r.hasShopee).length;
+                        alert(`✅ Đã đối chiếu xong với tab Shopee!\n- Đọc được: ${res.data.length} đơn hoàn từ Shopee.\n- Số MVD kho khớp với Shopee: ${matched} / ${allKhoNhanRows.length} đơn.`);
+                    } else {
+                        alert("Không tìm thấy đơn hàng hoàn nào trên tab Shopee đang mở. Bạn hãy chắc chắn tab Shopee đang ở trang danh sách 'Trả hàng/Hoàn tiền'.");
+                    }
+                });
+            });
+        });
+    });
+
+    // Khôi phục dữ liệu đã lưu từ bộ nhớ tạm local storage khi mở lại extension
+    chrome.storage.local.get(['cachedHangHoanShopeeData', 'cachedKhoNhanRows'], (st) => {
+        let hasShopeeCache = false;
+        let hasKhoCache = false;
+
+        if (st.cachedHangHoanShopeeData && Array.isArray(st.cachedHangHoanShopeeData) && st.cachedHangHoanShopeeData.length > 0) {
+            allHangHoanData = st.cachedHangHoanShopeeData;
+            hasShopeeCache = true;
+        }
+
+        if (st.cachedKhoNhanRows && Array.isArray(st.cachedKhoNhanRows) && st.cachedKhoNhanRows.length > 0) {
+            allKhoNhanRows = st.cachedKhoNhanRows;
+            hasKhoCache = true;
+        }
+
+        if (hasShopeeCache) renderHangHoanTable();
+        if (hasKhoCache) {
+            if (khoStatusText) khoStatusText.textContent = `Đã tải ${allKhoNhanRows.length} đơn từ bộ nhớ tạm`;
+            renderKhoNhanTable();
+        }
     });
 
 })();

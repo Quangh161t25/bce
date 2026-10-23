@@ -37,6 +37,7 @@
 <button class="tab-btn" data-tab="tab-sheet-sp-shopee">SP Shopee</button>
 <button class="tab-btn" data-tab="tab-nhieu-don-hang">Nhiều đơn hàng</button>
 <button class="tab-btn" data-tab="tab-autoin">AutoIn</button>
+<button class="tab-btn" data-tab="tab-autochat">Auto Chat</button>
 <button class="tab-btn" data-tab="tab-flash-sale" style="display: none;">Flash Sale</button>
 </div>
 
@@ -956,6 +957,23 @@ Vui lòng mở trang Kênh Người Bán và mở Popup thêm sản phẩm Flash
     </p>
     <div class="fs-iframe-container">
       <iframe id="autoin-iframe" title="AutoIn"></iframe>
+    </div>
+  </section>
+</div>
+
+<div id="tab-autochat" class="tab-content" hidden>
+  <section class="tool-section" style="border-left: 4px solid #ee4d2d; padding: 10px 10px 8px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;">
+      <h2 style="color: #ee4d2d; font-size: 13px; margin: 0;">Auto Chat</h2>
+      <button id="btn-autochat-reload" type="button" class="ghost" style="padding: 4px 8px; font-size: 11px; width: auto; min-height: 28px; line-height: 1;" title="Tải lại giao diện Auto Chat">
+        🔄 Tải lại
+      </button>
+    </div>
+    <p style="font-size: 11px; color: #475569; margin: 0 0 6px; line-height: 1.4;">
+      Chạy ngầm qua API Shopee: khách là người nhắn cuối thì tự gửi câu chào / câu nhắn tiếp, và lập danh sách khách chờ để bạn trả lời. Không cần mở tab Webchat, vẫn chạy khi đóng side panel.
+    </p>
+    <div class="fs-iframe-container">
+      <iframe id="autochat-iframe" title="Auto Chat"></iframe>
     </div>
   </section>
 </div>
@@ -2195,6 +2213,19 @@ Vui lòng mở trang Kênh Người Bán và mở Popup thêm sản phẩm Flash
       <button id="btn-kho-nhan-sort-toggle" type="button" style="padding: 4px 8px; font-size: 10.5px; font-weight: 600; border: 1px solid #cbd5e1; border-radius: 4px; background: white; cursor: pointer; color: #1e293b;" title="Bấm để đổi sắp xếp">
         📅 Ngày: Lớn → Bé ▼
       </button>
+
+      <!-- Nhóm lọc đối chiếu Shopee -->
+      <div id="filter-kho-shopee-btn-group" style="display: flex; gap: 3px; align-items: center; background: #fff; padding: 2px 6px; border: 1px solid #cbd5e1; border-radius: 4px;">
+        <span style="font-size: 10.5px; font-weight: 700; color: #334155;">Shopee:</span>
+        <button type="button" class="filter-kho-shopee-btn active" data-val="ALL" style="padding: 2px 7px; font-size: 10px; font-weight: 700; border: 1px solid #6366f1; border-radius: 3px; cursor: pointer; background: #6366f1; color: white;">Tất cả</button>
+        <button type="button" class="filter-kho-shopee-btn" data-val="YES" style="padding: 2px 7px; font-size: 10px; font-weight: 700; border: 1px solid #cbd5e1; border-radius: 3px; cursor: pointer; background: white; color: #15803d;" title="Chỉ hiện đơn CÓ trên tab Đơn Shopee">✓ Có</button>
+        <button type="button" class="filter-kho-shopee-btn" data-val="NO" style="padding: 2px 7px; font-size: 10px; font-weight: 700; border: 1px solid #cbd5e1; border-radius: 3px; cursor: pointer; background: white; color: #dc2626;" title="Chỉ hiện đơn CHƯA CÓ trên tab Đơn Shopee">✗ Chưa</button>
+      </div>
+
+      <!-- Nút đọc nhanh tab Shopee bên cạnh để đối chiếu -->
+      <button id="btn-sync-shopee-for-kho" type="button" style="margin: 0; padding: 4px 8px; font-size: 10.5px; font-weight: 700; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" title="Quét đơn từ tab Shopee bên cạnh để so sánh đối chiếu MVD ngay lập tức">
+        <span>⚡ Đối chiếu tab Shopee</span>
+      </button>
     </div>
 
     <!-- Dòng trạng thái -->
@@ -2210,19 +2241,20 @@ Vui lòng mở trang Kênh Người Bán và mở Popup thêm sản phẩm Flash
       <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
         <tr>
           <th style="padding: 8px 6px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 40px; text-align: center;">STT</th>
-          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 100px;">Ngày nhận</th>
-          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 80px;">Mã gian</th>
-          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 140px;">Mã vận đơn (MVD)</th>
+          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 95px;">Ngày nhận</th>
+          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 75px;">Mã gian</th>
+          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 145px;">Mã vận đơn (MVD)</th>
           <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 130px;">MVD 2</th>
-          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 160px;">SKU chi tiết</th>
-          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 60px; text-align: center;">Số lượng</th>
-          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 130px;">Tình trạng</th>
-          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 80px;">Kho</th>
+          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #1e40af; font-weight: 700; width: 135px;">📦 Tab Shopee</th>
+          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 150px;">SKU chi tiết</th>
+          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 55px; text-align: center;">Số lượng</th>
+          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 120px;">Tình trạng</th>
+          <th style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #475569; font-weight: 600; width: 75px;">Kho</th>
         </tr>
       </thead>
       <tbody id="kho-nhan-tbody">
         <tr>
-          <td colspan="9" style="padding: 14px; text-align: center; color: #64748b;">
+          <td colspan="10" style="padding: 14px; text-align: center; color: #64748b;">
             Bấm <b>"🔄 Đọc đơn kho"</b> để tải dữ liệu từ sheet HH_BH
           </td>
         </tr>
@@ -2600,6 +2632,7 @@ Kết quả trả về sẽ tự động định dạng bằng HTML cơ bản (&
 <script src="tabs/order_tool_tab.js"></script>
 <script src="tabs/in_nang_cao_tab.js"></script>
 <script src="tabs/autoin_tab.js"></script>
+<script src="tabs/autochat_tab.js"></script>
 <script src="tabs/wameli_account_settings.js"></script>
 <script src="tabs/quet_shop_tab.js"></script>
 </body>
