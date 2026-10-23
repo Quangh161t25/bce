@@ -249,7 +249,22 @@ function renderProduct() {
     }
   } else {
     $('#pImage').src = imgUrl(current.images[0]);
-    $('#pName').textContent = current.name;
+    if (!current.originalName) current.originalName = current.name || '';
+    if (!current.originalDescription) current.originalDescription = current.description || '';
+
+    const titleInp = $('#productTitleInput');
+    if (titleInp && document.activeElement !== titleInp) {
+      titleInp.value = current.name || '';
+    }
+    const descInp = $('#productDescInput');
+    if (descInp && document.activeElement !== descInp) {
+      descInp.value = current.description || '';
+    }
+    const titleCount = $('#titleCharCount');
+    if (titleCount) titleCount.textContent = `${(current.name || '').length}/120`;
+    const descCount = $('#descCharCount');
+    if (descCount) descCount.textContent = `${(current.description || '').length} ký tự`;
+
     const variants = current.tiers.length ? `${current.models.length} phân loại` : 'Không phân loại';
     const warn = current.categories.length ? '' : ' · ⚠ thiếu ngành hàng';
     $('#pMeta').textContent = `ID ${current.itemId} · ${current.images.length} ảnh · ${variants}${warn}`;
@@ -862,6 +877,41 @@ async function init() {
   } catch (err) {
     console.warn('Lỗi khởi tạo mã gian:', err);
   }
+
+  // Ô sửa Tiêu đề sản phẩm
+  const titleInp = $('#productTitleInput');
+  if (titleInp) {
+    titleInp.addEventListener('input', () => {
+      if (current) current.name = titleInp.value;
+      const countEl = $('#titleCharCount');
+      if (countEl) countEl.textContent = `${titleInp.value.length}/120`;
+    });
+  }
+
+  // Ô sửa Mô tả sản phẩm
+  const descInp = $('#productDescInput');
+  if (descInp) {
+    descInp.addEventListener('input', () => {
+      if (current) current.description = descInp.value;
+      const countEl = $('#descCharCount');
+      if (countEl) countEl.textContent = `${descInp.value.length} ký tự`;
+    });
+  }
+
+  // Nút khôi phục tiêu đề & mô tả gốc
+  $('#btnResetTitleDesc')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (!current) return;
+    current.name = current.originalName || current.name;
+    current.description = current.originalDescription || current.description;
+    if (titleInp) titleInp.value = current.name || '';
+    if (descInp) descInp.value = current.description || '';
+    const titleCount = $('#titleCharCount');
+    if (titleCount) titleCount.textContent = `${(current.name || '').length}/120`;
+    const descCount = $('#descCharCount');
+    if (descCount) descCount.textContent = `${(current.description || '').length} ký tự`;
+    log('Đã khôi phục tiêu đề & mô tả gốc của sản phẩm.', 'ok');
+  });
 
   $('#btnClone')?.addEventListener('click', handleCloneClick);
   $('#btnDlAll')?.addEventListener('click', downloadAllMedia);

@@ -17,12 +17,34 @@
       Mở một trang sản phẩm trên <b>shopee.vn</b> (nếu đã mở thì bấm F5) để lấy dữ liệu.
     </div>
     <div id="productBox" hidden>
-      <div class="product">
+      <div class="product" style="align-items: flex-start;">
         <img id="pImage" alt="" />
-        <div>
-          <div id="pName" class="pname"></div>
-          <div id="pMeta" class="hint"></div>
+        <div style="flex: 1; min-width: 0;">
+          <div id="pMeta" class="hint small" style="margin-bottom: 6px;"></div>
+          
+          <!-- Ô Tiêu đề sản phẩm -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+            <label for="productTitleInput" style="font-weight: 700; color: #1e293b; margin: 0; font-size: 11.5px;">
+              📝 Tiêu đề sản phẩm:
+            </label>
+            <span id="titleCharCount" class="hint small">0/120</span>
+          </div>
+          <textarea id="productTitleInput" rows="2" style="width: 100%; font-weight: 600; font-size: 12px; border-color: #3b82f6; padding: 5px 8px; border-radius: 4px; box-sizing: border-box; line-height: 1.35;" placeholder="Nhập tiêu đề sản phẩm..." maxlength="255"></textarea>
         </div>
+      </div>
+
+      <!-- Ô Mô tả sản phẩm -->
+      <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <label for="productDescInput" style="font-weight: 700; color: #1e293b; margin: 0; font-size: 11.5px;">
+            📄 Mô tả sản phẩm:
+          </label>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span id="descCharCount" class="hint small">0 ký tự</span>
+            <a href="#" id="btnResetTitleDesc" class="small" style="color: #2563eb; text-decoration: underline;" title="Khôi phục tiêu đề và mô tả gốc của sản phẩm">↺ Khôi phục gốc</a>
+          </div>
+        </div>
+        <textarea id="productDescInput" rows="6" style="width: 100%; font-size: 11.5px; line-height: 1.45; border-radius: 4px; padding: 6px 8px; box-sizing: border-box;" placeholder="Nhập mô tả sản phẩm..."></textarea>
       </div>
     </div>
   </section>

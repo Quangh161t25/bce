@@ -114,7 +114,9 @@ export function normalizeSource(record) {
     itemId: String(item.item_id || item.itemid || record.itemId || ''),
     shopId: String(item.shop_id || item.shopid || record.shopId || ''),
     name: item.title || item.name || '',
+    originalName: item.title || item.name || '',
     description,
+    originalDescription: description,
     descParagraphs: paragraphs,
     images,
     tiers,
@@ -190,6 +192,16 @@ export function buildRichDescription(src, opts) {
     fields.push({ type: 0, value: `${v}\n` });
   };
   if (String(opts.descPrefix || '').trim()) addText(opts.descPrefix.trim());
+  // Neu nguoi dung da sua mo ta thi uu tien dung noi dung sua
+  if (src.originalDescription && src.description !== src.originalDescription) {
+    addText(src.description);
+    for (const p of src.descParagraphs || []) {
+      if (p.imgId && images < MAX_DESC_IMAGES) {
+        fields.push({ type: 1, value: p.imgId });
+        images++;
+      }
+    }
+  } else {
   for (const p of src.descParagraphs || []) {
     if (p.imgId) {
       if (images < MAX_DESC_IMAGES) {
@@ -201,6 +213,7 @@ export function buildRichDescription(src, opts) {
     } else {
       fields.push({ type: 0, value: '\n' });
     }
+  }
   }
   if (String(opts.descSuffix || '').trim()) addText(opts.descSuffix.trim());
   if (!images) return null;
