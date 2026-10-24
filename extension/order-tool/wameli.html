@@ -39,9 +39,29 @@
         </span>
         <button id="wLoad" class="btn primary">Lấy dữ liệu</button>
         <button id="wStop" class="btn danger hidden">Dừng</button>
+        <button id="wQuickSync" class="btn hidden" style="background:#16a34a; color:#fff; font-weight:600; display:inline-flex; align-items:center; gap:5px;" title="Lấy dữ liệu từ Wameli và tự động lưu tất cả sản phẩm mới vào Sheet DS_SP">⚡ Tải & Lưu ngay vào DS_SP</button>
       </div>
-      <div class="toolbar">
+      <div class="toolbar" style="align-items:center; gap:12px; flex-wrap:wrap;">
         <label>Hoặc nhập file Excel đã xuất từ Wameli <input id="wFile" type="file" accept=".xlsx"></label>
+      </div>
+      <div id="wAutoSyncBar" class="toolbar hidden" style="margin-top:8px; padding:6px 12px; background:#f0fdf4; border-radius:6px; border:1px solid #bbf7d0; align-items:center; gap:14px; flex-wrap:wrap;">
+        <label style="display:inline-flex; align-items:center; gap:6px; font-weight:700; cursor:pointer; color:#15803d; font-size:12.5px;" title="Khi bật: Mỗi lần bấm 'Lấy dữ liệu', 'Tải & Lưu ngay' hoặc nạp file Excel, hệ thống sẽ tự động đối chiếu và ghi ngay sản phẩm mới vào Sheet DS_SP mà không cần bấm thêm nút hay confirm.">
+          <input type="checkbox" id="wAutoSyncSheet" checked> ⚡ Tự động lưu SP mới vào Sheet DS_SP sau khi lấy
+        </label>
+        <label style="display:inline-flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; color:#334155; font-size:12px;" title="Khi mở tab Sản phẩm WML, tự động kết nối lấy dữ liệu và đồng bộ vào Sheet DS_SP">
+          <input type="checkbox" id="wAutoLoadOnOpen"> 🔄 Tự động lấy khi mở tab
+        </label>
+        <label style="display:inline-flex; align-items:center; gap:6px; font-weight:500; cursor:pointer; color:#1d4ed8; font-size:12px;" title="Tự động chạy định kỳ để lấy sản phẩm từ Wameli và cập nhật vào Sheet DS_SP">
+          <input type="checkbox" id="wAutoPeriodic"> ⏰ Tự động chạy định kỳ:
+          <select id="wAutoInterval" style="padding:2px 6px; font-size:11.5px; border-radius:4px; border:1px solid #93c5fd; background:#fff;">
+            <option value="30">Mỗi 30 phút</option>
+            <option value="60" selected>Mỗi 1 giờ</option>
+            <option value="120">Mỗi 2 giờ</option>
+            <option value="240">Mỗi 4 giờ</option>
+            <option value="360">Mỗi 6 giờ</option>
+          </select>
+        </label>
+        <span id="wLastSyncInfo" class="hint small" style="margin-left:auto; color:#166534; font-weight:500;"></span>
       </div>
       <div id="wStatus" class="hint">Cần đăng nhập Wameli trước. Extension lấy dữ liệu tuần tự và nghỉ giữa các lần để tránh bị Wameli chặn.</div>
     </div>

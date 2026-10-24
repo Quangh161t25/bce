@@ -96,17 +96,37 @@ function productColumns() {
   };
 }
 
-async function saveToSheet() {
-  if (!state.rows.length) return toast('Chưa có sản phẩm. Bấm "Lấy dữ liệu" trước.', 'error');
+function updateLastSyncInfo(newCount) {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('vi-VN');
+  const countStr = newCount > 0 ? `+${newCount} SP mới` : 'không có SP mới';
+  const text = `Đã đồng bộ lúc ${timeStr} (${countStr})`;
+  const el = $('#wLastSyncInfo');
+  if (el) el.textContent = text;
+  chrome.storage.local.set({ wml_last_sync_info: text }).catch(() => {});
+}
+
+async function saveToSheet(silent = false) {
+  if (!state.rows.length) {
+    if (!silent) toast('Chưa có sản phẩm. Bấm "Lấy dữ liệu" trước.', 'error');
+    return { ok: false, count: 0 };
+  }
   const col = productColumns();
   const LABELS = { ma: 'Mã', ten: 'Tên', giaNhap: 'Giá nhập', giaBan: 'Giá bán lẻ', giaDongGoi: 'Giá bán đóng gói', giaThapNhat: 'Giá bán thấp nhất' };
   const missing = Object.keys(LABELS).filter((k) => col[k] < 0).map((k) => LABELS[k]);
-  if (missing.length) return toast('Không thấy cột: ' + missing.join(', '), 'error');
+  if (missing.length) {
+    const err = 'Không thấy cột: ' + missing.join(', ');
+    if (!silent) toast(err, 'error');
+    return { ok: false, error: err };
+  }
 
   const btn = $('#wToSheet');
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
+  const qBtn = $('#wQuickSync');
+  if (qBtn) qBtn.disabled = true;
+
   try {
-    status('Đang đọc sheet DS_SP...');
+    status('Đang đọc sheet DS_SP để đối chiếu sản phẩm mới...');
     const res = await chrome.runtime.sendMessage({ type: 'FETCH_DS_SP' });
     if (!res || !res.ok) throw new Error((res && res.error) || 'Không đọc được sheet DS_SP');
     const values = res.values || [];
@@ -137,23 +157,34 @@ async function saveToSheet() {
     }
 
     if (!newRows.length) {
-      status('Tất cả sản phẩm đã có trong sheet DS_SP.');
-      return toast('Không có sản phẩm mới (tất cả đã có trong DS_SP)', 'info');
+      status('Tất cả sản phẩm đã có trong sheet DS_SP (không có SP mới cần thêm).');
+      if (!silent) toast('Không có sản phẩm mới (tất cả đã có trong DS_SP)', 'info');
+      updateLastSyncInfo(0);
+      return { ok: true, count: 0 };
     }
-    if (!confirm(`Thêm ${newRows.length} sản phẩm mới vào sheet DS_SP?\n(${state.rows.length - newRows.length} sản phẩm đã có sẵn sẽ bỏ qua)`)) {
-      status('Đã huỷ lưu vào sheet.');
-      return;
+
+    if (!silent) {
+      if (!confirm(`Thêm ${newRows.length} sản phẩm mới vào sheet DS_SP?\n(${state.rows.length - newRows.length} sản phẩm đã có sẵn sẽ bỏ qua)`)) {
+        status('Đã huỷ lưu vào sheet.');
+        return { ok: false, cancelled: true };
+      }
     }
-    status(`Đang thêm ${newRows.length} sản phẩm vào DS_SP...`);
+
+    status(`Đang thêm ${newRows.length} sản phẩm mới vào sheet DS_SP...`);
     const add = await chrome.runtime.sendMessage({ type: 'APPEND_DS_SP', rowDatas: newRows });
     if (!add || !add.ok) throw new Error((add && add.error) || 'Không thêm được vào DS_SP');
-    status(`Đã thêm ${newRows.length} sản phẩm mới vào sheet DS_SP.`);
-    toast(`Đã lưu ${newRows.length} sản phẩm mới vào DS_SP`, 'success');
+    const succMsg = `Đã lưu ${newRows.length} sản phẩm mới vào sheet DS_SP.`;
+    status(`✅ ${succMsg}`);
+    toast(succMsg, 'success');
+    updateLastSyncInfo(newRows.length);
+    return { ok: true, count: newRows.length };
   } catch (e) {
     status('Lỗi lưu vào sheet: ' + e.message, 'err');
     toast(e.message, 'error');
+    return { ok: false, error: e.message };
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
+    if (qBtn) qBtn.disabled = false;
   }
 }
 
@@ -331,17 +362,117 @@ async function loadPages() {
   saveProductCache();
 }
 
+async function checkAutoSyncSheet() {
+  if (kind() !== 'products') return;
+  const isAuto = $('#wAutoSyncSheet')?.checked;
+  if (!isAuto) return;
+  await saveToSheet(true);
+}
+
+async function quickSync() {
+  if (state.loading) return;
+  const syncChk = $('#wAutoSyncSheet');
+  const oldVal = syncChk ? syncChk.checked : false;
+  if (syncChk) syncChk.checked = true;
+  await load();
+  if (syncChk && !oldVal) syncChk.checked = false;
+}
+
+let autoPeriodicTimer = null;
+function setupPeriodicSync() {
+  if (autoPeriodicTimer) {
+    clearInterval(autoPeriodicTimer);
+    autoPeriodicTimer = null;
+  }
+  const isEnabled = $('#wAutoPeriodic')?.checked;
+  if (!isEnabled || pageKind !== 'products') return;
+
+  const minutes = Math.max(5, Number($('#wAutoInterval')?.value) || 60);
+  const ms = minutes * 60 * 1000;
+  autoPeriodicTimer = setInterval(() => {
+    if (!state.loading && pageKind === 'products') {
+      console.log('[Wameli] Bắt đầu tự động đồng bộ định kỳ...');
+      load();
+    }
+  }, ms);
+}
+
+async function initAutoSyncSettings() {
+  const stored = await chrome.storage.local.get([
+    'wml_auto_sync_sheet',
+    'wml_auto_load_open',
+    'wml_auto_periodic',
+    'wml_auto_interval',
+    'wml_last_sync_info'
+  ]);
+
+  const chkSync = $('#wAutoSyncSheet');
+  if (chkSync) {
+    chkSync.checked = stored.wml_auto_sync_sheet !== undefined ? !!stored.wml_auto_sync_sheet : true;
+    chkSync.onchange = () => {
+      chrome.storage.local.set({ wml_auto_sync_sheet: chkSync.checked });
+      toast(chkSync.checked ? 'Đã bật: Tự động lưu SP mới vào Sheet DS_SP' : 'Đã tắt tự động lưu DS_SP', 'info');
+    };
+  }
+
+  const chkOpen = $('#wAutoLoadOnOpen');
+  if (chkOpen) {
+    chkOpen.checked = !!stored.wml_auto_load_open;
+    chkOpen.onchange = () => {
+      chrome.storage.local.set({ wml_auto_load_open: chkOpen.checked });
+      toast(chkOpen.checked ? 'Đã bật: Tự động lấy khi mở tab' : 'Đã tắt tự động lấy khi mở tab', 'info');
+    };
+  }
+
+  const chkPeriodic = $('#wAutoPeriodic');
+  const selInterval = $('#wAutoInterval');
+  if (selInterval && stored.wml_auto_interval) {
+    selInterval.value = String(stored.wml_auto_interval);
+  }
+  if (chkPeriodic) {
+    chkPeriodic.checked = !!stored.wml_auto_periodic;
+    chkPeriodic.onchange = () => {
+      chrome.storage.local.set({ wml_auto_periodic: chkPeriodic.checked });
+      setupPeriodicSync();
+      toast(chkPeriodic.checked ? `Đã bật tự động đồng bộ định kỳ mỗi ${selInterval?.value || 60} phút` : 'Đã tắt tự động chạy định kỳ', 'info');
+    };
+  }
+  if (selInterval) {
+    selInterval.onchange = () => {
+      chrome.storage.local.set({ wml_auto_interval: Number(selInterval.value) || 60 });
+      if (chkPeriodic?.checked) setupPeriodicSync();
+    };
+  }
+
+  if (stored.wml_last_sync_info && $('#wLastSyncInfo')) {
+    $('#wLastSyncInfo').textContent = stored.wml_last_sync_info;
+  }
+
+  if (pageKind === 'products') {
+    if (chkPeriodic?.checked) {
+      setupPeriodicSync();
+    }
+    if (chkOpen?.checked && !state.loading) {
+      setTimeout(() => { load(); }, 600);
+    }
+  }
+}
+
 async function load() {
   if (state.loading) return;
   if (kind() === 'orders' && (!$('#wFrom').value || !$('#wTo').value)) return toast('Chọn Từ ngày và Đến ngày', 'error');
   state.loading = true;
   state.stop = false;
   $('#wLoad').disabled = true;
+  if ($('#wQuickSync')) $('#wQuickSync').disabled = true;
   $('#wStop').classList.remove('hidden');
   try {
     const mode = $('#wMode').value;
     if (mode === 'pages') await loadPages();
     else await loadExcel(mode);
+    if (kind() === 'products') {
+      await checkAutoSyncSheet();
+    }
   } catch (e) {
     // Gặp lỗi (bị chặn, quá thời gian...) thì dừng hẳn, không thử lại dồn dập
     status(`Dừng do lỗi: ${e.message}. Đợi 15–30 phút rồi thử lại, hoặc tự xuất file trên Wameli và nhập vào ô bên trên.`, 'err');
@@ -349,6 +480,7 @@ async function load() {
   } finally {
     state.loading = false;
     $('#wLoad').disabled = false;
+    if ($('#wQuickSync')) $('#wQuickSync').disabled = false;
     $('#wStop').classList.add('hidden');
     render();
   }
@@ -360,6 +492,9 @@ async function importFile(file) {
     setData(head, rows, `Nguồn: file ${file.name}`);
     status(`Đã đọc ${rows.length} dòng từ ${file.name}.`);
     toast(`Đã đọc ${rows.length} dòng`, 'success');
+    if (kind() === 'products') {
+      await checkAutoSyncSheet();
+    }
   } catch (e) {
     toast('Không đọc được file: ' + e.message, 'error');
   }
@@ -389,11 +524,17 @@ document.title = pageKind === 'products' ? 'Sản phẩm WML' : 'Đơn xuất kh
 $('.brand').textContent = pageKind === 'products' ? '🧾 Sản phẩm WML' : '🏬 Đơn xuất kho WML';
 $('#upCard').classList.toggle('hidden', pageKind === 'products');
 $('#wToSheet').classList.toggle('hidden', pageKind !== 'products');
+$('#wQuickSync')?.classList.toggle('hidden', pageKind !== 'products');
+$('#wAutoSyncBar')?.classList.toggle('hidden', pageKind !== 'products');
 $('#wKind').onchange = syncKind;
 $('#wMode').onchange = syncMode;
 syncKind();
-$('#wToSheet').onclick = saveToSheet;
-if (pageKind === 'products') restoreProductCache().catch(() => {});
+$('#wToSheet').onclick = () => saveToSheet(false);
+if ($('#wQuickSync')) $('#wQuickSync').onclick = quickSync;
+if (pageKind === 'products') {
+  restoreProductCache().catch(() => {});
+  initAutoSyncSettings();
+}
 $('#wLoad').onclick = load;
 $('#wStop').onclick = () => { state.stop = true; status('Sẽ dừng sau trang đang đọc...'); };
 $('#wFile').onchange = (e) => { if (e.target.files[0]) importFile(e.target.files[0]); e.target.value = ''; };
