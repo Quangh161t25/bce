@@ -4,29 +4,44 @@
 // =========================================================================
 
 (function() {
-  const APP_URL = "../clone-tool/app.html";
+  const getAppUrl = () => {
+    try {
+      if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.getURL) {
+        return chrome.runtime.getURL("extension/clone-tool/app.html");
+      }
+    } catch (_) {}
+    return "../clone-tool/app.html";
+  };
+
   const iframeEl = document.getElementById("in-nang-cao-iframe");
   const btnReload = document.getElementById("btn-in-nang-cao-reload");
   if (!iframeEl) return;
 
-  const ensureLoaded = () => {
-    if (!iframeEl.getAttribute("src")) iframeEl.setAttribute("src", APP_URL);
+  const ensureLoaded = (force = false) => {
+    const appUrl = getAppUrl();
+    const currentSrc = iframeEl.getAttribute("src") || iframeEl.src || "";
+    if (force || !currentSrc || currentSrc === "about:blank" || !currentSrc.includes("clone-tool/app.html")) {
+      const urlToSet = force ? `${appUrl}?_t=${Date.now()}` : appUrl;
+      iframeEl.src = urlToSet;
+      iframeEl.setAttribute("src", urlToSet);
+    }
   };
 
+  // Lắng nghe click chuyển sang tab Sao chép sản phẩm
   document.querySelectorAll('.tab-btn[data-tab="tab-in-nang-cao"]').forEach((btn) => {
-    btn.addEventListener("click", ensureLoaded);
+    btn.addEventListener("click", () => {
+      setTimeout(() => ensureLoaded(false), 30);
+    });
   });
 
+  // Nút Tải lại giao diện
   btnReload?.addEventListener("click", () => {
-    if (!iframeEl.getAttribute("src")) return ensureLoaded();
-    try {
-      iframeEl.contentWindow.location.reload();
-    } catch (e) {
-      iframeEl.setAttribute("src", APP_URL);
-    }
+    ensureLoaded(true);
   });
 
   // Side panel mở lại đúng tab Sao chép sản phẩm (tab đang active khi khởi động)
   const tab = document.getElementById("tab-in-nang-cao");
-  if (tab && !tab.hidden) ensureLoaded();
+  if (tab && !tab.hidden) {
+    ensureLoaded(false);
+  }
 })();

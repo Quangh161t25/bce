@@ -3402,13 +3402,13 @@ async function uploadImageToFreeImageHost(imageUrl) {
   // MODULE: ORDER TOOL - Tự động dọn tab & kiểm soát tab
   // =========================================================================
   if (message?.type === "ORDER_TOOL_OPEN_ALL") {
-    executeAutoCleanTabs({ open: true, focusFirst: true }).then(res => sendResponse(res))
+    executeAutoCleanTabs({ open: true, focusFirst: true, links: message.links, config: message.config }).then(res => sendResponse(res))
       .catch(err => sendResponse({ ok: false, error: err.message, closedCount: 0 }));
     return true;
   }
 
   if (message?.type === "ORDER_TOOL_TRIGGER_CLEAN_NOW") {
-    executeAutoCleanTabs({ open: false }).then(res => {
+    executeAutoCleanTabs({ open: false, cleanNow: true, links: message.links, config: message.config }).then(res => {
       sendResponse(res);
     }).catch(err => {
       sendResponse({ ok: false, error: err.message, closedCount: 0 });
@@ -4130,8 +4130,15 @@ chrome.storage?.local?.get(["order_tool_auto_clean_config"], (res) => {
 });
 
 // =========================================================================
-// HÀM SO KHỚP URL TAB VỚI LINK ĐÃ LƯU
+// HÀM SO KHỚP URL TAB VỚI LINK ĐÃ LƯU & TỰ ĐỘNG DỌN TAB
 // =========================================================================
+
+const DEFAULT_ORDER_TOOL_QUICK_LINKS = [
+  { id: "def_order", name: "Đơn hàng (Cần xử lý)", url: "https://banhang.shopee.vn/portal/sale/order?type=toship&source=to_process", enabled: true },
+  { id: "def_product", name: "Tất cả sản phẩm (All)", url: "https://banhang.shopee.vn/portal/product/list/live/all?operationSortBy=recommend_v2&page=1&size=48", enabled: true },
+  { id: "def_wameli", name: "Wameli (Quản trị)", url: "https://phanmem.wameli.vn/admin/", enabled: true }
+];
+
 function isTabUrlMatchingSavedLink(tabUrl, savedUrl) {
   if (!tabUrl || !savedUrl) return false;
   const tUrl = String(tabUrl).trim();
@@ -4165,6 +4172,35 @@ function isTabUrlMatchingSavedLink(tabUrl, savedUrl) {
       if (pTab === "/admin" || pTab.startsWith("/admin/")) return true;
     }
 
+    // Shopee Kênh Người Bán: So khớp thông minh theo phân hệ chức năng
+    if (hSaved.includes("banhang.shopee.vn") && hTab.includes("banhang.shopee.vn")) {
+      // a) Danh sách sản phẩm (list, list/all, list/live/all...)
+      if (pSaved.startsWith("/portal/product/list") && pTab.startsWith("/portal/product/list")) {
+        return true;
+      }
+      // b) Danh sách đơn hàng
+      if (pSaved.startsWith("/portal/sale/order") && pTab.startsWith("/portal/sale/order")) {
+        const sType = uSaved.searchParams.get("type");
+        const tType = uTab.searchParams.get("type");
+        if (sType && tType && sType.toLowerCase() !== tType.toLowerCase()) {
+          return false;
+        }
+        return true;
+      }
+      // c) Giao hàng loạt (Mass ship)
+      if (pSaved.startsWith("/portal/sale/mass/ship") && pTab.startsWith("/portal/sale/mass/ship")) {
+        return true;
+      }
+      // d) Kênh marketing
+      if (pSaved.startsWith("/portal/marketing") && pTab.startsWith("/portal/marketing")) {
+        return true;
+      }
+      // e) Trả hàng / hoàn tiền
+      if (pSaved.startsWith("/portal/sale/return") && pTab.startsWith("/portal/sale/return")) {
+        return true;
+      }
+    }
+
     // Nếu pathname khác nhau -> khác trang hoàn toàn (VD /portal/sale/order vs /portal/product/list)
     if (pTab !== pSaved) {
       return false;
@@ -4188,34 +4224,47 @@ function isTabUrlMatchingSavedLink(tabUrl, savedUrl) {
 // =========================================================================
 // Đồng bộ tab làm việc theo các link đang BẬT trong tab Đơn Tool:
 // - mỗi link chỉ giữ ĐÚNG 1 tab (ưu tiên tab đang xem / dùng gần nhất), đóng các tab trùng;
-// - đóng mọi tab khác không thuộc link nào (trừ tab ghim, trang hệ thống/tiện ích,
-//   tab đang xem nếu bật "Giữ tab đang xem", tab tích giữ thủ công trong danh sách);
+// - đóng mọi tab khác không thuộc link nào (trừ tab ghim, trang hệ thống/tiện ích);
 // - opts.open = true ("Mở toàn bộ" & Tự động 30 phút): mở thêm link còn thiếu và tải lại link về đúng trang.
-//   opts.open = false ("Dọn ngay"): chỉ đóng tab, không mở thêm.
+// - opts.open = false ("Dọn ngay"): chỉ đóng tab không lưu và tab trùng, không mở thêm.
 async function executeAutoCleanTabs(opts = {}) {
   const open = !!opts.open;
   const focusFirst = !!opts.focusFirst;
+  const isCleanNow = !!opts.cleanNow || !open;
+
   try {
     const res = await chrome.storage.local.get(["order_tool_auto_clean_config", "order_tool_quick_links"]);
     const cfg = Object.assign({
       enabled: true,
-      keepActiveTab: true,
+      keepActiveTab: false,
+      keepOrder: true,
       keepTabIds: []
-    }, res.order_tool_auto_clean_config || {});
+    }, res.order_tool_auto_clean_config || {}, opts.config || {});
 
-    let quickLinks = Array.isArray(res.order_tool_quick_links) ? res.order_tool_quick_links : [];
+    // Ưu tiên danh sách link truyền trực tiếp từ giao diện (mới nhất)
+    let quickLinks = Array.isArray(opts.links) && opts.links.length > 0
+      ? opts.links
+      : (Array.isArray(res.order_tool_quick_links) && res.order_tool_quick_links.length > 0 ? res.order_tool_quick_links : []);
+
     if (!quickLinks.length) {
       const shopRes = await chrome.storage.local.get(["maGian", "dhHoanTextValue"]);
       const shopCode = (shopRes.maGian || shopRes.dhHoanTextValue || "").trim();
       if (shopCode) {
         const subRes = await chrome.storage.local.get([`order_tool_quick_links_${shopCode}`]);
-        if (Array.isArray(subRes[`order_tool_quick_links_${shopCode}`])) {
+        if (Array.isArray(subRes[`order_tool_quick_links_${shopCode}`]) && subRes[`order_tool_quick_links_${shopCode}`].length > 0) {
           quickLinks = subRes[`order_tool_quick_links_${shopCode}`];
         }
       }
     }
+
+    if (!quickLinks.length) {
+      quickLinks = [...DEFAULT_ORDER_TOOL_QUICK_LINKS];
+    }
+
+    // Đảm bảo lưu lại vào storage
+    chrome.storage.local.set({ order_tool_quick_links: quickLinks }).catch(() => {});
+
     const links = quickLinks.filter(l => l && l.url && l.enabled !== false);
-    // Không có link nào đang bật thì không đóng gì (tránh đóng sạch trình duyệt)
     if (!links.length) {
       return { ok: false, error: "Chưa có link nào đang BẬT trong danh sách trang làm việc.", closedCount: 0, remainingCount: 0 };
     }
@@ -4225,10 +4274,8 @@ async function executeAutoCleanTabs(opts = {}) {
       const url = t.url || t.pendingUrl || "";
       return t.pinned || /^(chrome|chrome-extension|edge|about|devtools|view-source):/.test(url);
     };
-    const keepIds = new Set(Array.isArray(cfg.keepTabIds) ? cfg.keepTabIds : []);
-    const isProtected = (t) => isSystem(t) || keepIds.has(t.id) || (cfg.keepActiveTab && t.active);
 
-    // 1. Mỗi link chọn 1 tab giữ lại
+    // 1. Mỗi link chọn đúng 1 tab giữ lại (ưu tiên tab đang xem hoặc truy cập gần nhất)
     const assigned = new Set();
     const keepers = []; // { link, tab | null }
     for (const link of links) {
@@ -4239,7 +4286,7 @@ async function executeAutoCleanTabs(opts = {}) {
       keepers.push({ link, tab: keeper });
     }
 
-    // 2. Mở link còn thiếu / tải lại link về đúng trang (trước khi đóng để cửa sổ không bị đóng hết tab)
+    // 2. Mở link còn thiếu / tải lại link về đúng trang (khi open=true)
     let createdCount = 0;
     let firstTabId = null;
     if (open) {
@@ -4261,13 +4308,19 @@ async function executeAutoCleanTabs(opts = {}) {
       }
     }
 
-    // 3. Đóng tab trùng link và tab không thuộc link nào
+    // 3. Quy tắc bảo vệ tab:
+    // - Tab hệ thống / tab ghim luôn được giữ lại
+    // - Nếu bật "Giữ tab đang xem" (keepActiveTab) thì chỉ giữ thêm tab đang active
+    // - Khi "Dọn ngay": đóng TOÀN BỘ tab không thuộc link nào đã lưu và tab trùng
+    const isProtected = (t) => isSystem(t) || (cfg.keepActiveTab && t.active);
+
     const idsToClose = tabs.filter(t => !assigned.has(t.id) && !isProtected(t)).map(t => t.id);
     if (idsToClose.length > 0) {
       await chrome.tabs.remove(idsToClose).catch(err => {
         console.warn("[executeAutoCleanTabs] Lỗi đóng tab:", err);
       });
     }
+
     if (focusFirst && firstTabId !== null) {
       await chrome.tabs.update(firstTabId, { active: true }).catch(() => {});
     }
@@ -4283,12 +4336,10 @@ async function executeAutoCleanTabs(opts = {}) {
     if (cfg.enabled) store.order_tool_next_run_at = Date.now() + 30 * 60 * 1000;
     await chrome.storage.local.set(store);
 
-    console.log(`[executeAutoCleanTabs] open=${open}: mở ${createdCount}, đóng ${idsToClose.length}, còn ${remaining.length} tab.`);
+    console.log(`[executeAutoCleanTabs] open=${open}, cleanNow=${isCleanNow}: mở ${createdCount}, đóng ${idsToClose.length}, còn ${remaining.length} tab.`);
     return { ok: true, closedCount: idsToClose.length, remainingCount: remaining.length, createdCount, linkCount: links.length };
   } catch (err) {
     console.error("[executeAutoCleanTabs] Lỗi:", err);
     return { ok: false, error: err.message, closedCount: 0, remainingCount: 0 };
   }
 }
-
-

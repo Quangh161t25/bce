@@ -52,7 +52,7 @@ function todayStr(d = new Date()) {
   return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
 }
 
-// Gợi ý khung giờ in Wameli theo thời gian thực
+// Gợi ý khung giờ in Wameli theo thời gian thực (hỗ trợ chuyển T7/CN sang Thứ 2 khi Chủ nhật nghỉ)
 function getWameliSlotSuggestion(now = new Date()) {
   const SLOTS = [
     { key: "8H", label: "8H", mins: 8 * 60 + 25 },
@@ -61,16 +61,48 @@ function getWameliSlotSuggestion(now = new Date()) {
     { key: "14H", label: "14H", mins: 15 * 60 + 45 },
     { key: "16H", label: "16H", mins: 17 * 60 },
   ];
+  const skipSunday = ls.get("tcdd-skip-sunday", "1") !== "0";
+  const dayOfWeek = now.getDay(); // 0: Chủ nhật, 6: Thứ 7
+
+  // Nếu hôm nay là Chủ nhật và Chủ nhật nghỉ -> chuyển sang 8H sáng Thứ 2
+  if (skipSunday && dayOfWeek === 0) {
+    return { key: "8H_next", display: "8H (Thứ 2)", text: "8H sáng Thứ 2 (CN không làm việc)" };
+  }
+
   const currentMins = now.getHours() * 60 + now.getMinutes();
   const sugg = SLOTS.find(s => currentMins < s.mins);
   if (!sugg) {
+    if (skipSunday && dayOfWeek === 6) {
+      // Chiều Thứ 7 sau 17h00 -> chuyển sang 8H sáng Thứ 2
+      return { key: "8H_next", display: "8H (Thứ 2)", text: "8H sáng Thứ 2 (CN không làm việc)" };
+    }
     return { key: "8H_next", display: "8H (ngày mai)", text: "8H ngày mai (sau 17h00)" };
   }
   return { key: sugg.key, display: `${sugg.key} (hôm nay)`, text: `${sugg.key} (gợi ý lúc ${p2(now.getHours())}:${p2(now.getMinutes())})` };
 }
 
+function getSlotDisplayText(target_slot, now = new Date()) {
+  const sugg = getWameliSlotSuggestion(now);
+  const skipSunday = ls.get("tcdd-skip-sunday", "1") !== "0";
+  const dayOfWeek = now.getDay();
+  const isSatAfter5OrSun = (dayOfWeek === 6 && (now.getHours() * 60 + now.getMinutes() >= 17 * 60)) || dayOfWeek === 0;
+  const nextLabel = (skipSunday && isSatAfter5OrSun) ? "8H sáng Thứ 2" : "8H ngày mai";
+
+  if (target_slot === "auto" || !target_slot) {
+    return `⚡ Tự động (Gợi ý: ${sugg.display})`;
+  }
+  if (target_slot === "8H_next") {
+    return nextLabel;
+  }
+  return target_slot;
+}
+
 function renderSlotOptions(selectedKey = ls.get("tcdd-wameli-slot", "auto")) {
   const sugg = getWameliSlotSuggestion();
+  const now = new Date();
+  const isSatAfter5OrSun = (now.getDay() === 6 && (now.getHours() * 60 + now.getMinutes() >= 17 * 60)) || now.getDay() === 0;
+  const skipSun = ls.get("tcdd-skip-sunday", "1") !== "0";
+  const nextDayLabel = (isSatAfter5OrSun && skipSun) ? "8H sáng Thứ 2 (CN nghỉ)" : "8H ngày mai";
   const options = [
     { value: "auto", text: `⚡ Tự động (Gợi ý: ${sugg.display})` },
     { value: "8H", text: "8H (Sáng sớm - trước 8h25)" },
@@ -78,7 +110,7 @@ function renderSlotOptions(selectedKey = ls.get("tcdd-wameli-slot", "auto")) {
     { value: "13H", text: "13H (Đầu chiều - trước 13h30)" },
     { value: "14H", text: "14H (Chiều - trước 15h45)" },
     { value: "16H", text: "16H (Cuối chiều - trước 17h00)" },
-    { value: "8H_next", text: "8H ngày mai" },
+    { value: "8H_next", text: nextDayLabel },
   ];
   return options.map(o => `<option value="${o.value}" ${o.value === selectedKey ? "selected" : ""}>${esc(o.text)}</option>`).join("");
 }
@@ -234,6 +266,10 @@ function mount() {
       <div class="tc-tools-row sub">
         <span class="tc-muted" id="tc-next"></span>
         <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+          <label style="display:inline-flex;align-items:center;gap:3px;cursor:pointer;font-weight:600;color:#1e293b;font-size:11px;" title="Chủ nhật không làm việc: Khi in vào chiều Thứ 7 hoặc ngày Chủ nhật, tự động chuyển khung in Wameli sang sáng Thứ 2 (8H)">
+            <input type="checkbox" id="tc-skip-sunday" ${ls.get("tcdd-skip-sunday", "1") !== "0" ? "checked" : ""} style="cursor:pointer;margin:0;">
+            <span>📅 CN nghỉ (→ T2)</span>
+          </label>
           <label>Tự đọc <select id="tc-every">${[1, 2, 3, 5].map((m) => `<option value="${m}">${m}p</option>`).join("")}</select></label>
           <label title="Khung giờ nạp Wameli: Tự động gợi ý theo thời gian thực hoặc bạn có thể tự chọn khung giờ mong muốn">
             ⏰ Giờ in: <select id="tc-slot-global" style="padding:2px 4px;font-size:11px;font-weight:600;border:1px solid #cbd5e1;border-radius:4px;color:#0284c7;background:#fff;max-width:145px;text-overflow:ellipsis;"></select>
@@ -362,6 +398,18 @@ function mount() {
     chrome.runtime.sendMessage({ type: "tcdd-set-every", minutes: +e.target.value }).catch(() => {});
     schedule();
   };
+
+  const skipSunChk = $("#tc-skip-sunday");
+  if (skipSunChk) {
+    skipSunChk.checked = ls.get("tcdd-skip-sunday", "1") !== "0";
+    skipSunChk.onchange = (e) => {
+      const val = e.target.checked ? "1" : "0";
+      ls.set("tcdd-skip-sunday", val);
+      chrome.storage.local.set({ "tcdd-skip-sunday": val });
+      if (slotGlobal) slotGlobal.innerHTML = renderSlotOptions();
+      autoLog(val === "1" ? "📅 Đã BẬT: Chủ nhật không làm việc (in chiều T7/CN tự chuyển sang sáng Thứ 2)" : "📅 Đã TẮT: Chủ nhật làm việc bình thường");
+    };
+  }
 
   const slotGlobal = $("#tc-slot-global");
   if (slotGlobal) {
@@ -540,8 +588,7 @@ async function runProcessedOrdersFlow(targetList) {
   }
 
   const target_slot = ls.get("tcdd-wameli-slot", "auto");
-  const sugg = getWameliSlotSuggestion();
-  const slotDisplayText = target_slot === "auto" ? `⚡ Tự động (Gợi ý: ${sugg.display})` : (target_slot === "8H_next" ? "8H ngày mai" : target_slot);
+  const slotDisplayText = getSlotDisplayText(target_slot);
   const confirmMsg = `CHẠY LẠI QUY TRÌNH CHO ${targetList.length} ĐƠN [ĐÃ XỬ LÝ]?\n\n` +
     `⏰ Giờ in Wameli: ${slotDisplayText}\n\n` +
     `Danh sách mã đơn:\n${targetList.slice(0, 10).map((r) => r.order_sn).join("\n")}${targetList.length > 10 ? `\n... và ${targetList.length - 10} đơn khác` : ""}\n\n` +
@@ -641,7 +688,12 @@ function groupsOf(sel) {
 
 async function shipAndPrint(g, dayIdx, log) {
   const ts = await getSlots(g);
-  const slot = ts[Math.min(dayIdx, ts.length - 1)];
+  let slot = ts[Math.min(dayIdx, ts.length - 1)];
+  const skipSunday = ls.get("tcdd-skip-sunday", "1") !== "0";
+  if (skipSunday && slot && new Date(slot.value * 1000).getDay() === 0) {
+    const nonSun = ts.find((s) => new Date(s.value * 1000).getDay() !== 0);
+    if (nonSun) slot = nonSun;
+  }
   if (!slot) {
     const err = `${g.wh.name}: Shopee không trả về ngày lấy hàng`;
     log(`❌ ${esc(err)}`);
@@ -840,11 +892,13 @@ async function uploadWameli(pdf, xlsx, base, log) {
     const shop_id = store["tcdd-shop-id"] || "";
 
     const target_slot = ls.get("tcdd-wameli-slot", "auto");
+    const skip_sunday = ls.get("tcdd-skip-sunday", "1") !== "0";
     const r = await chrome.runtime.sendMessage({
       type: "tcdd-wameli", base, warehouse_id,
       pdf: await b64(pdf), xlsx: await b64(xlsx),
       shop_code, shop_name, shop_id,
-      target_slot
+      target_slot,
+      skip_sunday
     });
     if (r?.error) throw new Error(r.error);
     const sName = r.shop_name || shop_name || "Shop " + (r.shop_id || "");
@@ -1240,7 +1294,7 @@ function flowMenu() {
       ${step(4, "Tạo phiếu & mở trang in", "Loại phiếu: <b>Phiếu gửi hàng và Phiếu đóng gói</b> (1 file PDF). Trang in mở ở tab mới.")}
       ${step(5, "Tải PDF + Excel", "Vào Tải xuống/TOPCARE-phieu-in/, tên <b>ddmm-gdd-HHMM-n</b>. Excel 28 cột chuẩn.")}
       ${step(6, "Nạp lên Wameli & Lưu", "Sàn Shopee · Shop Điện máy Topcare (GDD) · kèm PDF + Excel.")}
-      ${step("⏰", "Chọn khung giờ Wameli", "Trước 8h25 → 8H · 8h25–9h45 → 11H · 9h45–13h30 → 13H · 13h30–15h45 → 14H · 15h45–17h00 → 16H.<br>Khung đó hôm nay đã <b>Đã in</b> → khung kế tiếp. 16H đã in hoặc sau 17h00 → <b>8H ngày hôm sau</b>.")}
+      ${step("⏰", "Chọn khung giờ Wameli", "Trước 8h25 → 8H · 8h25–9h45 → 11H · 9h45–13h30 → 13H · 13h30–15h45 → 14H · 15h45–17h00 → 16H.<br>Khung đó hôm nay đã <b>Đã in</b> → khung kế tiếp. 16H đã in hoặc sau 17h00 → <b>8H ngày hôm sau</b> (Nếu bật 'CN nghỉ' thì chiều T7 hoặc Chủ nhật tự động chuyển sang <b>8H Thứ 2</b>).")}
       ${step("🔔", "Báo động & Thông báo góc màn hình", "Tiếng 'ting' khi đơn mới được xác nhận hoặc nạp Wameli xong. Tiếng chuông cảnh báo + thông báo đỏ khi có đơn hoặc thao tác bị lỗi ❌.")}
       ${step("✈️", "Bắn thông báo vào Telegram", "Tự động gửi thông tin đơn mới, cảnh báo lỗi khẩn cấp và bảng báo cáo 17h/8h trực tiếp vào nhóm chat hoặc cá nhân trên Telegram.")}
       ${step("📊", "Tổng kết cuối ngày (17h & 8h)", "Tự động hiện bảng tổng kết lúc 17h00 chiều và 8h00 sáng: tổng đơn, số đơn đã in, các khung nạp Wameli, danh sách đơn lỗi.")}
@@ -1326,8 +1380,7 @@ function preview(sel) {
   const m = document.createElement("div");
   m.className = "tc-modal";
   const target_slot = ls.get("tcdd-wameli-slot", "auto");
-  const sugg = getWameliSlotSuggestion();
-  const slotDisplayText = target_slot === "auto" ? `⚡ Tự động (Gợi ý: ${sugg.display})` : (target_slot === "8H_next" ? "8H ngày mai" : target_slot);
+  const slotDisplayText = getSlotDisplayText(target_slot);
   const isUploadWml = ls.get("tcdd-wameli", "1") === "1";
   m.innerHTML = `<div><h3>Tóm tắt xác nhận lấy hàng</h3>
     <div>Hình thức: <b>${mode === "pickup" ? "Đơn vị vận chuyển tới lấy" : "Tự mang ra bưu cục"}</b>${mode === "pickup" ? ` · Ngày lấy: <b>${esc(day)}</b>` : ""} · Quy trình: <b>${isUploadWml ? `Nạp Wameli (Giờ in: ${esc(slotDisplayText)})` : "Chỉ xác nhận đơn Shopee (Không nạp Wameli)"}</b></div>

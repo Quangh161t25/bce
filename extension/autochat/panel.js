@@ -57,6 +57,7 @@
           ${AUTOCHAT.greetTags(e, 'tag')}
           <span class="grow"></span>
           <button class="btn" data-act="open" data-id="${id}">💬 Mở chat</button>
+          ${waiting && e.greet && e.greet.error ? `<button class="btn ghost" data-act="retry" data-id="${id}">🔄 Thử gửi lại</button>` : ''}
           ${waiting
             ? `<button class="btn ghost" data-act="done" data-id="${id}">✔ Xong</button>`
             : `<button class="btn ghost" data-act="reopen" data-id="${id}">↩ Chờ lại</button>`}
@@ -142,6 +143,14 @@
     if (!e) return;
     if (btn.dataset.act === 'open') {
       chrome.runtime.sendMessage({ type: 'autochat-open-conv', convId: e.convId });
+    } else if (btn.dataset.act === 'retry') {
+      if (e.greet) {
+        delete e.greet.error;
+        delete e.greet.failMsgId;
+        e.greet.tries = 0;
+      }
+      await AUTOCHAT.saveQueue(q);
+      chrome.runtime.sendMessage({ type: 'autochat-tick-now' });
     } else if (btn.dataset.act === 'done') {
       Object.assign(e, { status: 'done', doneAt: Date.now(), doneReason: 'manual' });
       await AUTOCHAT.saveQueue(q);

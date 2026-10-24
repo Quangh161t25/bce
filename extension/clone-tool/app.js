@@ -229,26 +229,26 @@ function renderPrices() {
 
 function renderProduct() {
   const has = !!current;
-  $('#productEmpty').hidden = has;
-  $('#productBox').hidden = !has;
-  updateCloneButtonUI();
-  if (!has) {
-    $('#productEmpty').innerHTML = currentItemId
-      ? `Chưa có dữ liệu sản phẩm <b>${currentItemId}</b>. Hãy bấm <b>F5</b> trang sản phẩm trên shopee.vn.<br><br><button id="btnFetchActiveTab" style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; font-size:12px; background:#ea580c; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold; box-shadow:0 2px 4px rgba(234,88,12,0.3);">🔄 Bấm để tải lại trang Shopee & lấy dữ liệu</button>`
-      : 'Mở một trang sản phẩm trên <b>shopee.vn</b> (nếu đã mở thì bấm F5) để lấy dữ liệu.';
-    const fBtn = $('#btnFetchActiveTab');
-    if (fBtn) {
-      fBtn.onclick = async () => {
-        fBtn.disabled = true;
-        fBtn.textContent = '⏳ Đang tải lại...';
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab && tab.id) {
-          chrome.tabs.reload(tab.id);
-        }
-      };
+  const emptyEl = $('#productEmpty');
+  const imgEl = $('#pImage');
+  const metaEl = $('#pMeta');
+  const boxEl = $('#productBox');
+
+  if (boxEl) boxEl.hidden = false;
+
+  if (has) {
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (imgEl) {
+      imgEl.src = imgUrl(current.images && current.images[0]);
+      imgEl.style.display = 'block';
     }
-  } else {
-    $('#pImage').src = imgUrl(current.images[0]);
+    if (metaEl) {
+      const variants = current.tiers && current.tiers.length ? `${current.models.length} phân loại` : 'Không phân loại';
+      const warn = current.categories && current.categories.length ? '' : ' · ⚠ thiếu ngành hàng';
+      metaEl.textContent = `ID ${current.itemId} · ${(current.images || []).length} ảnh · ${variants}${warn}`;
+      metaEl.style.display = 'block';
+    }
+
     if (!current.originalName) current.originalName = current.name || '';
     if (!current.originalDescription) current.originalDescription = current.description || '';
 
@@ -264,11 +264,29 @@ function renderProduct() {
     if (titleCount) titleCount.textContent = `${(current.name || '').length}/120`;
     const descCount = $('#descCharCount');
     if (descCount) descCount.textContent = `${(current.description || '').length} ký tự`;
-
-    const variants = current.tiers.length ? `${current.models.length} phân loại` : 'Không phân loại';
-    const warn = current.categories.length ? '' : ' · ⚠ thiếu ngành hàng';
-    $('#pMeta').textContent = `ID ${current.itemId} · ${current.images.length} ảnh · ${variants}${warn}`;
+  } else {
+    if (imgEl) imgEl.style.display = 'none';
+    if (metaEl) metaEl.style.display = 'none';
+    if (emptyEl) {
+      emptyEl.style.display = 'block';
+      emptyEl.innerHTML = currentItemId
+        ? `Chưa có dữ liệu sản phẩm <b>${currentItemId}</b>. Hãy mở lại trang sản phẩm trên <b>shopee.vn</b> rồi bấm F5.<br><button id="btnFetchActiveTab" style="margin-top:6px; display:inline-flex; align-items:center; gap:6px; padding:4px 10px; font-size:11.5px; background:#ea580c; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">🔄 Bấm để tải lại trang Shopee & lấy dữ liệu</button>`
+        : `💡 Mở một trang sản phẩm trên <b>shopee.vn</b> (F5) để tự động lấy ảnh và thông tin gốc. Hoặc bạn có thể dán / nhập trực tiếp Tiêu đề &amp; Mô tả bên dưới để <b>Viết lại AI</b> và <b>Điền vào SP</b>:`;
+      const fBtn = $('#btnFetchActiveTab');
+      if (fBtn) {
+        fBtn.onclick = async () => {
+          fBtn.disabled = true;
+          fBtn.textContent = '⏳ Đang tải lại...';
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab && tab.id) {
+            chrome.tabs.reload(tab.id);
+          }
+        };
+      }
+    }
   }
+
+  updateCloneButtonUI();
   renderPrices();
   renderAiImages();
   renderCover();
@@ -847,15 +865,568 @@ async function runClone() {
   }
 }
 
+// ---------- Gemini AI Viết lại & Đẩy vào SP (Y hệt module Web bán SP) ----------
+
+// Helper gửi message tới tab Shopee active hoặc mở mới trang thêm SP nếu chưa mở
+async function sendMessageToActiveShopeeTab(message) {
+    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    if (!tab || !tab.url || !tab.url.includes("banhang.shopee.vn/portal/product/")) {
+        const tabs = await chrome.tabs.query({ url: "https://banhang.shopee.vn/portal/product/*" });
+        if (tabs && tabs.length > 0) {
+            tab = tabs[0];
+            await chrome.tabs.update(tab.id, { active: true });
+        } else {
+            tab = await chrome.tabs.create({ url: "https://banhang.shopee.vn/portal/product/new?from=sidebar" });
+            await new Promise(r => setTimeout(r, 3000));
+        }
+    }
+    return new Promise((resolve) => chrome.tabs.sendMessage(tab.id, message, resolve));
+}
+
+// Helper gọi XKiro AI API dự phòng với cơ chế thử nhiều model (DeepSeek, Qwen Free, Minimax...)
+async function callXkiroDeepseekDirect(promptText) {
+    const DEFAULT_XKIRO_KEY = "sk-xt-27e56ff5d3d864c86e4993e85cf95f1695698217d913faf3";
+    const res = await new Promise(r => chrome.storage.local.get(["xkiroApiKey", "xkiroModel", "xkiroModels"], r));
+    const apiKey = (res.xkiroApiKey || "").trim() || DEFAULT_XKIRO_KEY;
+    const configuredModel = (res.xkiroModel || "").trim() || "deepseek/deepseek-v4-flash";
+
+    const fallbackList = [
+        configuredModel,
+        "deepseek/deepseek-v4-pro",
+        "qwen/qwen3.8-max:free",
+        "deepseek/deepseek-v4-flash",
+        "qwen/qwen3.7-max:free",
+        "qwen/qwen3.7-plus:free",
+        "qwen/qwen3.6-plus:free",
+        "minimax/minimax-m2.7-highspeed:free"
+    ];
+    const modelsToTry = [...new Set(fallbackList)];
+
+    let lastError = null;
+
+    for (const model of modelsToTry) {
+        try {
+            const response = await fetch("https://api.xkiro.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        { role: "user", content: promptText }
+                    ]
+                })
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                const errMsg = data.error?.message || `Lỗi XKiro HTTP ${response.status}`;
+                lastError = new Error(errMsg);
+                console.warn(`[XKiro AI] Model ${model} gặp lỗi (${errMsg}), thử model tiếp theo...`);
+                await new Promise(r => setTimeout(r, 300));
+                continue;
+            }
+
+            let resultText = data.choices?.[0]?.message?.content || "";
+            resultText = resultText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+            if (resultText) {
+                return resultText;
+            }
+        } catch (err) {
+            lastError = err;
+            console.warn(`[XKiro AI] Lỗi model ${model}:`, err.message);
+            await new Promise(r => setTimeout(r, 300));
+        }
+    }
+
+    throw lastError || new Error("Tất cả model XKiro đều không phản hồi");
+}
+
+// Helper gọi Gemini API trực tiếp với cơ chế tự động thử model dự phòng và chuyển sang XKiro DeepSeek khi quá tải hoặc hết hạn
+async function callGeminiApiDirect(promptText) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(["geminiApiKey", "geminiApiKeys", "geminiModel", "geminiModels"], async (res) => {
+            const keyInputVal = $('#geminiApiKeyInput')?.value?.trim();
+            const primaryKey = keyInputVal || (res.geminiApiKey ? res.geminiApiKey.trim() : "");
+            let apiKeys = Array.isArray(res.geminiApiKeys) && res.geminiApiKeys.length > 0 
+                ? res.geminiApiKeys.map(k => String(k || "").trim()).filter(Boolean)
+                : (primaryKey ? [primaryKey] : []);
+            if (primaryKey && !apiKeys.includes(primaryKey)) {
+                apiKeys.unshift(primaryKey);
+            }
+
+            // Nếu không có Gemini API key -> Tự động chuyển thẳng sang XKiro DeepSeek
+            if (apiKeys.length === 0) {
+                try {
+                    console.log("[AI] Không có Gemini key, tự động dùng XKiro DeepSeek...");
+                    const deepseekResult = await callXkiroDeepseekDirect(promptText);
+                    return resolve(deepseekResult);
+                } catch (deepseekErr) {
+                    return reject(new Error("Lỗi gọi AI (DeepSeek): " + deepseekErr.message));
+                }
+            }
+
+            const modelSelectVal = $('#geminiModelSelect')?.value;
+            const configuredModel = modelSelectVal || res.geminiModel || "gemini-2.0-flash";
+            const fallbackModels = [
+                configuredModel,
+                "gemini-2.0-flash",
+                "gemini-1.5-flash",
+                "gemini-2.5-flash-lite",
+                "gemini-2.0-flash-lite",
+                "gemini-2.5-flash",
+                "gemini-2.5-pro"
+            ];
+            const modelsToTry = [...new Set(fallbackModels)];
+
+            let lastError = null;
+
+            for (const apiKey of apiKeys) {
+                for (const model of modelsToTry) {
+                    try {
+                        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+                        const response = await fetch(url, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: promptText }] }]
+                            })
+                        });
+
+                        const data = await response.json();
+                        if (!response.ok) {
+                            const errMsg = data.error?.message || `Lỗi HTTP ${response.status}`;
+                            const isOverloadedOrQuota = 
+                                response.status === 503 || 
+                                response.status === 429 || 
+                                response.status === 500 || 
+                                response.status === 400 || 
+                                response.status === 403 || 
+                                errMsg.toLowerCase().includes("high demand") || 
+                                errMsg.toLowerCase().includes("spikes in demand") || 
+                                errMsg.toLowerCase().includes("quota") ||
+                                errMsg.toLowerCase().includes("resource_exhausted") ||
+                                errMsg.toLowerCase().includes("overloaded") ||
+                                errMsg.toLowerCase().includes("expired") ||
+                                errMsg.toLowerCase().includes("invalid");
+
+                            if (isOverloadedOrQuota) {
+                                console.warn(`[Gemini API] Model ${model} quá tải/lỗi (${errMsg}), thử model tiếp theo...`);
+                                lastError = new Error(errMsg);
+                                await new Promise(r => setTimeout(r, 350));
+                                continue;
+                            } else {
+                                throw new Error(errMsg);
+                            }
+                        }
+
+                        const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                        if (resultText) {
+                            return resolve(resultText.trim());
+                        } else {
+                            throw new Error("AI không trả về nội dung");
+                        }
+                    } catch (err) {
+                        lastError = err;
+                        console.warn(`[Gemini API] Lỗi model ${model}:`, err.message);
+                        await new Promise(r => setTimeout(r, 350));
+                    }
+                }
+            }
+
+            // Nếu tất cả model/key Gemini đều quá tải hoặc hết hạn -> Tự động kích hoạt XKiro DeepSeek
+            console.warn("[Gemini API] Gemini gặp lỗi hoặc hết hạn, tự động chuyển sang XKiro DeepSeek...");
+            try {
+                const deepseekResult = await callXkiroDeepseekDirect(promptText);
+                if (deepseekResult) {
+                    return resolve(deepseekResult);
+                }
+            } catch (deepseekErr) {
+                return reject(new Error("Gemini lỗi (" + (lastError?.message || "quá tải") + ") và XKiro DeepSeek cũng lỗi: " + deepseekErr.message));
+            }
+
+            reject(lastError || new Error("Không thể kết nối tới Google Gemini. Vui lòng thử lại sau giây lát!"));
+        });
+    });
+}
+
+async function loadGeminiConfig() {
+    const { geminiApiKey, geminiModel } = await chrome.storage.local.get(["geminiApiKey", "geminiModel"]);
+    const keyInput = $("#geminiApiKeyInput");
+    const modelSelect = $("#geminiModelSelect");
+    const badge = $("#geminiStatusBadge");
+
+    if (keyInput && geminiApiKey) {
+        keyInput.value = geminiApiKey;
+    }
+    if (modelSelect && geminiModel) {
+        modelSelect.value = geminiModel;
+    }
+    if (badge) {
+        if (geminiApiKey && geminiApiKey.trim()) {
+            badge.textContent = "🟢 Đã có Key";
+            badge.className = "pill ok";
+        } else {
+            badge.textContent = "⚪ Dùng DeepSeek Free";
+            badge.className = "pill";
+        }
+    }
+}
+
+async function saveGeminiConfig() {
+    const keyInput = $("#geminiApiKeyInput");
+    const modelSelect = $("#geminiModelSelect");
+    const msgEl = $("#geminiApiMsg");
+    const badge = $("#geminiStatusBadge");
+
+    const apiKey = keyInput ? keyInput.value.trim() : "";
+    const model = modelSelect ? modelSelect.value : "gemini-2.0-flash";
+
+    await chrome.storage.local.set({
+        geminiApiKey: apiKey,
+        geminiModel: model
+    });
+
+    if (badge) {
+        if (apiKey) {
+            badge.textContent = "🟢 Đã có Key";
+            badge.className = "pill ok";
+        } else {
+            badge.textContent = "⚪ Dùng DeepSeek Free";
+            badge.className = "pill";
+        }
+    }
+
+    if (msgEl) {
+        msgEl.textContent = apiKey ? "✔ Đã lưu Gemini API Key thành công!" : "✔ Đã lưu (sẽ dùng DeepSeek V4 Free nếu chưa có key).";
+        msgEl.style.color = apiKey ? "#16a34a" : "#64748b";
+    }
+    log(apiKey ? "✔ Đã lưu Gemini API Key thành công." : "Đã cập nhật cấu hình API.", apiKey ? "ok" : "");
+}
+
+function toggleGeminiKeyVis() {
+    const input = $("#geminiApiKeyInput");
+    const btn = $("#btnToggleGeminiKeyVis");
+    if (!input) return;
+    const isPass = input.type === "password";
+    input.type = isPass ? "text" : "password";
+    if (btn) btn.textContent = isPass ? "🙈" : "👁️";
+}
+
+async function testGeminiConfig() {
+    const keyInput = $("#geminiApiKeyInput");
+    const modelSelect = $("#geminiModelSelect");
+    const msgEl = $("#geminiApiMsg");
+    const testBtn = $("#btnTestGeminiKey");
+
+    const apiKey = keyInput ? keyInput.value.trim() : "";
+    const model = modelSelect ? modelSelect.value : "gemini-2.0-flash";
+
+    if (!apiKey) {
+        if (msgEl) {
+            msgEl.textContent = "Đang test qua XKiro DeepSeek V4 Free...";
+            msgEl.style.color = "#3b82f6";
+        }
+        try {
+            await callXkiroDeepseekDirect("Trả lời đúng 1 chữ: OK");
+            if (msgEl) {
+                msgEl.textContent = "🟢 Kết nối DeepSeek V4 Free thành công!";
+                msgEl.style.color = "#16a34a";
+            }
+            log("✔ Kết nối DeepSeek V4 Free thành công.", "ok");
+        } catch (e) {
+            if (msgEl) {
+                msgEl.textContent = "🔴 Lỗi: " + e.message;
+                msgEl.style.color = "#dc2626";
+            }
+        }
+        return;
+    }
+
+    if (testBtn) {
+        testBtn.disabled = true;
+        testBtn.textContent = "⏳ Đang test...";
+    }
+    if (msgEl) {
+        msgEl.textContent = "Đang gửi yêu cầu test tới Gemini API...";
+        msgEl.style.color = "#3b82f6";
+    }
+
+    const startTime = Date.now();
+    try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: "Trả lời đúng 1 chữ: OK" }] }],
+                generationConfig: { maxOutputTokens: 10 }
+            })
+        });
+
+        const latency = Date.now() - startTime;
+        if (res.ok) {
+            if (msgEl) {
+                msgEl.textContent = `🟢 Kết nối model ${model} thành công (${latency}ms)!`;
+                msgEl.style.color = "#16a34a";
+            }
+            log(`✔ Kiểm tra Gemini API (${model}) thành công (${latency}ms).`, "ok");
+        } else {
+            let errText = `HTTP ${res.status}`;
+            try {
+                const errJson = await res.json();
+                if (errJson?.error?.message) errText = errJson.error.message;
+            } catch (_) {}
+            if (msgEl) {
+                msgEl.textContent = `🔴 Thất bại: ${errText}`;
+                msgEl.style.color = "#dc2626";
+            }
+            log(`✖ Kiểm tra Gemini API thất bại: ${errText}`, "err");
+        }
+    } catch (err) {
+        if (msgEl) {
+            msgEl.textContent = `🔴 Lỗi mạng: ${err.message}`;
+            msgEl.style.color = "#dc2626";
+        }
+        log(`✖ Lỗi mạng khi kiểm tra Gemini API: ${err.message}`, "err");
+    } finally {
+        if (testBtn) {
+            testBtn.disabled = false;
+            testBtn.textContent = "⚡ Kiểm tra kết nối";
+        }
+    }
+}
+
+// Cài đặt các nút Viết lại AI, Điền vào SP, Copy (chuẩn module Web bán SP)
+function setupWebSpActionButtons() {
+    const titleInp = document.getElementById('productTitleInput');
+    const descInp = document.getElementById('productDescInput');
+
+    // 1. Nút Viết lại AI - Tên sản phẩm
+    const btnRewriteName = document.getElementById('btnRewriteTitleAi');
+    if (btnRewriteName) {
+        btnRewriteName.addEventListener('click', async () => {
+            const currentName = (titleInp?.value || current?.name || '').trim();
+            const currentDesc = (descInp?.value || current?.description || '').trim();
+            if (!currentName && !currentDesc) {
+                alert("Vui lòng nhập tên hoặc mô tả sản phẩm trước khi viết lại bằng AI!");
+                return;
+            }
+            btnRewriteName.textContent = "Đang viết...";
+            btnRewriteName.disabled = true;
+
+            try {
+                const prompt = `Bạn là chuyên gia viết tiêu đề sản phẩm chuẩn SEO Shopee. Hãy dựa vào tên và nội dung mô tả sản phẩm dưới đây để viết lại 1 tên sản phẩm mới chuẩn SEO cực kỳ thu hút, có độ dài KHOẢNG 99 KÝ TỰ (tối đa 99 ký tự, không vượt quá 99 ký tự), không chứa các ký tự định dạng markdown như **, không chứa ngoặc kép, chỉ trả về duy nhất câu tên sản phẩm:\nTên hiện tại: ${currentName}\nMô tả sản phẩm: ${currentDesc}`;
+                let newTitle = await callGeminiApiDirect(prompt);
+                if (newTitle) {
+                    newTitle = newTitle
+                        .replace(/\*\*/g, '')
+                        .replace(/\*/g, '')
+                        .replace(/^["']|["']$/g, '')
+                        .trim();
+                    
+                    if (newTitle.length > 99) {
+                        newTitle = newTitle.substring(0, 99).trim();
+                    }
+                    if (titleInp) titleInp.value = newTitle;
+                    if (current) current.name = newTitle;
+                    const countEl = document.getElementById('titleCharCount');
+                    if (countEl) countEl.textContent = `${newTitle.length}/120`;
+                    log(`✔ Đã viết lại tên sản phẩm bằng AI: "${newTitle}"`, 'ok');
+                }
+            } catch (err) {
+                alert("Lỗi viết lại tên AI: " + err.message);
+                log("✖ Lỗi viết lại tên AI: " + err.message, "err");
+            } finally {
+                btnRewriteName.textContent = "Viết lại AI";
+                btnRewriteName.disabled = false;
+            }
+        });
+    }
+
+    // 2. Nút Viết lại AI - Mô tả sản phẩm
+    const btnRewriteDesc = document.getElementById('btnRewriteDescAi');
+    if (btnRewriteDesc) {
+        btnRewriteDesc.addEventListener('click', async () => {
+            const currentName = (titleInp?.value || current?.name || '').trim();
+            const currentDesc = (descInp?.value || current?.description || '').trim();
+            if (!currentName && !currentDesc) {
+                alert("Vui lòng nhập tên hoặc mô tả sản phẩm để AI viết lại!");
+                return;
+            }
+            btnRewriteDesc.textContent = "Đang viết...";
+            btnRewriteDesc.disabled = true;
+
+            try {
+                const prompt = `Bạn là chuyên gia marketing Shopee. Hãy viết lại bài mô tả sản phẩm chuyên nghiệp, đầy đủ công dụng, thông số kỹ thuật, bảo hành, dùng biểu tượng emoji đẹp mắt. Giữ nguyên định dạng xuống dòng.\nTUYỆT ĐỐI KHÔNG dùng ký tự in đậm markdown ** (không được dùng dấu ** ở bất kỳ đâu trong văn bản).\nTên sản phẩm: ${currentName}\nMô tả cũ (nếu có): ${currentDesc}`;
+                let newDesc = await callGeminiApiDirect(prompt);
+                if (newDesc) {
+                    newDesc = newDesc.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+                    if (descInp) descInp.value = newDesc;
+                    if (current) current.description = newDesc;
+                    const countEl = document.getElementById('descCharCount');
+                    if (countEl) countEl.textContent = `${newDesc.length} ký tự`;
+                    log(`✔ Đã viết lại mô tả sản phẩm bằng AI (${newDesc.length} ký tự)`, 'ok');
+                }
+            } catch (err) {
+                alert("Lỗi viết lại mô tả AI: " + err.message);
+                log("✖ Lỗi viết lại mô tả AI: " + err.message, "err");
+            } finally {
+                btnRewriteDesc.textContent = "Viết lại AI";
+                btnRewriteDesc.disabled = false;
+            }
+        });
+    }
+
+    // 3. Nút Điền vào SP - Tên
+    const btnFillName = document.getElementById('btnPushTitleToProduct');
+    if (btnFillName) {
+        btnFillName.addEventListener('click', async () => {
+            const val = (titleInp?.value || current?.name || '').trim();
+            if (!val) {
+                alert("Chưa có tên sản phẩm để điền!");
+                return;
+            }
+            if (current) current.name = val;
+            btnFillName.textContent = "Đang điền...";
+            try {
+                const response = await sendMessageToActiveShopeeTab({
+                    type: "FILL_PRODUCT_TEXT",
+                    product: { name: val }
+                });
+                if (response?.message) {
+                    btnFillName.textContent = "Đã điền!";
+                } else {
+                    btnFillName.textContent = "Đã gửi điền tên";
+                }
+                log(`✔ Đã gửi điền tên sản phẩm vào Shopee: "${val}"`, 'ok');
+            } catch (err) {
+                alert("Lỗi điền tên: " + err.message);
+                log("✖ Lỗi điền tên vào Shopee: " + err.message, "err");
+            } finally {
+                setTimeout(() => { btnFillName.textContent = "Điền vào SP"; }, 1500);
+            }
+        });
+    }
+
+    // 4. Nút Điền vào SP - Mô tả
+    const btnFillDesc = document.getElementById('btnPushDescToProduct');
+    if (btnFillDesc) {
+        btnFillDesc.addEventListener('click', async () => {
+            const val = (descInp?.value || current?.description || '').trim();
+            if (!val) {
+                alert("Chưa có nội dung mô tả để điền!");
+                return;
+            }
+            if (current) current.description = val;
+            btnFillDesc.textContent = "Đang điền...";
+            try {
+                const response = await sendMessageToActiveShopeeTab({
+                    type: "FILL_PRODUCT_TEXT",
+                    product: { description: val }
+                });
+                if (response?.message) {
+                    btnFillDesc.textContent = "Đã điền!";
+                } else {
+                    btnFillDesc.textContent = "Đã gửi điền mô tả";
+                }
+                log(`✔ Đã gửi điền mô tả sản phẩm vào Shopee (${val.length} ký tự)`, 'ok');
+            } catch (err) {
+                alert("Lỗi điền mô tả: " + err.message);
+                log("✖ Lỗi điền mô tả vào Shopee: " + err.message, "err");
+            } finally {
+                setTimeout(() => { btnFillDesc.textContent = "Điền vào SP"; }, 1500);
+            }
+        });
+    }
+
+    // 5. Nút Copy Tên
+    const btnCopyTitle = document.getElementById('btnCopyTitle');
+    if (btnCopyTitle) {
+        btnCopyTitle.addEventListener('click', () => {
+            const val = (titleInp?.value || current?.name || '').trim();
+            if (!val) {
+                alert("Không có nội dung để copy!");
+                return;
+            }
+            navigator.clipboard.writeText(val).then(() => {
+                btnCopyTitle.textContent = "Đã copy!";
+                setTimeout(() => { btnCopyTitle.textContent = "Copy"; }, 1500);
+            }).catch(err => alert("Lỗi copy: " + err.message));
+        });
+    }
+
+    // 6. Nút Copy Mô tả
+    const btnCopyDesc = document.getElementById('btnCopyDesc');
+    if (btnCopyDesc) {
+        btnCopyDesc.addEventListener('click', () => {
+            const val = (descInp?.value || current?.description || '').trim();
+            if (!val) {
+                alert("Không có nội dung để copy!");
+                return;
+            }
+            navigator.clipboard.writeText(val).then(() => {
+                btnCopyDesc.textContent = "Đã copy!";
+                setTimeout(() => { btnCopyDesc.textContent = "Copy"; }, 1500);
+            }).catch(err => alert("Lỗi copy: " + err.message));
+        });
+    }
+
+    // Cài đặt Gemini API
+    document.getElementById('btnSaveGeminiKey')?.addEventListener('click', saveGeminiConfig);
+    document.getElementById('btnTestGeminiKey')?.addEventListener('click', testGeminiConfig);
+    document.getElementById('btnToggleGeminiKeyVis')?.addEventListener('click', toggleGeminiKeyVis);
+}
+
 // ---------- Khởi động ----------
 
 async function init() {
-  await loadOptions();
-  await loadCover();
-  await detectFromActiveTab();
-  checkShop();
-  checkAutoFlow();
-  updateCloneButtonUI();
+  try {
+    setupWebSpActionButtons();
+  } catch (err) {
+    console.error('Lỗi setupWebSpActionButtons:', err);
+  }
+
+  try {
+    await loadOptions();
+  } catch (err) {
+    console.warn('Lỗi loadOptions:', err);
+  }
+
+  try {
+    await loadGeminiConfig();
+  } catch (err) {
+    console.warn('Lỗi loadGeminiConfig:', err);
+  }
+
+  try {
+    await loadCover();
+  } catch (err) {
+    console.warn('Lỗi loadCover:', err);
+  }
+
+  try {
+    await detectFromActiveTab();
+  } catch (err) {
+    console.warn('Lỗi detectFromActiveTab:', err);
+  }
+
+  // Đảm bảo luôn hiển thị giao diện sản phẩm & các ô nhập liệu
+  try {
+    renderProduct();
+  } catch (err) {
+    console.warn('Lỗi renderProduct ban đầu:', err);
+  }
+
+  try {
+    checkShop();
+    checkAutoFlow();
+    updateCloneButtonUI();
+  } catch (err) {
+    console.warn('Lỗi checkShop/AutoFlow:', err);
+  }
 
   // Đọc mã gian từ chrome.storage.local và đồng bộ ô mã gian
   try {

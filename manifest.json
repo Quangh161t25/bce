@@ -208,6 +208,7 @@
         "dist/*",
         "dist/assets/*",
         "extension/flash-sale/*",
+        "extension/clone-tool/*",
         "extension/popup/images/*",
         "extension/content/shopee-fetch-interceptor.js",
         "extension/tai-anh-shopee/js/contentScript.js",

@@ -21,6 +21,7 @@ async function applyDefaults() {
   if (!existing["tcdd-every"]) updates["tcdd-every"] = "2"; // 120 giây = 2 phút
   if (existing["tcdd-auto-open-wameli"] === undefined) updates["tcdd-auto-open-wameli"] = "1";
   if (existing["tcdd-wameli"] === undefined) updates["tcdd-wameli"] = "1";
+  if (existing["tcdd-skip-sunday"] === undefined) updates["tcdd-skip-sunday"] = "1";
   if (Object.keys(updates).length > 0) {
     await chrome.storage.local.set(updates);
   }
@@ -957,6 +958,16 @@ async function wameliUpload(tabId, msg) {
           }
         }
 
+        // QUY TẮC: Nếu Chủ nhật không làm việc (skip_sunday)
+        // Khi ngày in rơi vào Chủ nhật (chiều Thứ 7 sau 17h/hết khung chuyển sang hôm sau, hoặc 8H_next vào T7, hoặc in vào ngày Chủ nhật)
+        // -> Tự động chuyển ngày in sang sáng Thứ 2 (khung 8H)!
+        const skipSunday = msg.skip_sunday !== false;
+        if (skipSunday && day.getDay() === 0) {
+          day = new Date(day.getTime() + 86400000); // Chủ nhật + 1 ngày = Thứ 2
+          slot = "8H";
+          house_id = 3;
+        }
+
         // Danh sách Shop / Giờ chỉ có trong form "Thêm mới" (trang danh sách ở trên không có),
         // nên mở form đó (chỉ đọc) giống tab Đơn Tool.
         const formRes = await fetch("/admin/order/upload", {
@@ -1036,7 +1047,8 @@ async function wameliUpload(tabId, msg) {
         if (!out.includes(msg.base)) {
           const firstRow = outDoc.querySelector("table tr:nth-child(2)");
           const firstText = firstRow ? firstRow.textContent : "";
-          if (!firstText.includes(today) && !alertMsg.toLowerCase().includes("thành công") && !alertMsg.toLowerCase().includes("success")) {
+          const targetDay = `${p2(day.getDate())}/${p2(day.getMonth() + 1)}/${day.getFullYear()}`;
+          if (!firstText.includes(today) && !firstText.includes(targetDay) && !alertMsg.toLowerCase().includes("thành công") && !alertMsg.toLowerCase().includes("success")) {
             return { error: "Đã gửi nhưng không thấy file " + msg.base + " trên Wameli" + (alertMsg ? ` (${alertMsg})` : "") };
           }
         }
@@ -1075,6 +1087,10 @@ function skuShopCodeFromXlsx(xlsxB64) {
 }
 
 async function executeWameliUpload(msg) {
+  if (msg.skip_sunday === undefined) {
+    const store = await chrome.storage.local.get(["tcdd-skip-sunday"]);
+    msg.skip_sunday = store["tcdd-skip-sunday"] !== "0";
+  }
   // Wameli đối chiếu shop với mã trong SKU, nên ưu tiên mã lấy từ SKU nếu khác mã gian đang cài
   const skuCode = skuShopCodeFromXlsx(msg.xlsx);
   if (skuCode && skuCode !== String(msg.shop_code || "").trim().toLowerCase()) {
@@ -1501,7 +1517,14 @@ async function runAutoBackground() {
           channel_id: g.channel_id,
           address_id: g.address_id,
         });
-        const slot = (slotsData.time_slots || [])[0];
+        const storeSkipSun = await chrome.storage.local.get(["tcdd-skip-sunday"]);
+        const autoSkipSunday = storeSkipSun["tcdd-skip-sunday"] !== "0";
+        let slot = (slotsData.time_slots || [])[0];
+        if (autoSkipSunday && slot && new Date(slot.value * 1000).getDay() === 0) {
+          // Chủ nhật nghỉ -> tìm slot ngày làm việc tiếp theo (Thứ 2)
+          const nonSun = (slotsData.time_slots || []).find((s) => new Date(s.value * 1000).getDay() !== 0);
+          if (nonSun) slot = nonSun;
+        }
         if (!slot) {
           const err = `${g.wh.name}: Shopee không trả về ngày lấy hàng`;
           await bgLog(`❌ ${err}`);
@@ -1713,6 +1736,7 @@ async function runAutoBackground() {
             const warehouse_id = isHCM(g.ad?.warehouse_name) ? 2 : 1; // theo địa chỉ lấy hàng (dùng cả khi ghi sheet)
             if (cfg["tcdd-wameli"] !== "0") {
               const target_slot = cfg["tcdd-wameli-slot"] || "auto";
+              const skip_sunday = cfg["tcdd-skip-sunday"] !== "0";
               wRes = await executeWameliUpload({
                 base,
                 warehouse_id,
@@ -2046,6 +2070,7 @@ async function processProcessedOrders(targetOrders = null, options = {}) {
           if (pdfB64 && xlsxB64) {
             try {
               const target_slot = options.target_slot || cfg["tcdd-wameli-slot"] || "auto";
+              const skip_sunday = cfg["tcdd-skip-sunday"] !== "0";
               wRes = await executeWameliUpload({
                 base,
                 warehouse_id,

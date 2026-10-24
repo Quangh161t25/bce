@@ -22,7 +22,7 @@
   let currentConfig = {
     enabled: false,
     keepOrder: true,
-    keepActiveTab: true,
+    keepActiveTab: false,
     keepTabIds: [],
     keepTabUrls: []
   };
@@ -157,6 +157,35 @@
         if (pTab === "/admin" || pTab.startsWith("/admin/")) return true;
       }
 
+      // Shopee Kênh Người Bán: So khớp thông minh theo phân hệ chức năng
+      if (hSaved.includes("banhang.shopee.vn") && hTab.includes("banhang.shopee.vn")) {
+        // a) Danh sách sản phẩm (list, list/all, list/live/all...)
+        if (pSaved.startsWith("/portal/product/list") && pTab.startsWith("/portal/product/list")) {
+          return true;
+        }
+        // b) Danh sách đơn hàng
+        if (pSaved.startsWith("/portal/sale/order") && pTab.startsWith("/portal/sale/order")) {
+          const sType = uSaved.searchParams.get("type");
+          const tType = uTab.searchParams.get("type");
+          if (sType && tType && sType.toLowerCase() !== tType.toLowerCase()) {
+            return false;
+          }
+          return true;
+        }
+        // c) Giao hàng loạt (Mass ship)
+        if (pSaved.startsWith("/portal/sale/mass/ship") && pTab.startsWith("/portal/sale/mass/ship")) {
+          return true;
+        }
+        // d) Kênh marketing
+        if (pSaved.startsWith("/portal/marketing") && pTab.startsWith("/portal/marketing")) {
+          return true;
+        }
+        // e) Trả hàng / hoàn tiền
+        if (pSaved.startsWith("/portal/sale/return") && pTab.startsWith("/portal/sale/return")) {
+          return true;
+        }
+      }
+
       // Nếu pathname khác nhau -> khác trang hoàn toàn (VD /portal/sale/order vs /portal/product/list)
       if (pTab !== pSaved) {
         return false;
@@ -209,7 +238,11 @@
     showStatus(`Đang mở ${linksToOpen.length} trang làm việc và đóng các tab thừa...`);
     // Lưu danh sách link hiện tại trước để background dùng đúng bản mới nhất
     chrome.storage.local.set({ [STORAGE_QUICK_LINKS]: quickLinks }, () => {
-      chrome.runtime.sendMessage({ type: "ORDER_TOOL_OPEN_ALL" }, (res) => {
+      chrome.runtime.sendMessage({
+        type: "ORDER_TOOL_OPEN_ALL",
+        links: quickLinks,
+        config: currentConfig
+      }, (res) => {
         if (chrome.runtime.lastError || !res) {
           showStatus("Lỗi mở trang: " + (chrome.runtime.lastError?.message || "Không phản hồi"), true);
           return;
@@ -582,6 +615,7 @@
         renderQuickLinks();
       } else {
         quickLinks = [...DEFAULT_QUICK_LINKS];
+        chrome.storage.local.set({ [STORAGE_QUICK_LINKS]: quickLinks });
         renderQuickLinks();
       }
       // Đồng bộ ngầm từ Sheet cai_dat cột link_mo
@@ -868,7 +902,7 @@
 
   function syncCheckboxesWithConfig() {
     if (chkKeepOrder) chkKeepOrder.checked = currentConfig.keepOrder !== false;
-    if (chkKeepActiveTab) chkKeepActiveTab.checked = currentConfig.keepActiveTab !== false;
+    if (chkKeepActiveTab) chkKeepActiveTab.checked = !!currentConfig.keepActiveTab;
   }
 
   function bindRuleCheckbox(chkEl, key) {
@@ -909,23 +943,30 @@
     btnCleanNow.textContent = "⏳ Đang dọn...";
     showStatus("Đang dọn dẹp các tab thừa theo quy tắc...");
 
-    chrome.runtime.sendMessage({ type: "ORDER_TOOL_TRIGGER_CLEAN_NOW" }, (res) => {
-      btnCleanNow.disabled = false;
-      btnCleanNow.textContent = "🧹 Dọn ngay";
+    // Lưu danh sách link hiện tại trước để background dùng đúng bản mới nhất
+    chrome.storage.local.set({ [STORAGE_QUICK_LINKS]: quickLinks }, () => {
+      chrome.runtime.sendMessage({
+        type: "ORDER_TOOL_TRIGGER_CLEAN_NOW",
+        links: quickLinks,
+        config: currentConfig
+      }, (res) => {
+        btnCleanNow.disabled = false;
+        btnCleanNow.textContent = "🧹 Dọn ngay";
 
-      if (chrome.runtime.lastError || !res) {
-        showStatus("Lỗi dọn dẹp: " + (chrome.runtime.lastError?.message || "Không phản hồi"), true);
-        return;
-      }
+        if (chrome.runtime.lastError || !res) {
+          showStatus("Lỗi dọn dẹp: " + (chrome.runtime.lastError?.message || "Không phản hồi"), true);
+          return;
+        }
 
-      if (res.error) {
-        showStatus("Lỗi: " + res.error, true);
-        return;
-      }
+        if (res.error) {
+          showStatus("Lỗi: " + res.error, true);
+          return;
+        }
 
-      showStatus(`✅ Dọn xong: mỗi link giữ 1 tab, đã đóng ${res.closedCount || 0} tab thừa (còn ${res.remainingCount || 0} tab).`);
-      renderOpenTabs();
-      fetchStatusFromBackground();
+        showStatus(`✅ Dọn xong: mỗi link giữ 1 tab, đã đóng ${res.closedCount || 0} tab thừa (còn ${res.remainingCount || 0} tab).`);
+        renderOpenTabs();
+        fetchStatusFromBackground();
+      });
     });
   });
 

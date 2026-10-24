@@ -43,13 +43,43 @@ var AUTOCHAT_ENGINE = (function () {
       shop_id: s.shopId, offset: 0, limit: 20, direction: 'older', biz_id: 0, on_message_received: true
     });
 
+  function genUuid() {
+    // 1. Thử dùng self.crypto.randomUUID nếu có (tránh dùng bare crypto vì bị thư viện jsrsasign tạo biến var trùng)
+    try {
+      const c = (typeof self !== 'undefined' && self.crypto) || (typeof window !== 'undefined' && window.crypto);
+      if (c && typeof c.randomUUID === 'function') {
+        return c.randomUUID();
+      }
+    } catch (_) {}
+
+    // 2. Thử dùng self.crypto.getRandomValues nếu có
+    try {
+      const c = (typeof self !== 'undefined' && self.crypto) || (typeof window !== 'undefined' && window.crypto);
+      if (c && typeof c.getRandomValues === 'function') {
+        const buf = new Uint8Array(16);
+        c.getRandomValues(buf);
+        buf[6] = (buf[6] & 0x0f) | 0x40; // Version 4
+        buf[8] = (buf[8] & 0x3f) | 0x80; // Variant 10xx
+        const hex = Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+      }
+    } catch (_) {}
+
+    // 3. Fallback Math.random chuẩn RFC4122 v4
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+      const r = (Math.random() * 16) | 0;
+      const v = ch === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
+  }
+
   // Cùng định dạng với tin webchat tự gửi (bắt từ request thật).
   const sendText = (s, e, text) =>
-    api(s, '/messages', { uuid: crypto.randomUUID() }, {
-      request_id: crypto.randomUUID(),
+    api(s, '/messages', { uuid: genUuid() }, {
+      request_id: genUuid(),
       to_id: e.buyerId,
       type: 'text',
-      content: { text, uid: crypto.randomUUID() },
+      content: { text, uid: genUuid() },
       shop_id: s.shopId,
       chat_send_option: { force_send_cancel_order_warning: false, comply_cancel_order_warning: false },
       source_content: {},
@@ -243,6 +273,14 @@ var AUTOCHAT_ENGINE = (function () {
       }
 
       const q = await AUTOCHAT.getQueue();
+      // Tự động xóa lỗi cũ do bug randomUUID gây ra để khách được gửi lại ngay
+      for (const e of Object.values(q)) {
+        if (e.greet && e.greet.error && e.greet.error.includes('randomUUID')) {
+          delete e.greet.error;
+          delete e.greet.failMsgId;
+          e.greet.tries = 0;
+        }
+      }
       const needDetail = applyConversations(await listConversations(s), s.userId, st, q);
       for (const e of needDetail.slice(0, MAX_DETAIL_PER_TICK)) {
         try {

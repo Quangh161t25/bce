@@ -3117,10 +3117,26 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       return input;
     }
 
-    return Array.from(document.querySelectorAll("input.eds-input__input, input[type='text']")).find((el) => {
+    const byPlaceholder = Array.from(document.querySelectorAll("input.eds-input__input, input[type='text'], input")).find((el) => {
       const p = normalizeText(el.placeholder || "");
       return p.includes("ten thuong hieu") || p.includes("ten san pham") || p.includes("loai san pham");
     });
+    if (byPlaceholder && isVisible(byPlaceholder)) return byPlaceholder;
+
+    const formItems = Array.from(document.querySelectorAll('.eds-form-item, .shopee-form-item, [class*="form-item"]'));
+    for (const item of formItems) {
+      const label = item.querySelector('.eds-form-item-clause__label, label, [class*="label"]');
+      const text = label ? (label.textContent || '').trim().toLowerCase() : '';
+      if (text.includes('tên sản phẩm') || text.includes('product name') || text.includes('tên thương hiệu')) {
+        const inp = item.querySelector('input');
+        if (inp && isVisible(inp)) return inp;
+      }
+    }
+
+    const byMaxLen = document.querySelector('input[maxlength="120"]');
+    if (byMaxLen && isVisible(byMaxLen)) return byMaxLen;
+
+    return byPlaceholder || null;
   }
 
   function findProductDescriptionEditor() {
@@ -3151,6 +3167,13 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
 
     textarea = textareas.find(el => isVisible(el) && el.clientHeight > 50);
     if (textarea) return textarea;
+
+    if (typeof findSellerProductDescriptionEditor === 'function') {
+      try {
+        const sellerEd = findSellerProductDescriptionEditor();
+        if (sellerEd) return sellerEd;
+      } catch (e) {}
+    }
 
     return null;
   }

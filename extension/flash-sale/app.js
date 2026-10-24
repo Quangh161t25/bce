@@ -618,7 +618,9 @@ $('#btnSubmit').onclick = (e) => withBusy(e.currentTarget, async () => {
 // =====================================================================
 function newRule(name, items) {
   return {
-    id: crypto.randomUUID(),
+    id: (typeof self !== 'undefined' && self.crypto && typeof self.crypto.randomUUID === 'function')
+      ? self.crypto.randomUUID()
+      : 'rule_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9),
     name,
     enabled: false,
     items,

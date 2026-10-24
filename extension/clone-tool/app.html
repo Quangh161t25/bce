@@ -12,22 +12,61 @@
     <span id="shopStatus" class="pill">Đang kiểm tra shop...</span>
   </header>
 
-  <section class="card" id="productCard">
-    <div id="productEmpty" class="hint">
-      Mở một trang sản phẩm trên <b>shopee.vn</b> (nếu đã mở thì bấm F5) để lấy dữ liệu.
+  <!-- Cài đặt Gemini AI -->
+  <details id="geminiApiCard" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; margin-bottom: 8px;">
+    <summary style="font-weight: 700; color: #1e40af; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+      <span style="display: flex; align-items: center; gap: 5px;">🤖 Cài đặt Gemini AI (Tự động viết lại Tiêu đề &amp; Mô tả)</span>
+      <span id="geminiStatusBadge" class="pill" style="font-size: 10px; margin: 0;">Chưa kiểm tra</span>
+    </summary>
+    <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+          <label for="geminiApiKeyInput" style="font-weight: 600; margin: 0; font-size: 11.5px; color: #334155;">Gemini API Key:</label>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="small" style="color: #2563eb; text-decoration: underline;">🔑 Lấy API Key miễn phí</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <input type="password" id="geminiApiKeyInput" placeholder="Dán Gemini API Key (AIzaSy...)" style="flex: 1; margin: 0; font-size: 12px; font-family: monospace;" />
+          <button type="button" id="btnToggleGeminiKeyVis" class="btn" style="padding: 3px 8px; font-size: 11px;" title="Hiện/ẩn API Key">👁️</button>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 130px;">
+          <label for="geminiModelSelect" style="font-weight: 600; margin: 0 0 3px 0; font-size: 11.5px; color: #334155;">Model:</label>
+          <select id="geminiModelSelect" style="width: 100%; padding: 5px 6px; font-size: 11.5px; border: 1px solid var(--border); border-radius: 4px; background: #fff;">
+            <option value="gemini-2.0-flash" selected>gemini-2.0-flash (Mới nhất, siêu nhanh)</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash (Ổn định, nhanh)</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro (Chất lượng cao nhất)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+          </select>
+        </div>
+        <button type="button" id="btnSaveGeminiKey" class="btn blue" style="padding: 5px 10px; font-size: 11.5px; white-space: nowrap;">💾 Lưu</button>
+        <button type="button" id="btnTestGeminiKey" class="btn green" style="padding: 5px 10px; font-size: 11.5px; white-space: nowrap;">⚡ Kiểm tra kết nối</button>
+      </div>
+      <div id="geminiApiMsg" class="small hint" style="font-style: italic; min-height: 14px;"></div>
     </div>
-    <div id="productBox" hidden>
+  </details>
+
+  <section class="card" id="productCard">
+    <div id="productEmpty" class="hint" style="margin-bottom: 8px;">
+      💡 Mở một trang sản phẩm trên <b>shopee.vn</b> (F5) để tự động lấy ảnh và thông tin gốc. Bạn cũng có thể nhập hoặc dán trực tiếp Tiêu đề &amp; Mô tả bên dưới để bấm <b>Viết lại AI</b> và <b>Điền vào SP</b>:
+    </div>
+    <div id="productBox">
       <div class="product" style="align-items: flex-start;">
-        <img id="pImage" alt="" />
+        <img id="pImage" alt="" style="display: none;" />
         <div style="flex: 1; min-width: 0;">
-          <div id="pMeta" class="hint small" style="margin-bottom: 6px;"></div>
+          <div id="pMeta" class="hint small" style="margin-bottom: 6px; display: none;"></div>
           
           <!-- Ô Tiêu đề sản phẩm -->
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; flex-wrap: wrap; gap: 4px;">
             <label for="productTitleInput" style="font-weight: 700; color: #1e293b; margin: 0; font-size: 11.5px;">
               📝 Tiêu đề sản phẩm:
             </label>
-            <span id="titleCharCount" class="hint small">0/120</span>
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <button type="button" id="btnCopyTitle" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #64748b; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Copy tiêu đề sản phẩm">Copy</button>
+              <button type="button" id="btnRewriteTitleAi" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Viết lại tên bằng AI">Viết lại AI</button>
+              <button type="button" id="btnPushTitleToProduct" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #3b82f6; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Điền tên vào trang Shopee">Điền vào SP</button>
+              <span id="titleCharCount" class="hint small">0/120</span>
+            </div>
           </div>
           <textarea id="productTitleInput" rows="2" style="width: 100%; font-weight: 600; font-size: 12px; border-color: #3b82f6; padding: 5px 8px; border-radius: 4px; box-sizing: border-box; line-height: 1.35;" placeholder="Nhập tiêu đề sản phẩm..." maxlength="255"></textarea>
         </div>
@@ -35,11 +74,14 @@
 
       <!-- Ô Mô tả sản phẩm -->
       <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; flex-wrap: wrap; gap: 4px;">
           <label for="productDescInput" style="font-weight: 700; color: #1e293b; margin: 0; font-size: 11.5px;">
             📄 Mô tả sản phẩm:
           </label>
-          <div style="display: flex; gap: 8px; align-items: center;">
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <button type="button" id="btnCopyDesc" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #64748b; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Copy mô tả sản phẩm">Copy</button>
+            <button type="button" id="btnRewriteDescAi" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #10b981; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Viết lại mô tả bằng AI">Viết lại AI</button>
+            <button type="button" id="btnPushDescToProduct" style="width: auto !important; min-height: 20px !important; height: 20px !important; padding: 0 6px; font-size: 10px; font-weight: bold; background: #3b82f6; color: white; border: none; border-radius: 3px; cursor: pointer; line-height: 20px;" title="Điền mô tả vào trang Shopee">Điền vào SP</button>
             <span id="descCharCount" class="hint small">0 ký tự</span>
             <a href="#" id="btnResetTitleDesc" class="small" style="color: #2563eb; text-decoration: underline;" title="Khôi phục tiêu đề và mô tả gốc của sản phẩm">↺ Khôi phục gốc</a>
           </div>
