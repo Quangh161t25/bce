@@ -100,19 +100,33 @@
   }
 
   function pasteFiles(target, files) {
+    if (!target || !files || !files.length) return false;
     const dt = new DataTransfer();
     files.forEach((f) => dt.items.add(f));
     target.focus();
-    const evt = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+    let evt;
+    try {
+      evt = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+    } catch (_) {
+      evt = new Event("paste", { bubbles: true, cancelable: true });
+    }
+    try {
+      Object.defineProperty(evt, "clipboardData", { value: dt, writable: false, configurable: true });
+    } catch (_) {}
     target.dispatchEvent(evt);
     return evt.defaultPrevented;
   }
 
   function dropFiles(target, files) {
+    if (!target || !files || !files.length) return;
     const dt = new DataTransfer();
     files.forEach((f) => dt.items.add(f));
     ["dragenter", "dragover", "drop"].forEach((evType) => {
-      target.dispatchEvent(new DragEvent(evType, { bubbles: true, cancelable: true, dataTransfer: dt }));
+      const ev = new DragEvent(evType, { bubbles: true, cancelable: true, dataTransfer: dt });
+      try {
+        Object.defineProperty(ev, "dataTransfer", { value: dt, writable: false, configurable: true });
+      } catch (_) {}
+      target.dispatchEvent(ev);
     });
   }
 
@@ -264,29 +278,58 @@
   }
   async function sendCoverFromImage(img, source = "gemini") {
     const src = img.currentSrc || img.src || "";
-    try {
-      if (/^(blob|data):/.test(src)) {
+
+    // 1. Nếu là blob: hoặc data:, xử lý trực tiếp qua canvas hoặc blob
+    if (/^(blob|data):/.test(src)) {
+      try {
         let dataUrl;
         try {
           dataUrl = imageToDataUrlViaCanvas(img);
-        } catch (e) {
+        } catch (_) {
           dataUrl = await readBlobAsDataUrl(await (await fetch(src)).blob());
         }
-        await saveCoverDataUrl(dataUrl, source);
-        return { ok: true };
+        if (dataUrl && dataUrl.length > 500) {
+          await saveCoverDataUrl(dataUrl, source);
+          return { ok: true };
+        }
+      } catch (e) {
+        console.warn("[Shopee Clone AI] blob/data error:", e);
       }
-    } catch (e) {
-      return { ok: false, error: "Không đọc được ảnh: " + ((e && e.message) || e) };
     }
 
-    const res = await sendCoverToExtension(src, source);
-    if (res.ok) return res;
+    // 2. Thử vẽ canvas nếu ảnh đã hiển thị trên trang (không bị CORS taint)
     try {
-      await saveCoverDataUrl(imageToDataUrlViaCanvas(img), source);
-      return { ok: true };
-    } catch (e) {
-      return res;
+      if (img.complete && img.naturalWidth > 0) {
+        const dataUrl = imageToDataUrlViaCanvas(img);
+        if (dataUrl && dataUrl.length > 500) {
+          await saveCoverDataUrl(dataUrl, source);
+          return { ok: true };
+        }
+      }
+    } catch (_) {}
+
+    // 3. Thử tải trực tiếp trong trang web (context của trang)
+    if (src && /^https?:/.test(src)) {
+      try {
+        const resp = await fetch(src);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const dataUrl = await readBlobAsDataUrl(blob);
+          if (dataUrl && dataUrl.length > 500) {
+            await saveCoverDataUrl(dataUrl, source);
+            return { ok: true };
+          }
+        }
+      } catch (_) {}
     }
+
+    // 4. Nhờ background service worker tải ảnh về
+    if (src) {
+      const res = await sendCoverToExtension(src, source);
+      if (res.ok) return res;
+    }
+
+    return { ok: false, error: "Không đọc được dữ liệu ảnh từ trang" };
   }
 
   async function geminiAutoSendAndCollect() {
@@ -336,24 +379,127 @@
     showSuccessBadge("Shopee Clone: Đã lấy ảnh bìa! Tiện ích đang tự động sao chép sang Shopee...");
   }
 
-  // --- CHATGPT HANDLER ---
+  // --- CHATGPT HELPERS & HANDLER ---
+  const getChatGptInput = () => {
+    return (
+      document.querySelector("#prompt-textarea") ||
+      document.querySelector('div[contenteditable="true"].ProseMirror') ||
+      document.querySelector('div[contenteditable="true"][id*="prompt"]') ||
+      document.querySelector('div[role="textbox"][contenteditable="true"]') ||
+      document.querySelector('div[contenteditable="true"]') ||
+      document.querySelector("textarea#prompt-textarea") ||
+      document.querySelector('textarea[data-id="root"]') ||
+      document.querySelector("textarea")
+    );
+  };
+
+  function countChatGptAttachments() {
+    const root = document.querySelector("form") || document.querySelector("fieldset") || document;
+    return root.querySelectorAll(
+      'img[src^="blob:"], [data-testid*="attachment"], [data-testid*="file"], div[class*="attachment"], div[class*="thumbnail"], button[aria-label*="Xóa"], button[aria-label*="Remove"], button[aria-label*="Delete"]'
+    ).length;
+  }
+
+  async function insertTextIntoChatGpt(editor, text) {
+    if (!editor || !text) return false;
+    editor.focus();
+    await sleep(200);
+
+    if (editor.getAttribute("contenteditable") === "true" || editor.classList.contains("ProseMirror")) {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      sel.removeAllRanges();
+      sel.addRange(range);
+
+      let ok = false;
+      try {
+        ok = document.execCommand("selectAll", false, null);
+        ok = document.execCommand("insertText", false, text);
+      } catch (_) {}
+
+      if (!ok || !editor.textContent.includes(text.slice(0, 15))) {
+        try {
+          editor.dispatchEvent(new InputEvent("beforeinput", {
+            bubbles: true,
+            cancelable: true,
+            inputType: "insertText",
+            data: text
+          }));
+          let p = editor.querySelector("p");
+          if (!p) {
+            p = document.createElement("p");
+            editor.appendChild(p);
+          }
+          p.textContent = text;
+          editor.dispatchEvent(new InputEvent("input", {
+            bubbles: true,
+            inputType: "insertText",
+            data: text
+          }));
+        } catch (_) {}
+      }
+
+      if (!editor.textContent.includes(text.slice(0, 15))) {
+        try {
+          const dt = new DataTransfer();
+          dt.setData("text/plain", text);
+          const pe = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+          try { Object.defineProperty(pe, "clipboardData", { value: dt }); } catch (_) {}
+          editor.dispatchEvent(pe);
+        } catch (_) {}
+      }
+    } else {
+      editor.value = text;
+    }
+
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+    editor.dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(300);
+    return editor.textContent.includes(text.slice(0, 15)) || (editor.value && editor.value.includes(text.slice(0, 15)));
+  }
+
+  const getChatGptSendButton = () => {
+    const form = document.querySelector("form") || document;
+    const btns = [
+      ...form.querySelectorAll('button[data-testid="send-button"]'),
+      ...form.querySelectorAll('button[aria-label*="Send"]'),
+      ...form.querySelectorAll('button[aria-label*="Gửi"]'),
+      ...form.querySelectorAll('button[class*="send-button"]'),
+      ...form.querySelectorAll('button[type="submit"]')
+    ];
+    return btns.find((b) => {
+      if (b.disabled || b.getAttribute("aria-disabled") === "true") return false;
+      if (b.offsetParent === null) return false;
+      const label = (b.getAttribute("aria-label") || "").toLowerCase();
+      if (label.includes("voice") || label.includes("speech") || label.includes("mic") || label.includes("thoại")) return false;
+      return true;
+    }) || null;
+  };
+
   async function handleChatGpt(payload) {
     console.log("[Shopee Clone AI] Handling ChatGPT upload...", payload);
+    showSuccessBadge("Shopee Clone: Đã nhận lệnh, đang chuẩn bị thêm ảnh và prompt vào ChatGPT...", "#10a37f");
+    reportStatus("Đang tải trang ChatGPT và chuẩn bị dán dữ liệu...");
 
-    const getChatGptInput = () => {
-      return (
-        document.querySelector("#prompt-textarea") ||
-        document.querySelector('textarea[tabindex="0"]') ||
-        document.querySelector('div[contenteditable="true"]') ||
-        document.querySelector("textarea")
-      );
-    };
+    // Ghi nhớ các ảnh đang có sẵn trước khi gửi câu hỏi mới
+    const existingSrcs = new Set();
+    document.querySelectorAll('article img, [data-message-author-role="assistant"] img, main img, img[src*="oaiusercontent"]').forEach((im) => {
+      const s = im.currentSrc || im.src;
+      if (s) existingSrcs.add(s);
+    });
 
-    const textarea = await waitForElement(getChatGptInput, 25000);
+    let textarea = await waitForElement(getChatGptInput, 30000);
     if (!textarea) {
       console.warn("[Shopee Clone AI] ChatGPT textarea not found within timeout.");
+      showSuccessBadge("Shopee Clone: Không tìm thấy ô nhập của ChatGPT (bạn đã đăng nhập chưa?)", "#ed4014");
+      reportStatus("Không tìm thấy ô nhập ChatGPT (hãy đăng nhập ChatGPT)", "#ed4014");
       return;
     }
+
+    // Chờ React của ChatGPT hydrate và gắn xong các bộ lắng nghe sự kiện
+    await sleep(2500);
+    textarea = getChatGptInput() || textarea;
 
     const files = [];
     if (payload.images && payload.images.length) {
@@ -365,146 +511,180 @@
       }
     }
 
-    // 1. Upload images
+    // 1. Tải ảnh lên ChatGPT
     if (files.length > 0) {
       console.log("[Shopee Clone AI] Attaching", files.length, "images to ChatGPT...");
-      const dt = new DataTransfer();
-      files.forEach((f) => dt.items.add(f));
+      reportStatus(`Đang thêm ${files.length} ảnh vào ChatGPT...`);
+      let attached = false;
 
-      const fileInput = document.querySelector('input[type="file"]');
-      if (fileInput) {
-        try {
-          fileInput.files = dt.files;
-          fileInput.dispatchEvent(new Event("input", { bubbles: true }));
-          fileInput.dispatchEvent(new Event("change", { bubbles: true }));
-        } catch (e) {}
+      for (let attempt = 0; attempt < 5 && !attached; attempt++) {
+        textarea = getChatGptInput() || textarea;
+        const beforeCount = countChatGptAttachments();
+
+        // Thử gán vào input[type="file"] nếu có
+        let fileInput = document.querySelector('input[type="file"]');
+        if (!fileInput) {
+          const attachBtn = document.querySelector('button[data-testid="attach-button"], button[aria-label*="Attach"], button[aria-label*="Đính kèm"], button[aria-label*="tệp"]');
+          if (attachBtn) {
+            try { attachBtn.click(); } catch (_) {}
+            await sleep(300);
+            fileInput = document.querySelector('input[type="file"]');
+          }
+        }
+
+        if (fileInput) {
+          try {
+            const dt = new DataTransfer();
+            files.forEach((f) => dt.items.add(f));
+            const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "files");
+            if (descriptor && descriptor.set) {
+              descriptor.set.call(fileInput, dt.files);
+            } else {
+              fileInput.files = dt.files;
+            }
+            fileInput.dispatchEvent(new Event("input", { bubbles: true }));
+            fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+          } catch (_) {}
+        }
+
+        // Đồng thời dispatch sự kiện paste & drop
+        pasteFiles(textarea, files);
+        dropFiles(textarea, files);
+        const form = textarea.closest("form") || document.querySelector("form");
+        if (form) dropFiles(form, files);
+
+        for (let i = 0; i < 10; i++) {
+          await sleep(350);
+          if (countChatGptAttachments() > beforeCount) {
+            attached = true;
+            break;
+          }
+        }
+        if (!attached) await sleep(1000);
       }
 
-      try {
-        textarea.focus();
-        const pasteEvt = new ClipboardEvent("paste", {
-          bubbles: true,
-          cancelable: true,
-          clipboardData: dt,
-        });
-        textarea.dispatchEvent(pasteEvt);
-      } catch (e) {}
-
-      try {
-        const dropTargets = [
-          textarea,
-          document.querySelector('div[role="presentation"]'),
-          document.querySelector("main"),
-          document.body,
-        ].filter(Boolean);
-
-        for (const target of dropTargets) {
-          ["dragenter", "dragover", "drop"].forEach((evType) => {
-            target.dispatchEvent(
-              new DragEvent(evType, {
-                bubbles: true,
-                cancelable: true,
-                dataTransfer: dt,
-              })
-            );
-          });
-        }
-      } catch (e) {}
-
-      await new Promise((r) => setTimeout(r, 1200));
+      // Chờ các spinner tiến trình tải ảnh của ChatGPT kết thúc
+      for (let s = 0; s < 30; s++) {
+        const composer = document.querySelector("form") || document;
+        const spinners = composer.querySelectorAll('[class*="spinner"], svg[class*="animate-spin"], [aria-label*="Loading"], [aria-label*="Đang tải"]');
+        if (spinners.length === 0) break;
+        await sleep(500);
+      }
+      await sleep(1000);
     }
 
-    // 2. Insert prompt text
+    // 2. Điền prompt
+    let textOk = !payload.prompt;
     if (payload.prompt) {
       console.log("[Shopee Clone AI] Inserting prompt into ChatGPT...");
-      try {
-        textarea.focus();
-        if (textarea.tagName === "TEXTAREA") {
-          textarea.value = payload.prompt;
-          textarea.dispatchEvent(new Event("input", { bubbles: true }));
-          textarea.dispatchEvent(new Event("change", { bubbles: true }));
-        } else {
-          document.execCommand("selectAll", false, null);
-          const ok = document.execCommand("insertText", false, payload.prompt);
-          if (!ok || !textarea.textContent.includes(payload.prompt)) {
-            textarea.innerText = payload.prompt;
-          }
-          textarea.dispatchEvent(new Event("input", { bubbles: true }));
-          textarea.dispatchEvent(new Event("change", { bubbles: true }));
-        }
-      } catch (e) {
-        console.error("[Shopee Clone AI] Error inserting ChatGPT text:", e);
+      reportStatus("Đang điền prompt vào ChatGPT...");
+      for (let attempt = 0; attempt < 5 && !textOk; attempt++) {
+        textarea = getChatGptInput() || textarea;
+        textOk = await insertTextIntoChatGpt(textarea, payload.prompt);
+        if (!textOk) await sleep(800);
       }
     }
 
-    showSuccessBadge("Shopee Clone: Đã tự động tải ảnh và điền prompt vào ChatGPT!");
+    if (textOk) {
+      showSuccessBadge(`Shopee Clone: Đã thêm ${files.length} ảnh + prompt vào ChatGPT!`, "#10a37f");
+      reportStatus(`Đã thêm ${files.length} ảnh + prompt vào ChatGPT`);
+    } else {
+      showSuccessBadge("Shopee Clone: Đã thêm ảnh vào ChatGPT (nhấn Ctrl+V để dán prompt).", "#10a37f");
+      reportStatus("Đã thêm ảnh vào ChatGPT, hãy nhấn Ctrl+V để dán prompt.");
+    }
+
     if (payload.autoSend || payload.auto) {
-      chatGptAutoSendAndCollect();
+      await chatGptAutoSendAndCollect(existingSrcs);
     }
   }
 
+  async function chatGptAutoSendAndCollect(existingSrcs) {
+    reportStatus("Đang chờ ChatGPT sẵn sàng gửi tin nhắn...");
 
-  const getChatGptSendButton = () => {
-    const btns = [
-      ...document.querySelectorAll('button[data-testid="send-button"]'),
-      ...document.querySelectorAll('button[aria-label*="Send"]'),
-      ...document.querySelectorAll('button[aria-label*="Gửi"]'),
-      ...document.querySelectorAll('button[class*="send-button"]'),
-      ...document.querySelectorAll('form button[type="submit"]')
-    ];
-    return btns.find((b) => !b.disabled && b.getAttribute("aria-disabled") !== "true" && b.offsetParent !== null) || null;
-  };
-
-  async function chatGptAutoSendAndCollect() {
-    const beforeCount = document.querySelectorAll('article img, [data-message-author-role="assistant"] img, img[src*="oaiusercontent"]').length;
-
+    // 1. Chờ nút gửi của ChatGPT kích hoạt (khi ảnh tải xong)
     let btn = null;
     for (let i = 0; i < 60 && !btn; i++) {
       btn = getChatGptSendButton();
       if (!btn) await sleep(500);
     }
     if (!btn) {
-      showSuccessBadge("Shopee Clone: Không tìm thấy nút gửi ChatGPT, hãy bấm gửi thủ công.", "#ed4014");
+      showSuccessBadge("Shopee Clone: Không bấm được nút gửi ChatGPT, hãy bấm gửi thủ công.", "#ed4014");
+      reportStatus("Không bấm được nút gửi ChatGPT, hãy bấm gửi thủ công.", "#ed4014");
       return;
     }
-    await sleep(1000);
-    (getChatGptSendButton() || btn).click();
-    showSuccessBadge("Shopee Clone: Đã gửi, đang chờ ChatGPT tạo ảnh...");
 
+    await sleep(1000);
+    const finalBtn = getChatGptSendButton() || btn;
+    finalBtn.click();
+    showSuccessBadge("Shopee Clone: Đã gửi, đang chờ ChatGPT tạo ảnh...", "#10a37f");
+    reportStatus("Đã gửi, đang chờ ChatGPT tạo ảnh...");
+
+    // Nếu sau 1.5 giây nút gửi vẫn còn chưa gửi, thử mô phỏng Enter
+    await sleep(1500);
+    const checkBtn = getChatGptSendButton();
+    if (checkBtn) {
+      const editor = getChatGptInput();
+      if (editor) {
+        editor.dispatchEvent(new KeyboardEvent("keydown", {
+          key: "Enter",
+          code: "Enter",
+          keyCode: 13,
+          which: 13,
+          bubbles: true
+        }));
+      }
+    }
+
+    // 2. Chờ ChatGPT tạo ảnh mới (lên tới 5 phút)
     let foundImg = null;
-    for (let i = 0; i < 480 && !foundImg; i++) {
+    for (let i = 0; i < 600 && !foundImg; i++) {
       await sleep(500);
-      const list = Array.from(document.querySelectorAll('article img, [data-message-author-role="assistant"] img, img[src*="oaiusercontent"]')).filter(im => {
-        return !im.closest('[class*="avatar"]') && (im.naturalWidth === 0 || im.naturalWidth >= 120);
-      });
-      if (list.length > beforeCount) {
-        const last = list[list.length - 1];
-        if (last.complete && (last.naturalWidth === 0 || last.naturalWidth >= 120)) {
-          foundImg = last;
+      const candidates = Array.from(document.querySelectorAll(
+        'article img, [data-message-author-role="assistant"] img, main img, img[src*="oaiusercontent"], img[alt*="Generated"]'
+      ));
+      for (let j = candidates.length - 1; j >= 0; j--) {
+        const im = candidates[j];
+        const src = im.currentSrc || im.src || "";
+        if (!src) continue;
+        if (im.closest('[class*="avatar"], button[id*="headlessui"]') || (im.naturalWidth > 0 && im.naturalWidth < 120)) continue;
+        if (existingSrcs && existingSrcs.has(src)) continue;
+        if (im.complete && (im.naturalWidth >= 120 || im.naturalWidth === 0)) {
+          foundImg = im;
+          break;
         }
       }
     }
 
     if (!foundImg) {
       showSuccessBadge("Shopee Clone: Hết thời gian chờ tạo ảnh. Bấm nút 📥 Dùng làm ảnh bìa trên ảnh khi tạo xong.", "#ed4014");
+      reportStatus("Hết thời gian chờ tạo ảnh. Bấm nút 📥 trên ảnh khi xong.", "#ed4014");
       return;
     }
-    await sleep(1500);
+    await sleep(2000);
 
-    showSuccessBadge("Shopee Clone: ChatGPT đã tạo ảnh, đang lấy ảnh về tiện ích...");
+    showSuccessBadge("Shopee Clone: ChatGPT đã tạo ảnh, đang lấy ảnh về tiện ích...", "#10a37f");
+    reportStatus("Đã phát hiện ảnh ChatGPT, đang lưu làm ảnh bìa...");
+
     const res = await sendCoverFromImage(foundImg, "chatgpt");
     if (!res.ok) {
       showSuccessBadge("Shopee Clone: Không lấy được ảnh (" + res.error + "). Hãy bấm nút 📥 trên ảnh hoặc kéo ảnh vào tiện ích.", "#ed4014");
+      reportStatus("Lỗi lấy ảnh: " + res.error, "#ed4014");
       return;
     }
-    showSuccessBadge("Shopee Clone: Đã lấy ảnh bìa từ ChatGPT! Tiện ích đang tự động sao chép sang Shopee...");
+
+    const box = foundImg.closest('div.relative, div[class*="relative"], div.overflow-hidden, div[class*="group"]') || foundImg.parentElement;
+    const b = box && box.querySelector(".scl-cover-btn");
+    if (b) b.textContent = "✔ Đã dùng làm ảnh bìa";
+
+    showSuccessBadge("Shopee Clone: Đã lấy ảnh bìa từ ChatGPT! Tiện ích đang tự động sao chép sang Shopee...", "#10a37f");
+    reportStatus("Đã lấy ảnh bìa từ ChatGPT thành công!");
   }
 
   // --- CHATGPT: "use generated image as cover" button ---
   function setupChatGptCoverButtons() {
     const addButtons = () => {
       const candidateImages = document.querySelectorAll(
-        'article img, [data-message-author-role="assistant"] img, div[class*="image"] img, img[src*="oaiusercontent"], img[alt*="Generated"]'
+        'article img, [data-message-author-role="assistant"] img, div[class*="image"] img, img[src*="oaiusercontent"], img[alt*="Generated"], main img'
       );
 
       candidateImages.forEach((img) => {
@@ -523,7 +703,7 @@
           position: "absolute",
           top: "10px",
           left: "10px",
-          zIndex: "999",
+          zIndex: "9999",
           padding: "6px 14px",
           border: "none",
           borderRadius: "16px",
@@ -633,8 +813,11 @@
     else document.addEventListener("DOMContentLoaded", start);
   }
 
-  if (window.location.hostname.toLowerCase().includes("gemini.google.com")) {
+  const currentHost = window.location.hostname.toLowerCase();
+  if (currentHost.includes("gemini.google.com")) {
     setupGeminiCoverButtons();
+  } else if (currentHost.includes("chatgpt.com") || currentHost.includes("openai.com")) {
+    setupChatGptCoverButtons();
   }
 
   // --- CHECK AND DISPATCH ---
@@ -642,13 +825,25 @@
   const getMyTabId = () => {
     if (!myTabIdPromise) {
       myTabIdPromise = new Promise((resolve) => {
-        try {
-          chrome.runtime.sendMessage({ type: "sclWhoAmI" }, (res) => {
-            resolve(chrome.runtime.lastError || !res ? null : res.tabId);
-          });
-        } catch (e) {
-          resolve(null);
-        }
+        let attempts = 0;
+        const ask = () => {
+          try {
+            chrome.runtime.sendMessage({ type: "sclWhoAmI" }, (res) => {
+              if (chrome.runtime.lastError || !res) {
+                if (++attempts < 3) {
+                  setTimeout(ask, 300);
+                } else {
+                  resolve(null);
+                }
+              } else {
+                resolve(res.tabId);
+              }
+            });
+          } catch (e) {
+            resolve(null);
+          }
+        };
+        ask();
       });
     }
     return myTabIdPromise;
@@ -664,7 +859,7 @@
       // Lệnh chỉ dành cho đúng tab mà Side Panel vừa mở
       if (payload.tabId) {
         const myTabId = await getMyTabId();
-        if (myTabId !== payload.tabId) return;
+        if (myTabId && myTabId !== payload.tabId) return;
       }
 
       // Only process payloads created in the last 2 minutes

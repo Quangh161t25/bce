@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auto Chat</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <section class="hero" id="hero">
+    <div class="hero-top">
+      <div>
+        <b>Auto Chat · chạy ngầm</b>
+        <small>Tự nhắn qua API Shopee để shop luôn là người nhắn cuối. Không cần mở webchat, không đụng màn hình.</small>
+      </div>
+      <span class="dot" id="dot"></span>
+    </div>
+    <div class="modes" id="modes">
+      <button data-mode="off"><span>⏹</span>Tắt</button>
+      <button data-mode="watch"><span>👀</span>Chỉ theo dõi</button>
+      <button data-mode="auto"><span>🤖</span>Tự nhắn</button>
+    </div>
+    <div class="mode-hint" id="mode-hint"></div>
+    <dl class="stats">
+      <div><dt>Phiên Shopee</dt><dd id="st-session">—</dd></div>
+      <div><dt>Quét gần nhất</dt><dd id="st-poll">—</dd></div>
+      <div><dt>Đang chờ</dt><dd id="st-waiting">0</dd></div>
+      <div><dt>Đã gửi hôm nay</dt><dd id="st-sent">0</dd></div>
+    </dl>
+    <div class="err" id="st-error" hidden></div>
+  </section>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="waiting">Đang chờ (<span id="n-waiting">0</span>)</button>
+    <button class="tab" data-tab="done">Đã xong (<span id="n-done">0</span>)</button>
+    <button class="tab" data-tab="log">Nhật ký</button>
+    <button class="tab" data-tab="settings">Cài đặt</button>
+  </div>
+
+  <main id="list"></main>
+
+  <section id="settings" class="settings" hidden>
+    <div class="lbl">Câu chào (tin đầu tiên khi khách nhắn):</div>
+    <textarea id="s-text" rows="3"></textarea>
+    <div class="lbl">Câu nhắn tiếp (khách nhắn thêm sau câu chào / sau tin tự động của Shopee):</div>
+    <textarea id="s-follow" rows="3"></textarea>
+    <label class="row" title="Để nhân viên kịp trả lời tay. Hết số giây này mà khách vẫn là người nhắn cuối thì Auto Chat gửi câu nhắn tiếp.">Khách nhắn tiếp: đợi <input type="number" id="s-fdelay" min="0" max="3600"> giây chưa ai trả lời mới gửi câu nhắn tiếp</label>
+    <label class="row" title="Khách nhắn liên tục thì không gửi dồn.">2 tin Auto Chat cho cùng 1 khách cách nhau ít nhất <input type="number" id="s-fgap" min="1" max="1440"> phút</label>
+    <label class="row" title="Ví dụ tắt máy cả đêm, sáng bật lại: khách nhắn từ tối qua không nhận câu chào muộn nữa, chỉ nằm trong danh sách chờ.">Chỉ tự nhắn khách nhắn trong vòng <input type="number" id="s-age" min="5" max="1440"> phút</label>
+    <label class="row" title="Chốt an toàn: lỡ có lỗi thì không gửi ồ ạt.">Tối đa <input type="number" id="s-max" min="1" max="1000"> tin Auto Chat mỗi giờ</label>
+    <button id="btn-save" class="btn">💾 Lưu cài đặt</button>
+    <p class="note">
+      Chạy ngầm trong extension mỗi 30 giây, kể cả khi đóng side panel và tab webchat (Chrome phải đang mở).
+      Phiên Shopee lấy tự động mỗi khi bạn mở một trang <a href="https://banhang.shopee.vn/new-webchat/conversations" target="_blank">Kênh Người Bán</a>.
+    </p>
+    <p class="note">
+      "Tự nhắn" chỉ nhắn khách nhắn <b>sau lúc bật</b>. Shopee đã tự trả lời (tin tự động / ngoài giờ) thì không gửi trùng.
+      Tin của Auto Chat không làm khách rời danh sách chờ: khách chỉ "xong" khi nhân viên gửi tin thật.
+      Đừng bật cùng chế độ tự gửi ở tab Chat AI.
+    </p>
+  </section>
+
+  <script src="shared.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>

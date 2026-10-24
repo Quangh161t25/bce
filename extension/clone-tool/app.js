@@ -600,9 +600,10 @@ async function openAi(target, auto = false) {
     aiWatchdog = setTimeout(() => {
       if (!lastAiStatusTs) log('Chưa thấy phản hồi từ trang AI sau 60 giây. Kiểm tra tab AI: đã đăng nhập chưa? Thử F5 tab đó.', 'warn');
     }, 60000);
+    const aiName = target === 'chatgpt' ? 'ChatGPT' : 'Gemini';
     log(auto
-      ? 'Đang chạy tự động: mở Gemini → gửi → chờ ảnh → sao chép. Đừng đóng Side Panel!'
-      : `Đã mở ${target === 'chatgpt' ? 'ChatGPT' : 'Gemini'} và điền sẵn ảnh + prompt.`);
+      ? `Đang chạy tự động: mở ${aiName} → gửi → chờ ảnh → sao chép. Đừng đóng Side Panel!`
+      : `Đã mở ${aiName} và điền sẵn ảnh + prompt.`);
   } catch (e) {
     log('Lỗi mở AI: ' + e.message, 'err');
   } finally {

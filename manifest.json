@@ -84,6 +84,29 @@
     },
     {
       "matches": [
+        "https://banhang.shopee.vn/*"
+      ],
+      "js": [
+        "extension/autochat/token.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://banhang.shopee.vn/webchat/*",
+        "https://banhang.shopee.vn/new-webchat/*"
+      ],
+      "js": [
+        "extension/autochat/shared.js",
+        "extension/autochat/content.js"
+      ],
+      "css": [
+        "extension/autochat/content.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
         "https://gemini.google.com/*"
       ],
       "js": [

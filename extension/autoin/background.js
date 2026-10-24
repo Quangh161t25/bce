@@ -1108,8 +1108,92 @@ async function executeWameliUpload(msg) {
     await waitComplete(tab.id);
     res = await wameliUpload(tab.id, msg);
   }
-  if (res?.error && /đăng nhập/.test(res.error)) chrome.tabs.update(tab.id, { active: true });
+  if (res?.error && /đăng nhập/.test(res.error)) {
+    // Tự đăng nhập bằng tài khoản đã lưu ở tab Cài đặt / sheet cai_dat rồi nạp lại 1 lần
+    const login = await autoLoginWameli(tab.id);
+    if (login.ok) {
+      await chrome.tabs.update(tab.id, { url: WURL }).catch(() => {});
+      await waitComplete(tab.id);
+      res = await wameliUpload(tab.id, msg);
+    } else {
+      res = { error: login.error };
+    }
+    if (res?.error && /đăng nhập/.test(res.error)) chrome.tabs.update(tab.id, { active: true });
+  }
   return res;
+}
+
+// Tài khoản Wameli: tab Cài đặt lưu vào chrome.storage (wameliUser / wameliPass), đồng bộ sheet cai_dat
+// (cột wameli_user / wameli_pass, dòng 2). Máy chưa có thì đọc sheet rồi nhớ lại.
+async function getWameliCredentials() {
+  let { wameliUser, wameliPass } = await chrome.storage.local.get(["wameliUser", "wameliPass"]);
+  if ((!wameliUser || !wameliPass) && typeof getGoogleAccessToken === "function" && typeof getSpreadsheetId === "function" && typeof fetchSheetValues === "function") {
+    try {
+      const [token, sheetId] = await Promise.all([getGoogleAccessToken(), getSpreadsheetId()]);
+      const rows = await fetchSheetValues("cai_dat!A:Z", token, 30000, sheetId);
+      const header = (rows[0] || []).map((h) => String(h || "").trim().toLowerCase());
+      const get = (k) => (header.indexOf(k) >= 0 ? String((rows[1] || [])[header.indexOf(k)] || "").trim() : "");
+      if (get("wameli_user") && get("wameli_pass")) {
+        wameliUser = get("wameli_user");
+        wameliPass = get("wameli_pass");
+        await chrome.storage.local.set({ wameliUser, wameliPass });
+      }
+    } catch (e) { /* không đọc được sheet */ }
+  }
+  return { user: wameliUser || "", pass: wameliPass || "" };
+}
+
+async function autoLoginWameli(tabId) {
+  const { user, pass } = await getWameliCredentials();
+  if (!user || !pass) {
+    return { ok: false, error: "Wameli chưa đăng nhập và chưa có tài khoản Wameli – nhập tài khoản/mật khẩu ở tab Cài đặt" };
+  }
+  await bgLog("🔑 Wameli chưa đăng nhập – đang tự đăng nhập tài khoản <b>" + user.replace(/</g, "&lt;") + "</b>...");
+  await chrome.tabs.update(tabId, { url: "https://phanmem.wameli.vn/admin" }).catch(() => {});
+  await waitComplete(tabId);
+
+  const [fill] = await chrome.scripting.executeScript({
+    target: { tabId },
+    args: [user, pass],
+    func: (u, p) => {
+      const pwd = document.querySelector("input[type=\"password\"]");
+      if (!pwd) return { already: !/login/i.test(location.href) };
+      const form = pwd.closest("form") || document.body;
+      const userInput = form.querySelector("input[name*=\"user\" i], input[name*=\"login\" i], input[name*=\"name\" i], input[name*=\"email\" i], input[id*=\"user\" i]")
+        || [...form.querySelectorAll("input:not([type=hidden]):not([type=password]):not([type=submit]):not([type=checkbox]):not([type=radio])")][0];
+      if (!userInput) return { error: "Không thấy ô tài khoản trên trang đăng nhập Wameli" };
+      const setVal = (el, v) => {
+        el.focus();
+        el.value = v;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      setVal(userInput, u);
+      setVal(pwd, p);
+      const btn = form.querySelector("button[type=submit], input[type=submit], button");
+      if (btn) btn.click();
+      else if (form.tagName === "FORM") form.submit();
+      return { submitted: true };
+    },
+  }).catch((e) => [{ result: { error: String(e.message || e) } }]);
+  const r = fill && fill.result;
+  if (r?.error) return { ok: false, error: r.error };
+  if (r?.already) return { ok: true };
+
+  await waitComplete(tabId);
+  const [check] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const pwd = document.querySelector("input[type=\"password\"]");
+      const err = document.querySelector(".alert, .alert-danger, .error, .message, #system-message");
+      return { stillLogin: !!pwd, msg: err ? err.textContent.trim().replace(/\s+/g, " ") : "" };
+    },
+  }).catch(() => [{ result: { stillLogin: true, msg: "" } }]);
+  if (check?.result?.stillLogin) {
+    return { ok: false, error: "Tự đăng nhập Wameli không thành công" + (check.result.msg ? ": " + check.result.msg : " – kiểm tra lại tài khoản/mật khẩu ở tab Cài đặt") };
+  }
+  await bgLog("✅ Đã tự đăng nhập Wameli");
+  return { ok: true };
 }
 
 // ---------- QUY TRÌNH TỰ ĐỘNG CHẠY NỀN ----------
@@ -1626,8 +1710,8 @@ async function runAutoBackground() {
             await bgLog(`💾 Đã tải Excel: ${base}.xlsx (${xlsRows.length - 1} dòng)`); 
             // Nạp Wameli
             let wRes = null;
+            const warehouse_id = isHCM(g.ad?.warehouse_name) ? 2 : 1; // theo địa chỉ lấy hàng (dùng cả khi ghi sheet)
             if (cfg["tcdd-wameli"] !== "0") {
-              const warehouse_id = isHCM(g.ad?.warehouse_name) ? 2 : 1; // theo địa chỉ lấy hàng
               const target_slot = cfg["tcdd-wameli-slot"] || "auto";
               wRes = await executeWameliUpload({
                 base,
