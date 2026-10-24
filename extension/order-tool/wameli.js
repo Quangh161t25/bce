@@ -379,22 +379,62 @@ async function quickSync() {
 }
 
 let autoPeriodicTimer = null;
+let scheduledDailyCheckTimer = null;
+
 function setupPeriodicSync() {
   if (autoPeriodicTimer) {
     clearInterval(autoPeriodicTimer);
     autoPeriodicTimer = null;
   }
+  if (scheduledDailyCheckTimer) {
+    clearInterval(scheduledDailyCheckTimer);
+    scheduledDailyCheckTimer = null;
+  }
+
   const isEnabled = $('#wAutoPeriodic')?.checked;
   if (!isEnabled || pageKind !== 'products') return;
 
-  const minutes = Math.max(5, Number($('#wAutoInterval')?.value) || 60);
-  const ms = minutes * 60 * 1000;
-  autoPeriodicTimer = setInterval(() => {
-    if (!state.loading && pageKind === 'products') {
-      console.log('[Wameli] Bắt đầu tự động đồng bộ định kỳ...');
-      load();
-    }
-  }, ms);
+  const numVal = Math.max(0.05, parseFloat($('#wAutoHoursInput')?.value) || 1);
+  const unit = $('#wAutoUnit')?.value || 'hours';
+  const minutes = unit === 'minutes' ? numVal : numVal * 60;
+  const ms = Math.max(5000, minutes * 60 * 1000);
+
+  const specificTimesRaw = ($('#wSpecificTimesInput')?.value || '').trim();
+  const specificTimes = specificTimesRaw
+    .split(/[,;\s]+/)
+    .map((t) => t.trim())
+    .filter((t) => /^([01]?\d|2[0-3]):([0-5]\d)$/.test(t))
+    .map((t) => {
+      const [h, m] = t.split(':');
+      return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+    });
+
+  // 1. Chạy theo chu kỳ số giờ/phút người dùng nhập
+  if (ms > 0) {
+    console.log(`[Wameli] Bật chạy định kỳ mỗi ${numVal} ${unit === 'minutes' ? 'phút' : 'giờ'} (${Math.round(ms / 1000)}s)`);
+    autoPeriodicTimer = setInterval(() => {
+      if (!state.loading && pageKind === 'products') {
+        console.log('[Wameli] Bắt đầu tự động đồng bộ theo chu kỳ...');
+        load();
+      }
+    }, ms);
+  }
+
+  // 2. Chạy theo các mốc khung giờ cố định trong ngày (nếu có điền)
+  if (specificTimes.length > 0) {
+    let lastTriggeredMinute = '';
+    console.log(`[Wameli] Đã cài đặt khung giờ cố định: ${specificTimes.join(', ')}`);
+    scheduledDailyCheckTimer = setInterval(() => {
+      if (state.loading || pageKind !== 'products') return;
+      const now = new Date();
+      const currentHm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      if (specificTimes.includes(currentHm) && lastTriggeredMinute !== currentHm) {
+        lastTriggeredMinute = currentHm;
+        console.log(`[Wameli] Bắt đầu tự động đồng bộ theo khung giờ ${currentHm}...`);
+        load();
+      }
+    }, 15000);
+  }
 }
 
 async function initAutoSyncSettings() {
@@ -402,7 +442,9 @@ async function initAutoSyncSettings() {
     'wml_auto_sync_sheet',
     'wml_auto_load_open',
     'wml_auto_periodic',
-    'wml_auto_interval',
+    'wml_auto_hours',
+    'wml_auto_unit',
+    'wml_specific_times',
     'wml_last_sync_info'
   ]);
 
@@ -425,22 +467,44 @@ async function initAutoSyncSettings() {
   }
 
   const chkPeriodic = $('#wAutoPeriodic');
-  const selInterval = $('#wAutoInterval');
-  if (selInterval && stored.wml_auto_interval) {
-    selInterval.value = String(stored.wml_auto_interval);
+  const inpVal = $('#wAutoHoursInput');
+  const selUnit = $('#wAutoUnit');
+  const inpSpecific = $('#wSpecificTimesInput');
+
+  if (inpVal && stored.wml_auto_hours !== undefined) {
+    inpVal.value = stored.wml_auto_hours;
   }
+  if (selUnit && stored.wml_auto_unit) {
+    selUnit.value = stored.wml_auto_unit;
+  }
+  if (inpSpecific && stored.wml_specific_times) {
+    inpSpecific.value = stored.wml_specific_times;
+  }
+
+  const updatePeriodicConfig = () => {
+    const num = parseFloat(inpVal?.value) || 1;
+    const unit = selUnit?.value || 'hours';
+    const specific = inpSpecific?.value || '';
+    chrome.storage.local.set({
+      wml_auto_hours: num,
+      wml_auto_unit: unit,
+      wml_specific_times: specific
+    });
+    if (chkPeriodic?.checked) setupPeriodicSync();
+  };
+
+  if (inpVal) inpVal.onchange = updatePeriodicConfig;
+  if (selUnit) selUnit.onchange = updatePeriodicConfig;
+  if (inpSpecific) inpSpecific.onchange = updatePeriodicConfig;
+
   if (chkPeriodic) {
     chkPeriodic.checked = !!stored.wml_auto_periodic;
     chkPeriodic.onchange = () => {
       chrome.storage.local.set({ wml_auto_periodic: chkPeriodic.checked });
       setupPeriodicSync();
-      toast(chkPeriodic.checked ? `Đã bật tự động đồng bộ định kỳ mỗi ${selInterval?.value || 60} phút` : 'Đã tắt tự động chạy định kỳ', 'info');
-    };
-  }
-  if (selInterval) {
-    selInterval.onchange = () => {
-      chrome.storage.local.set({ wml_auto_interval: Number(selInterval.value) || 60 });
-      if (chkPeriodic?.checked) setupPeriodicSync();
+      const num = parseFloat(inpVal?.value) || 1;
+      const unit = selUnit?.value === 'minutes' ? 'phút' : 'giờ';
+      toast(chkPeriodic.checked ? `Đã bật tự động đồng bộ định kỳ (mỗi ${num} ${unit})` : 'Đã tắt tự động chạy định kỳ', 'info');
     };
   }
 
