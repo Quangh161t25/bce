@@ -8407,11 +8407,15 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
         } else {
           clickElementAtCenter(dropdownItem);
           await sleep(500);
+          const now = Date.now();
           outcome = {
             id: cleanTargetId,
             name: matched.name,
             status: "boosted",
-            msg: "Đã kích hoạt đẩy thành công!"
+            msg: "Đã kích hoạt đẩy thành công!",
+            boostedAt: now,
+            expireAt: now + 4 * 60 * 60 * 1000,
+            timestamp: now
           };
         }
       }
@@ -8469,11 +8473,14 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
       if (cardText.includes("Đang đẩy") || Boolean(timeMatch)) {
         const remaining = timeMatch ? timeMatch[1] : "đang đẩy";
         alreadyBoostingCount++;
+        const now = Date.now();
         results[i] = {
           id: cleanTargetId,
           name: matched.name,
           status: "already_boosting",
-          msg: `Đang đẩy (${remaining})`
+          msg: `Đang đẩy (${remaining})`,
+          remaining: remaining,
+          timestamp: now
         };
         continue;
       }

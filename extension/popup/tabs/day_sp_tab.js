@@ -103,7 +103,7 @@
                 }
             }
             if (config.lastLogs && logList) {
-                renderLogs(config.lastLogs);
+                renderLogs(config.lastLogs, config.lastRunTime);
             }
         });
     }
@@ -151,11 +151,47 @@
         return ids;
     }
 
-    function renderLogs(results) {
+    function formatTime(timestamp) {
+        if (!timestamp) return '';
+        const d = new Date(timestamp);
+        if (isNaN(d.getTime())) return '';
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${hh}:${mm}:${ss}`;
+    }
+
+    function formatDate(timestamp) {
+        if (!timestamp) return '';
+        const d = new Date(timestamp);
+        if (isNaN(d.getTime())) return '';
+        const dd = String(d.getDate()).padStart(2, '0');
+        const MM = String(d.getMonth() + 1).padStart(2, '0');
+        return `${dd}/${MM}`;
+    }
+
+    let cachedLastLogs = null;
+    let cachedLastRunTime = null;
+
+    function renderLogs(results, lastRunTime = null) {
         if (!logList) return;
+        cachedLastLogs = results;
+        if (lastRunTime) cachedLastRunTime = lastRunTime;
+
         if (!results || !results.length) {
             logList.innerHTML = '<div style="padding: 10px; text-align: center; color: #94a3b8; font-size: 11px;">Chưa có lịch sử đẩy sản phẩm.</div>';
+            const lastTimeEl = document.getElementById('day-sp-last-time');
+            if (lastTimeEl) lastTimeEl.textContent = '';
             return;
+        }
+
+        const runTime = lastRunTime || cachedLastRunTime;
+        const lastTimeEl = document.getElementById('day-sp-last-time');
+        if (lastTimeEl && runTime) {
+            const tStr = formatTime(runTime);
+            const dStr = formatDate(runTime);
+            const nextTimeStr = formatTime(runTime + 4 * 3600 * 1000);
+            lastTimeEl.innerHTML = `⏱️ Đẩy lúc: <b style="color:#0f766e;">${tStr}</b> (${dStr}) · Lượt kế tiếp: <b style="color:#2563eb;">${nextTimeStr}</b>`;
         }
 
         let html = '';
@@ -163,35 +199,67 @@
             let icon = '⏳';
             let badgeBg = '#f1f5f9';
             let badgeColor = '#475569';
+            let timeInfo = '';
+
+            const itemTime = item.boostedAt || item.timestamp || runTime;
+            const timeStr = itemTime ? formatTime(itemTime) : '';
+            const expireStr = item.expireAt ? formatTime(item.expireAt) : (itemTime ? formatTime(itemTime + 4 * 3600 * 1000) : '');
+
+            let remainingText = '';
+            if (item.status === 'boosted' || item.status === 'already_boosting') {
+                const exp = item.expireAt || (itemTime ? itemTime + 4 * 3600 * 1000 : 0);
+                if (exp) {
+                    const diff = exp - Date.now();
+                    if (diff > 0) {
+                        const h = Math.floor(diff / 3600000);
+                        const m = Math.floor((diff % 3600000) / 60000);
+                        remainingText = `<span style="color:#0284c7;font-weight:600;">(còn ${h}h ${m}p)</span>`;
+                    } else {
+                        remainingText = `<span style="color:#16a34a;font-weight:600;">(đã hết 4h - có thể đẩy lại)</span>`;
+                    }
+                }
+            }
 
             if (item.status === 'boosted') {
                 icon = '🚀';
                 badgeBg = '#dcfce7';
                 badgeColor = '#15803d';
+                timeInfo = timeStr ? `Đã đẩy lúc <b>${timeStr}</b> · Hết hạn lúc <b>${expireStr}</b> ${remainingText}` : 'Đã kích hoạt đẩy thành công!';
             } else if (item.status === 'already_boosting') {
                 icon = '⏱️';
                 badgeBg = '#e0f2fe';
                 badgeColor = '#0369a1';
+                timeInfo = `${item.msg || 'Đang trong thời gian đẩy'} ${remainingText}`;
             } else if (item.status === 'limit_reached') {
                 icon = '⚠️';
                 badgeBg = '#fef3c7';
                 badgeColor = '#b45309';
+                timeInfo = 'Đã đạt giới hạn 5/5 vị trí đẩy (Shopee tối đa 5 SP cùng lúc)';
             } else if (item.status === 'not_found' || item.status === 'error') {
                 icon = '❌';
                 badgeBg = '#fee2e2';
                 badgeColor = '#b91c1c';
+                timeInfo = item.msg || 'Không thể đẩy';
             }
 
             html += `
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; margin-bottom: 4px; background: white; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 11px;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="font-weight: bold; color: #64748b;">#${idx + 1}</span>
-                        <span style="font-family: monospace; font-weight: 600; color: #1e293b;">${item.id}</span>
-                        ${item.name ? `<span style="color: #64748b; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">- ${item.name}</span>` : ''}
+                <div style="padding: 6px 8px; margin-bottom: 4px; background: white; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 11px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                        <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; flex: 1;">
+                            <span style="font-weight: bold; color: #64748b;">#${idx + 1}</span>
+                            <span style="font-family: monospace; font-weight: 700; color: #1e293b;">${item.id}</span>
+                            ${item.name ? `<span style="color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.name}">- ${item.name}</span>` : ''}
+                        </div>
+                        <span style="background: ${badgeBg}; color: ${badgeColor}; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; white-space: nowrap;">
+                            ${icon} ${item.status === 'boosted' ? 'Đã đẩy thành công!' : (item.msg || item.status)}
+                        </span>
                     </div>
-                    <span style="background: ${badgeBg}; color: ${badgeColor}; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 600; white-space: nowrap;">
-                        ${icon} ${item.msg || item.status}
-                    </span>
+                    ${timeInfo ? `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; padding-top: 3px; border-top: 1px dashed #f1f5f9; font-size: 10px; color: #64748b;">
+                            <span>${timeInfo}</span>
+                            ${(timeStr && item.status !== 'boosted') ? `<span>Quét lúc ${timeStr}</span>` : ''}
+                        </div>
+                    ` : ''}
                 </div>
             `;
         });
@@ -273,8 +341,16 @@
             const boostedCount = response.boostedCount || 0;
             const alreadyBoostingCount = response.alreadyBoostingCount || 0;
 
-            renderLogs(results);
-            saveConfig({ lastLogs: results, lastRunTime: Date.now() });
+            const now = Date.now();
+            const enhancedResults = (response.results || []).map(item => ({
+                ...item,
+                timestamp: item.timestamp || now,
+                boostedAt: item.status === 'boosted' ? (item.boostedAt || now) : item.boostedAt,
+                expireAt: item.status === 'boosted' ? (item.expireAt || (now + 4 * 60 * 60 * 1000)) : item.expireAt
+            }));
+
+            renderLogs(enhancedResults, now);
+            saveConfig({ lastLogs: enhancedResults, lastRunTime: now });
 
             setStatus(`✓ Hoàn tất: Đã đẩy ${boostedCount} SP mới, ${alreadyBoostingCount} SP đang trong thời gian đẩy!`, "success");
         } catch (err) {
@@ -351,6 +427,23 @@
             setStatus("Đã xóa trắng danh sách mã sản phẩm.");
         });
     }
+
+    const btnSet4hCycle = document.getElementById('btn-set-4h-cycle');
+    if (btnSet4hCycle) {
+        btnSet4hCycle.addEventListener('click', () => {
+            scheduleTimes = ["00:15", "04:15", "08:15", "12:15", "16:15", "20:15"];
+            renderScheduleTimes();
+            saveConfigAndSyncAlarms();
+            setStatus("✓ Đã thiết lập lịch đẩy liên tục mỗi 4 tiếng (00:15, 04:15, 08:15, 12:15, 16:15, 20:15)", "success");
+        });
+    }
+
+    // Tự động cập nhật thời gian còn lại mỗi 30s khi đang mở popup
+    setInterval(() => {
+        if (cachedLastLogs && cachedLastLogs.length > 0) {
+            renderLogs(cachedLastLogs, cachedLastRunTime);
+        }
+    }, 30000);
 
     if (btnStart) {
         btnStart.addEventListener('click', startAutoBoost);

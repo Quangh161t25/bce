@@ -7,6 +7,8 @@ importScripts("flash-sale/fs-background.bundle.js");
 importScripts("clone-tool/background.js");
 // AutoIn (TOPCARE – Đọc đơn hàng): tự xác nhận lấy hàng, in phiếu, nạp Wameli, Telegram (extension/autoin/)
 importScripts("autoin/background.js");
+// Auto Chat: chạy ngầm qua API chat, khách là người nhắn cuối thì tự nhắn lại + lập danh sách khách chờ (extension/autochat/)
+importScripts("autochat/shared.js", "autochat/engine.js", "autochat/background.js");
 
 let GOOGLE_SHEET_CONFIG = {
   spreadsheetId: self.SHARED_GOOGLE_CONFIG.extensionSpreadsheetId,
@@ -4063,8 +4065,15 @@ async function runAutoBoostJob(customIds = null, maxSlots = 5) {
       maxSlots: maxSlots
     }, (response) => {
       if (response && response.ok) {
-        config.lastLogs = response.results || [];
-        config.lastRunTime = Date.now();
+        const now = Date.now();
+        const results = (response.results || []).map(item => ({
+          ...item,
+          timestamp: item.timestamp || now,
+          boostedAt: item.status === 'boosted' ? (item.boostedAt || now) : item.boostedAt,
+          expireAt: item.status === 'boosted' ? (item.expireAt || (now + 4 * 60 * 60 * 1000)) : item.expireAt
+        }));
+        config.lastLogs = results;
+        config.lastRunTime = now;
         chrome.storage.local.set({ shopee_auto_boost_config: config });
       }
     });
