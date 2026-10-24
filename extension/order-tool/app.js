@@ -199,14 +199,14 @@ async function loadOrders() {
     }
 
     if (state.stop) {
-      progress.textContent = `Đã dừng – tải thêm được ${newLoaded} đơn mới (tổng: ${state.all.length} đơn)`;
+      progress.textContent = `Đã dừng – tải & lưu được ${newLoaded} đơn mới (tổng: ${state.all.length} đơn trong bộ nhớ máy)`;
       toast(`Đã dừng. Lấy thêm được ${newLoaded} đơn mới`, 'info');
     } else if (newLoaded === 0) {
-      progress.textContent = `Không có đơn mới chưa lưu (đang có ${state.all.length} đơn).`;
-      toast('Tất cả các đơn đã được lưu trước đó (không có đơn mới)', 'info');
+      progress.textContent = `Tất cả đơn đã có trong bộ nhớ máy (tổng: ${state.all.length} đơn).`;
+      toast('Tất cả các đơn đã có sẵn trong bộ nhớ máy (không có đơn mới)', 'info');
     } else {
-      progress.textContent = `Đã tải thêm ${newLoaded} đơn mới (tổng lưu: ${state.all.length} đơn)`;
-      toast(`Đã tải thêm thành công ${newLoaded} đơn mới`, 'success');
+      progress.textContent = `Đã tải & lưu thêm ${newLoaded} đơn mới vào bộ nhớ máy (tổng lưu: ${state.all.length} đơn)`;
+      toast(`Đã tải & lưu ${newLoaded} đơn mới vào bộ nhớ máy thành công`, 'success');
     }
   } catch (e) {
     progress.textContent = '';
@@ -1022,6 +1022,8 @@ async function initSavedOrders() {
       state.all = list;
       updateSavedCount();
       render();
+      const p = $('#progress');
+      if (p) p.textContent = `📦 Đang hiển thị ${list.length} đơn đã lưu trong bộ nhớ máy.`;
     }
   } catch (e) {
     console.warn('Lỗi đọc đơn đã lưu:', e);

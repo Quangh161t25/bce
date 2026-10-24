@@ -36,6 +36,7 @@ function syncKind() {
   $('#dateOpts').classList.toggle('hidden', kind() === 'products');
   $('#wMaxPages').value = kind() === 'products' ? 80 : 20;
   syncMode();
+  restoreDataCache().catch(() => {});
 }
 function syncMode() {
   $('#pageOpts').classList.toggle('hidden', $('#wMode').value !== 'pages');
@@ -48,6 +49,9 @@ function cleanTable(head, rows) {
 }
 
 const PRODUCT_CACHE_KEY = 'wameliProductsCache'; // { head, rows, source, at }
+const ORDERS_CACHE_KEY = 'wameliOrdersCache'; // { head, rows, source, at }
+
+const cacheKey = () => (kind() === 'products' ? PRODUCT_CACHE_KEY : ORDERS_CACHE_KEY);
 
 function setData(head, rows, source) {
   state.head = head;
@@ -55,18 +59,20 @@ function setData(head, rows, source) {
   state.page = 1;
   state.source = source;
   render();
-  if (kind() === 'products') saveProductCache();
+  saveDataCache();
 }
 
-// Lưu danh sách sản phẩm vào máy (gọi cả khi đọc từng trang xong)
-function saveProductCache() {
-  if (kind() !== 'products' || !state.rows.length) return;
-  chrome.storage.local.set({ [PRODUCT_CACHE_KEY]: { head: state.head, rows: state.rows, source: state.source, at: Date.now() } })
-    .catch((e) => toast('Không lưu được danh sách sản phẩm: ' + e.message, 'error'));
+// Lưu danh sách vào bộ nhớ máy (tự động lưu cả sản phẩm và đơn xuất kho)
+function saveDataCache() {
+  if (!state.rows.length) return;
+  const key = cacheKey();
+  chrome.storage.local.set({ [key]: { head: state.head, rows: state.rows, source: state.source, at: Date.now() } })
+    .catch((e) => toast('Không lưu được vào bộ nhớ máy: ' + e.message, 'error'));
 }
 
-async function restoreProductCache() {
-  const { [PRODUCT_CACHE_KEY]: cache } = await chrome.storage.local.get(PRODUCT_CACHE_KEY);
+async function restoreDataCache() {
+  const key = cacheKey();
+  const { [key]: cache } = await chrome.storage.local.get(key);
   if (!cache || !Array.isArray(cache.rows) || !cache.rows.length) return;
   state.head = cache.head || [];
   state.rows = cache.rows;
@@ -74,7 +80,7 @@ async function restoreProductCache() {
   const at = new Date(cache.at).toLocaleString('vi-VN');
   state.source = `${cache.source || ''} · đã lưu lúc ${at}`;
   render();
-  status(`Đang hiển thị ${cache.rows.length} sản phẩm đã lưu lúc ${at}. Bấm "Lấy dữ liệu" để làm mới.`);
+  status(`Đang hiển thị ${cache.rows.length} ${kindLabel()} đã lưu trong bộ nhớ máy lúc ${at}. Bấm "Lấy dữ liệu" để làm mới.`);
 }
 
 // ---------- Lưu sản phẩm mới vào sheet DS_SP ----------
@@ -337,7 +343,7 @@ async function loadExcel(task) {
   const fileName = { excel_misa: 'Misa', excel_nhat: 'Nhặt', export: 'Excel sản phẩm' }[task] || task;
   setData(head, rows, `Nguồn: file ${fileName} (${Math.round(res.size / 1024)} KB) – Wameli báo ${first.total} ${kindLabel()}`);
   status(`Xong: ${rows.length} dòng từ file Excel.`, '');
-  toast(`Đã lấy ${rows.length} dòng`, 'success');
+  toast(`Đã lấy & lưu ${rows.length} dòng vào bộ nhớ máy`, 'success');
 }
 
 async function loadPages() {
@@ -359,7 +365,8 @@ async function loadPages() {
   }
   const more = first.maxPage > lastPage ? ` (còn ${first.maxPage - lastPage} trang chưa đọc – tăng "Tối đa" nếu cần)` : '';
   status(`${state.stop ? 'Đã dừng' : 'Xong'}: ${all.length}/${first.total} dòng${more}.`);
-  saveProductCache();
+  saveDataCache();
+  toast(`Đã lấy & lưu ${all.length} dòng vào bộ nhớ máy`, 'success');
 }
 
 async function checkAutoSyncSheet() {
@@ -555,7 +562,7 @@ async function importFile(file) {
     const { head, rows } = splitHeader(await readXlsx(await file.arrayBuffer()));
     setData(head, rows, `Nguồn: file ${file.name}`);
     status(`Đã đọc ${rows.length} dòng từ ${file.name}.`);
-    toast(`Đã đọc ${rows.length} dòng`, 'success');
+    toast(`Đã đọc & lưu ${rows.length} dòng vào bộ nhớ máy`, 'success');
     if (kind() === 'products') {
       await checkAutoSyncSheet();
     }
@@ -595,8 +602,8 @@ $('#wMode').onchange = syncMode;
 syncKind();
 $('#wToSheet').onclick = () => saveToSheet(false);
 if ($('#wQuickSync')) $('#wQuickSync').onclick = quickSync;
+restoreDataCache().catch(() => {});
 if (pageKind === 'products') {
-  restoreProductCache().catch(() => {});
   initAutoSyncSettings();
 }
 $('#wLoad').onclick = load;
