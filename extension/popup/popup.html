@@ -38,6 +38,7 @@
 <button class="tab-btn" data-tab="tab-nhieu-don-hang">Nhiều đơn hàng</button>
 <button class="tab-btn" data-tab="tab-autoin">AutoIn</button>
 <button class="tab-btn" data-tab="tab-autochat">Auto Chat</button>
+<button class="tab-btn" data-tab="tab-roas-that" style="background: linear-gradient(135deg, #1b2a5a, #2b4594); color: white; font-weight: bold;">ROAS Thật</button>
 <button class="tab-btn" data-tab="tab-flash-sale" style="display: none;">Flash Sale</button>
 </div>
 
@@ -974,6 +975,55 @@ Vui lòng mở trang Kênh Người Bán và mở Popup thêm sản phẩm Flash
     </p>
     <div class="fs-iframe-container">
       <iframe id="autochat-iframe" title="Auto Chat"></iframe>
+    </div>
+  </section>
+</div>
+
+<div id="tab-roas-that" class="tab-content" hidden>
+  <section class="tool-section" style="border-left: 4px solid #1b2a5a; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+    <!-- TIÊU ĐỀ -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+      <h2 style="color: #1b2a5a; font-size: 13.5px; margin: 0; font-weight: 800; display: flex; align-items: center; gap: 6px;">
+        <span>📈</span> ROAS Thật – Dịch Vụ Hiển Thị
+      </h2>
+      <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: #e0e7ff; color: #1e3a8a; border: 1px solid #bfdbfe;">
+        v1.0
+      </span>
+    </div>
+
+    <!-- MÔ TẢ -->
+    <p style="font-size: 11px; color: #475569; margin: 0; line-height: 1.45;">
+      Tính <b>ROAS thật</b> của quảng cáo Shopee sau khi trừ đơn hủy, giao thất bại, trả hàng và phí ship hoàn. Xem thống kê theo <b>Ngày / Tuần / Tháng</b> và xuất Excel/CSV.
+    </p>
+
+    <!-- NÚT MỞ BẢNG TÍNH TRÊN SHOPEE -->
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; text-align: center;">
+      <button id="btn-open-roas-that" type="button" class="primary-action" style="width: 100%; padding: 10px 14px; font-size: 12.5px; font-weight: 800; background: linear-gradient(135deg, #1b2a5a, #2b4594); color: white; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 2px 6px rgba(27,42,90,0.3);">
+        🚀 Mở Bảng Tính ROAS Thật trên Kênh Người Bán
+      </button>
+      <div id="roas-that-status" style="font-size: 11px; font-weight: 600; min-height: 16px; margin-top: 6px; text-align: center;" aria-live="polite"></div>
+    </div>
+
+    <!-- CÁCH SỬ DỤNG TRÊN TRANG SHOPEE -->
+    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; font-size: 11px; line-height: 1.5; color: #334155;">
+      <b style="color: #1b2a5a; font-size: 11.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 6px;">
+        <span>💡</span> Hoạt động trực tiếp trên Kênh Người Bán:
+      </b>
+      <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px;">
+        <li>Nút nổi <b>📈 ROAS thật</b> tự động xuất hiện ở <b>góc trái dưới</b> màn hình Kênh Người Bán (<code>banhang.shopee.vn</code>).</li>
+        <li>Bấm nút để mở bảng điều khiển: chọn <b>Từ ngày / Đến ngày</b>, nhập <b>Phí ship hoàn</b> và <b>ROAS hòa vốn</b>, sau đó bấm <b>🚀 Tính ROAS</b>.</li>
+        <li>Chuyển xem linh hoạt theo <b>Ngày / Tuần / Tháng</b>.</li>
+        <li>Bấm <b>📥 Xuất CSV</b> để tải báo cáo chi tiết về máy và mở bằng Excel.</li>
+      </ul>
+    </div>
+
+    <!-- CÔNG THỨC TÍNH TOÁN -->
+    <div style="background: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 10px; font-size: 10.5px; color: #475569; line-height: 1.45;">
+      <b style="color: #0f172a;">📊 Công thức tính toán:</b><br>
+      • <b>Tỷ lệ đơn thành công:</b> Doanh số đơn Xong ÷ Tổng doanh số đơn đã có kết quả.<br>
+      • <b>ROAS thật:</b> (Doanh số QC × Tỷ lệ thành công − Phí ship hoàn ước tính) ÷ Chi phí QC.<br>
+      • <b>Mức thấp:</b> Chỉ tính đơn giao thành công không có trả hàng.<br>
+      • <b>Mức cao:</b> Tính cả đơn hoàn thành có yêu cầu trả hàng.
     </div>
   </section>
 </div>
@@ -2639,6 +2689,7 @@ Kết quả trả về sẽ tự động định dạng bằng HTML cơ bản (&
 <script src="tabs/autochat_tab.js"></script>
 <script src="tabs/wameli_account_settings.js"></script>
 <script src="tabs/quet_shop_tab.js"></script>
+<script src="tabs/roas_that_tab.js"></script>
 </body>
 
 </html>

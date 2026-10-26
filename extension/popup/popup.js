@@ -8063,7 +8063,10 @@ const CAI_DAT_TAB_NAME_TO_ID = {
   "quet sp": "tab-quet-shop",
   "doc sp shop": "tab-quet-shop",
   "doc san pham shop": "tab-quet-shop",
-  "quet san pham": "tab-quet-shop"
+  "quet san pham": "tab-quet-shop",
+  "roas that": "tab-roas-that",
+  "roas": "tab-roas-that",
+  "roas quang cao": "tab-roas-that"
 };
 
 function normalizeCaiDatTabName(value) {
