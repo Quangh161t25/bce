@@ -70,14 +70,20 @@ function sendMessage(message) {
             if (err) {
                 const text = err.message || '';
                 if (/Receiving end does not exist|Could not establish connection/i.test(text)) {
-                    reject(new Error('Không kết nối được background của extension. ' + bridgeHint()));
+                    const e = new Error('Extension chưa cập nhật. Hãy bấm ↻ Reload ở chrome://extensions (hoặc thoát hẳn Chrome rồi mở lại).');
+                    e.code = 'not-updated';
+                    reject(e);
                 } else {
-                    reject(new Error(text || 'Không gọi được background của extension.'));
+                    const e = new Error(text || 'Không gọi được background của extension.');
+                    e.code = 'unknown';
+                    reject(e);
                 }
                 return;
             }
             if (!res) {
-                reject(new Error('Background không phản hồi. ' + bridgeHint()));
+                const e = new Error('Background không phản hồi. ' + bridgeHint());
+                e.code = 'unknown';
+                reject(e);
                 return;
             }
             resolve(res);
@@ -90,7 +96,15 @@ function sendMessage(message) {
                 chrome.runtime.sendMessage(extensionId(), message, onResponse);
             }
         } catch (e) {
-            reject(new Error((e && e.message) || String(e)));
+            const text = (e && e.message) || String(e);
+            const err = new Error(text);
+            if (/Invalid extension id/i.test(text)) {
+                err.code = 'not-installed';
+                err.message = `Chưa cài extension trên trình duyệt này (không thấy ID ${extensionId()}).`;
+            } else {
+                err.code = 'unknown';
+            }
+            reject(err);
         }
     });
 }
@@ -98,13 +112,13 @@ function sendMessage(message) {
 // Kiểm tra nhanh xem extension có trả lời không (dùng để hiện trạng thái kết nối).
 export async function pingExtension() {
     if (!hasExtensionBridge()) {
-        return { ok: false, error: 'Trình duyệt này chưa có extension (hoặc trang chưa được cấp quyền gọi extension).' };
+        return { ok: false, code: 'no-bridge', error: 'Trình duyệt này chưa có extension (hoặc trang chưa được cấp quyền gọi extension).' };
     }
     try {
         const res = await sendMessage({ type: 'autoin-ping' });
         return { ok: !!(res && res.ok), id: (res && res.id) || '', at: (res && res.at) || 0 };
     } catch (e) {
-        return { ok: false, error: (e && e.message) || String(e) };
+        return { ok: false, code: (e && e.code) || 'unknown', error: (e && e.message) || String(e) };
     }
 }
 

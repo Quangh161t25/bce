@@ -47,6 +47,7 @@ export default function ChoLayHangTab() {
     const bridgeReady = hasExtensionBridge();
 
     const [bridgeState, setBridgeState] = useState(bridgeReady ? 'checking' : 'missing');
+    const [bridgeInfo, setBridgeInfo] = useState({ code: '', error: '' });
 
     const [status, setStatus] = useState(0);
     const [rows, setRows] = useState([]);
@@ -76,17 +77,28 @@ export default function ChoLayHangTab() {
     }, []);
 
     // Kiểm tra kết nối tới extension (để biết web đã deploy có gọi được background không).
+    const checkBridge = useCallback(async () => {
+        if (!hasExtensionBridge()) {
+            setBridgeState('missing');
+            setBridgeInfo({ code: 'no-bridge', error: '' });
+            return false;
+        }
+        setBridgeState('checking');
+        const r = await pingExtension();
+        if (!mounted.current) return false;
+        setBridgeState(r.ok ? 'ok' : 'error');
+        setBridgeInfo(r.ok ? { code: '', error: '' } : { code: r.code || 'unknown', error: r.error || '' });
+        return !!r.ok;
+    }, []);
+
     useEffect(() => {
-        let alive = true;
         if (!bridgeReady) {
             setBridgeState('missing');
-            return () => { alive = false; };
+            setBridgeInfo({ code: 'no-bridge', error: '' });
+            return;
         }
-        pingExtension().then((r) => {
-            if (alive) setBridgeState(r.ok ? 'ok' : 'error');
-        });
-        return () => { alive = false; };
-    }, [bridgeReady]);
+        checkBridge();
+    }, [bridgeReady, checkBridge]);
 
     useEffect(() => { statusRef.current = status; }, [status]);
     useEffect(() => { autoSecRef.current = autoSec; }, [autoSec]);
@@ -115,8 +127,12 @@ export default function ChoLayHangTab() {
             if (!mounted.current) return;
             const msg = (e && e.message) || String(e);
             setError(msg);
-            if (/kết nối được background|Chưa kết nối được extension|Background không phản hồi/i.test(msg)) {
+            if (e && e.code && e.code !== 'unknown') {
                 setBridgeState('error');
+                setBridgeInfo({ code: e.code, error: msg });
+            } else if (/kết nối được background|Chưa kết nối được extension|Background không phản hồi|Extension chưa cập nhật/i.test(msg)) {
+                setBridgeState('error');
+                setBridgeInfo({ code: 'unknown', error: msg });
             }
         } finally {
             inFlight.current = false;
@@ -408,7 +424,15 @@ export default function ChoLayHangTab() {
                             background: bridgeState === 'ok' ? '#10b981' : bridgeState === 'checking' ? '#94a3b8' : '#ef4444'
                         }}
                     />
-                    Extension {bridgeState === 'ok' ? 'đã kết nối' : bridgeState === 'checking' ? 'đang kiểm tra…' : 'chưa kết nối'}
+                    Extension {bridgeState === 'ok'
+                        ? 'đã kết nối'
+                        : bridgeState === 'checking'
+                            ? 'đang kiểm tra…'
+                            : bridgeInfo.code === 'not-installed'
+                                ? 'chưa cài'
+                                : bridgeInfo.code === 'not-updated'
+                                    ? 'cần reload'
+                                    : 'chưa kết nối'}
                 </span>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
@@ -475,19 +499,60 @@ export default function ChoLayHangTab() {
             )}
 
             {bridgeReady && bridgeState === 'error' && (
-                <div style={noticeStyle('#fffbeb', '#f59e0b', '#92400e')}>
-                    <AlertTriangle size={16} />
-                    <span>
-                        Trang web này chưa gọi được extension.
-                        {' '}Kiểm tra: (1) extension đang bật; (2) tên miền
-                        {' '}<b>{(() => { try { return window.location.origin; } catch (_) { return ''; } })()}</b>
-                        {' '}đã khai báo trong <b>"externally_connectable"</b> của manifest.json;
-                        {' '}(3) đã bấm <b>Reload</b> extension ở chrome://extensions.
+                <div style={{ ...noticeStyle('#fffbeb', '#f59e0b', '#92400e'), alignItems: 'flex-start' }}>
+                    <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span style={{ flexGrow: 1 }}>
+                        {bridgeInfo.code === 'not-installed' && (
+                            <>
+                                Trình duyệt này <b>chưa cài extension</b>. Cách cài: mở <b>chrome://extensions</b>
+                                {' '}→ bật <b>Developer mode</b> (Chế độ dành cho nhà phát triển) → <b>Load unpacked</b>
+                                {' '}→ chọn thư mục <b>D:\tải xuống 2\exten them sp12</b>.
+                            </>
+                        )}
+                        {bridgeInfo.code === 'not-updated' && (
+                            <>
+                                Extension đã cài nhưng <b>chưa cập nhật</b>. Mở <b>chrome://extensions</b>
+                                {' '}→ bấm nút <b>↻</b> (Reload) trên thẻ extension — hoặc <b>thoát hẳn Chrome rồi mở lại</b> —
+                                {' '}sau đó tải lại trang này (F5).
+                            </>
+                        )}
+                        {(bridgeInfo.code === 'unknown' || !bridgeInfo.code) && (
+                            <>
+                                Chưa gọi được extension. Kiểm tra: extension đang bật; tên miền
+                                {' '}<b>{(() => { try { return window.location.origin; } catch (_) { return ''; } })()}</b>
+                                {' '}đã khai báo trong <b>"externally_connectable"</b> của manifest.json; đã bấm <b>Reload</b> extension.
+                            </>
+                        )}
+                        {bridgeInfo.error ? (
+                            <div style={{ marginTop: 4, fontSize: '0.7rem', fontWeight: 500, opacity: 0.85, wordBreak: 'break-word' }}>
+                                Lỗi gốc: <code>{bridgeInfo.error}</code>
+                            </div>
+                        ) : null}
                     </span>
+                    <button
+                        type="button"
+                        onClick={() => { checkBridge().then((ok) => { if (ok) refresh(); }); }}
+                        style={{
+                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            background: '#fff',
+                            color: '#92400e',
+                            border: '1px solid #f59e0b',
+                            borderRadius: '6px',
+                            padding: '4px 10px',
+                            fontWeight: 700,
+                            fontSize: '0.72rem',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Kiểm tra lại
+                    </button>
                 </div>
             )}
 
-            {error && bridgeReady && (
+            {error && bridgeReady && bridgeState === 'ok' && (
                 <div style={noticeStyle('#fef2f2', '#ef4444', '#991b1b')}>
                     <AlertTriangle size={16} />
                     <span>
