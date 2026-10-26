@@ -60,6 +60,7 @@ export const TAB_TITLES = {
     'SP_GIAM_GIA': 'SP GIẢM GIÁ',
     'WEB_SP': 'WEB SP',
     'DH': 'ĐH',
+    'CHO_LAY_HANG': 'CHỜ LẤY HÀNG',
     'QUET_SP': 'QUÉT SP'
 };
 

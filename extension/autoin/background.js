@@ -1243,6 +1243,72 @@ function toRow(c) {
   };
 }
 
+// Dữ liệu gọn cho web (module "Chờ lấy hàng"): chỉ các trường cần hiển thị.
+function cardToWebRow(c, stage) {
+  const p = c.package_card || c.order_card || {};
+  const ext = p.order_ext_info || {};
+  const head = p.card_header || {};
+  const r = toRow(c);
+  const rawTime = ext.order_time || ext.create_time || head.order_time || head.create_time || 0;
+  return {
+    orderSn: r.order_sn,
+    orderId: r.order_id || 0,
+    packageNumber: r.package_number,
+    buyer: r.buyer,
+    items: r.items,
+    total: r.total,
+    status: r.status,
+    tag: r.tag,
+    warn: r.warn,
+    shipBy: r.ship_by,
+    shipByTs: ext.ship_by_date ? ext.ship_by_date * 1000 : 0,
+    carrier: r.carrier,
+    tracking: r.tracking,
+    pickupAddr: r.seller_addr,
+    stage, // 1 = Chờ lấy hàng - Chưa xử lý, 2 = Chờ lấy hàng - Đã xử lý
+    orderTime: rawTime && rawTime < 1e12 ? rawTime * 1000 : rawTime,
+  };
+}
+
+// Xử lý yêu cầu "Chờ lấy hàng" cho web: dùng chung cho trang extension và web đã deploy.
+function handleChoLayHang(msg, reply) {
+  (async () => {
+    try {
+      const stage = msg.status === 1 || msg.status === 2 ? Number(msg.status) : 0;
+      const maxCards = Math.min(Math.max(Number(msg.limit) || 200, 1), 400);
+      const stages = stage ? [stage] : [1, 2];
+      const rows = [];
+      const errors = [];
+      let total = 0;
+      for (const st of stages) {
+        try {
+          const idx = await bgFetchIndex(st);
+          total += idx.list.length;
+          const cards = await bgFetchCards(idx.list.slice(0, maxCards));
+          for (const c of cards) rows.push(cardToWebRow(c, st));
+        } catch (e) {
+          errors.push(`${st === 1 ? "Chưa xử lý" : "Đã xử lý"}: ${e.message || e}`);
+        }
+      }
+      reply({ ok: errors.length === 0, rows, total, at: Date.now(), errors });
+    } catch (e) {
+      reply({ ok: false, error: e.message || String(e), rows: [] });
+    }
+  })();
+  return true;
+}
+
+// Web đã deploy (Vercel/Netlify/tên miền riêng...) gọi vào extension qua
+// chrome.runtime.sendMessage(EXTENSION_ID, ...) — cần khai báo externally_connectable trong manifest.json.
+chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
+  if (!msg || typeof msg !== "object") return;
+  if (msg.type === "autoin-ping") {
+    reply({ ok: true, id: chrome.runtime.id, origin: (sender && sender.origin) || "", at: Date.now() });
+    return true;
+  }
+  if (msg.type === "autoin-cho-lay-hang") return handleChoLayHang(msg, reply);
+});
+
 async function bgFetchIndex(status = 1) {
   let out = [], page = 1;
   for (;;) {
@@ -2295,6 +2361,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       }
     startTelegramPollingLoop();
 })();
+    return true;
+  }
+
+  // ---------- WEB (dist/index.html): DANH SÁCH ĐƠN "CHỜ LẤY HÀNG" ĐỌC TRỰC TIẾP TỪ SHOPEE ----------
+  // Dùng lại đúng đường API của AutoIn (bgFetchIndex + bgFetchCards) nên cần 1 tab banhang.shopee.vn đang mở.
+  // status: 0 = cả Chưa xử lý + Đã xử lý, 1 = Chưa xử lý, 2 = Đã xử lý
+  if (msg.type === "autoin-cho-lay-hang") {
+    return handleChoLayHang(msg, reply);
+  }
+
+  if (msg.type === "autoin-ping") {
+    reply({ ok: true, id: chrome.runtime.id, at: Date.now() });
     return true;
   }
 

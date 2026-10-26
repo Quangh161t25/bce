@@ -51,6 +51,30 @@ npm run serve             # chạy dist/ bằng tools/server.py (cổng 8000)
 
 Trong extension, web mở tại `chrome-extension://<id>/dist/index.html`.
 
+### Tab CHỜ LẤY HÀNG (đọc đơn Shopee trực tiếp)
+
+- Tab **CHỜ LẤY HÀNG** trong sidebar đọc đơn Shopee **thời gian thực**, không qua Google Sheets.
+- Dữ liệu lấy từ đúng đường API của AutoIn: background nhận message `autoin-cho-lay-hang`
+  (`extension/autoin/background.js`) rồi gọi `bgFetchIndex` + `bgFetchCards`
+  (`order_list_tab: 300`, `order_to_ship_status: 1` = Chưa xử lý, `2` = Đã xử lý).
+- Yêu cầu: có 1 tab `https://banhang.shopee.vn/` đang đăng nhập Kênh Người Bán (background gọi API qua tab này).
+- Web chạy được ở **2 nơi**:
+  1. **Trong extension** — `chrome-extension://<id>/dist/index.html` (nút **🌐 Web** ở side panel mở sẵn tab này).
+     Gọi background bằng `chrome.runtime.sendMessage` thường.
+  2. **Web đã deploy** (Vercel/Netlify/Cloudflare Pages/tên miền riêng) — trang web gọi background bằng
+     `chrome.runtime.sendMessage(EXTENSION_ID, …)`; cần khai báo domain trong `externally_connectable`
+     của `manifest.json` rồi **Reload extension**.
+- Deploy: build `npm run build` rồi đưa thư mục `dist/` lên hosting tĩnh. Sau khi deploy:
+  1. Thêm domain vào `externally_connectable.matches` trong `manifest.json` (đã có sẵn `localhost`,
+     `*.vercel.app`, `*.netlify.app`, `*.pages.dev`, `*.github.io`, `*.web.app`, `*.onrender.com`, `*.wameli.vn`).
+  2. Reload extension ở `chrome://extensions`.
+  3. Mở `https://<domain>/?tab=CHO_LAY_HANG` — góc phải thanh công cụ hiện chip
+     **Extension đã kết nối** là đọc được đơn; nếu chip đỏ, banner sẽ chỉ ra domain cần thêm.
+- Đổi ID extension: sửa `EXTENSION_ID` trong `web/src/services/shopeeLiveOrders.js` (hoặc mở web với `?ext=<id>`).
+- Tự động làm mới 30 giây/lần (chọn 15 giây → 5 phút, hoặc Tắt); có tìm kiếm, lọc nhóm trạng thái,
+  sắp xếp theo hạn gửi / tổng tiền, và nút **Kênh Người Bán** để mở tab Shopee.
+- Sửa code web: `npm run build`. Sửa background AutoIn / manifest: chỉ cần Reload extension.
+
 ## Cấu hình Google
 
 Mọi thông tin service account và Spreadsheet ID mặc định nằm ở `shared/google-config.js`.
