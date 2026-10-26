@@ -12,6 +12,7 @@ import { formatMoneyVND } from '../../utils/formatters.js';
 import {
     fetchChoLayHang,
     hasExtensionBridge,
+    isExtensionPage,
     openShopeeSeller,
     pingExtension,
     STAGE_LABELS
@@ -48,6 +49,19 @@ export default function ChoLayHangTab() {
 
     const [bridgeState, setBridgeState] = useState(bridgeReady ? 'checking' : 'missing');
     const [bridgeInfo, setBridgeInfo] = useState({ code: '', error: '', tried: '' });
+
+    // Đang mở web BÊN TRONG extension mà manifest đang chạy chưa có "externally_connectable"
+    // => Chrome đang giữ manifest cũ, web deploy chưa gọi được. Hiện nút cập nhật 1 lần.
+    const manifestStale = useMemo(() => {
+        if (!isExtensionPage()) return false;
+        try {
+            const man = chrome.runtime.getManifest();
+            const matches = (man && man.externally_connectable && man.externally_connectable.matches) || [];
+            return matches.length === 0;
+        } catch (_) {
+            return false;
+        }
+    }, []);
 
     const [status, setStatus] = useState(0);
     const [rows, setRows] = useState([]);
@@ -497,6 +511,33 @@ export default function ChoLayHangTab() {
                         {' '}Hãy cài/bật extension rồi tải lại trang này.
                         {' '}(Cách khác: mở web trong extension — bấm icon extension → nút <b>🌐 Web</b>.)
                     </span>
+                </div>
+            )}
+
+            {manifestStale && (
+                <div style={{ ...noticeStyle('#eff6ff', '#3b82f6', '#1e40af'), alignItems: 'flex-start' }}>
+                    <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span style={{ flexGrow: 1 }}>
+                        Extension đang chạy <b>bản cũ</b> nên <b>web đã deploy (Vercel) chưa gọi được</b>.
+                        {' '}Bấm <b>Cập nhật ngay</b> (chỉ cần 1 lần) → đợi 2 giây → mở lại trang web và bấm <b>Ctrl+Shift+R</b>.
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => { try { chrome.runtime.reload(); } catch (_) { /* ignore */ } }}
+                        style={{
+                            flexShrink: 0,
+                            background: '#2563eb',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '5px 12px',
+                            fontWeight: 700,
+                            fontSize: '0.72rem',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Cập nhật ngay
+                    </button>
                 </div>
             )}
 

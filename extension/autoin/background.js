@@ -38,6 +38,22 @@ chrome.runtime.onStartup.addListener(async () => {
   startTelegramPollingLoop();
 });
 
+// TỰ CẬP NHẬT 1 LẦN: bản extension đang chạy có thể được Chrome nạp từ manifest CŨ
+// (chưa có "externally_connectable"), nên web đã deploy (Vercel/GitHub Pages...) không gọi được.
+// Gặp trường hợp đó thì tự reload để Chrome đọc lại manifest mới — chỉ làm 1 lần cho mỗi version.
+(async () => {
+  try {
+    const man = chrome.runtime.getManifest();
+    const matches = (man && man.externally_connectable && man.externally_connectable.matches) || [];
+    if (matches.length) return;                    // manifest đã mới -> không cần làm gì
+    const KEY = "autoin-web-bridge-reload";
+    const st = await chrome.storage.local.get([KEY]).catch(() => ({}));
+    if (st && st[KEY] === man.version) return;     // đã thử reload cho version này rồi
+    await chrome.storage.local.set({ [KEY]: man.version }).catch(() => {});
+    chrome.runtime.reload();                       // Chrome đọc lại manifest.json từ đĩa
+  } catch (_) { /* bỏ qua */ }
+})();
+
 // Danh sách API Shopee cho phép
 const ALLOW = [
   "/api/v3/order/search_order_list_index",
