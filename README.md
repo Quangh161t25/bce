@@ -64,12 +64,15 @@ Trong extension, web mở tại `chrome-extension://<id>/dist/index.html`.
   2. **Web đã deploy** (Vercel/Netlify/Cloudflare Pages/tên miền riêng) — trang web gọi background bằng
      `chrome.runtime.sendMessage(EXTENSION_ID, …)`; cần khai báo domain trong `externally_connectable`
      của `manifest.json` rồi **Reload extension**.
-- Deploy: build `npm run build` rồi đưa thư mục `dist/` lên hosting tĩnh. Sau khi deploy:
-  1. Thêm domain vào `externally_connectable.matches` trong `manifest.json` (đã có sẵn `localhost`,
-     `*.vercel.app`, `*.netlify.app`, `*.pages.dev`, `*.github.io`, `*.web.app`, `*.onrender.com`, `*.wameli.vn`).
-  2. Reload extension ở `chrome://extensions`.
-  3. Mở `https://<domain>/?tab=CHO_LAY_HANG` — góc phải thanh công cụ hiện chip
-     **Extension đã kết nối** là đọc được đơn; nếu chip đỏ, banner sẽ chỉ ra domain cần thêm.
+- Deploy: repo có sẵn `vercel.json` nên **Vercel tự build** (`npm ci` → `npm run build` → `dist`).
+  Trên Vercel: **Add New → Project → Import Git Repository** → chọn repo này → **Deploy**.
+  Sau khi deploy:
+  1. Domain `*.vercel.app` đã có sẵn trong `externally_connectable.matches` của `manifest.json`.
+     Dùng tên miền riêng thì thêm `"https://domain-cua-ban/*"` vào đó.
+  2. Reload extension ở `chrome://extensions` (chỉ cần 1 lần sau khi đổi manifest).
+  3. Mở `https://<domain>/?tab=CHO_LAY_HANG` — chip **Extension đã kết nối** là đọc được đơn;
+     nếu chip đỏ, banner ghi rõ "chưa cài" / "cần reload" kèm lỗi gốc.
+  - GitHub Pages cũng đã bật sẵn qua `.github/workflows/pages.yml` (deploy `dist/` khi push `main`).
 - Đổi ID extension: sửa `EXTENSION_ID` trong `web/src/services/shopeeLiveOrders.js` (hoặc mở web với `?ext=<id>`).
 - Tự động làm mới 30 giây/lần (chọn 15 giây → 5 phút, hoặc Tắt); có tìm kiếm, lọc nhóm trạng thái,
   sắp xếp theo hạn gửi / tổng tiền, và nút **Kênh Người Bán** để mở tab Shopee.
