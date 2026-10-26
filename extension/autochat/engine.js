@@ -1,7 +1,13 @@
 // Auto Chat: bộ máy chạy ngầm trong background (importScripts sau autochat/shared.js).
 // Mỗi lượt (alarm 30 giây): gọi API webchat bằng token phiên chat → cập nhật danh sách khách chờ →
 // ở chế độ "Tự nhắn" thì gửi tin qua API (POST /webchat/api/v1.2/messages) cho khách đang là người nhắn cuối.
-// Không cần mở tab webchat, không click giao diện. API chỉ cần token, không cần cookie.
+// Không click giao diện. API chỉ cần token, không cần cookie.
+//
+// Đường gọi API (đã thử thật: gọi từ trang banhang.shopee.vn thì chạy):
+//   1. "tab": chạy fetch bên trong một tab banhang.shopee.vn đang mở (chrome.scripting, không reload, không click)
+//      → request mang đúng nguồn của Shopee.
+//   2. "trực tiếp": không có tab nào thì background tự gọi; luật declarativeNetRequest trong autochat/background.js
+//      gắn Origin/Referer banhang.shopee.vn cho request này.
 /* global AUTOCHAT */
 /* exported AUTOCHAT_ENGINE */
 var AUTOCHAT_ENGINE = (function () {
@@ -17,22 +23,138 @@ var AUTOCHAT_ENGINE = (function () {
   // ---------- API ----------
   class SessionError extends Error {}
 
+  // Chạy trong tab Shopee, môi trường của chính trang (world MAIN): fetch mang nguồn banhang.shopee.vn
+  // và đi qua lớp bảo mật của Shopee giống hệt khi bạn tự bấm gửi trên webchat.
+  // Token phiên chat bị Shopee đổi liên tục (webchat / khung chat nhỏ tự đăng nhập lại và huỷ token cũ),
+  // nên luôn dùng token MỚI NHẤT trong localStorage của tab ngay lúc gọi; bị 401 thì đợi trang
+  // lấy token mới rồi thử lại 1 lần. Trả về token đã dùng để background cập nhật bản lưu.
+  async function fetchInPage(url, init) {
+    const readToken = () => {
+      try {
+        return (JSON.parse(localStorage.getItem('chat-session') || 'null') || {}).token || '';
+      } catch (e) {
+        return '';
+      }
+    };
+    const call = async (token) => {
+      if (token) init.headers.Authorization = 'Bearer ' + token;
+      // Cùng nguồn banhang.shopee.vn nên gửi kèm cookie phiên của trang (giống lúc webchat tự gửi).
+      // Thiếu cookie thì Shopee trả 401 dù token còn hạn.
+      init.credentials = 'include';
+      const r = await fetch(url, init);
+      return { status: r.status, text: await r.text(), token };
+    };
+    const first = readToken();
+    let res = await call(first);
+    if (res.status === 401) {
+      await new Promise((ok) => setTimeout(ok, 2500));
+      const fresh = readToken();
+      if (fresh && fresh !== res.token) res = await call(fresh);
+    }
+    // Chẩn đoán (không lộ token): trang nào, có token trong trang không, đuôi token đã gửi
+    try {
+      const sent = (init.headers.Authorization || '').slice(-4);
+      res.diag = `${location.pathname}${first ? '' : ', trang không có chat-session'}, token …${sent}`;
+    } catch (e) {
+      // chẩn đoán không được làm hỏng kết quả
+    }
+    return res;
+  }
+
+  // Đọc phiên chat (token, shop) hiện tại từ tab Shopee; khác bản lưu thì cập nhật.
+  function readSessionInPage() {
+    try {
+      const s = JSON.parse(localStorage.getItem('chat-session') || 'null');
+      return s && s.token && s.user && s.shop ? { token: s.token, userId: s.user.id, shopId: s.shop.id, shopName: s.shop.name } : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function syncSessionFromTab() {
+    for (const t of await shopeeTabs()) {
+      try {
+        const [r] = await chrome.scripting.executeScript({ target: { tabId: t.id }, func: readSessionInPage });
+        if (r && r.result) return saveSessionIfChanged(r.result);
+      } catch (e) {
+        // thử tab khác
+      }
+    }
+    return null;
+  }
+
+  async function saveSessionIfChanged(next) {
+    const cur = await AUTOCHAT.getSession();
+    if (cur && cur.token === next.token && cur.shopId === next.shopId) return cur;
+    const s = Object.assign({}, cur || {}, next, { at: Date.now() });
+    await chrome.storage.local.set({ [AUTOCHAT.K.session]: s });
+    return s;
+  }
+
+  async function shopeeTabs() {
+    const tabs = await chrome.tabs.query({ url: 'https://banhang.shopee.vn/*' });
+    // Ưu tiên tab webchat, bỏ tab đang tải dở / đã bị Chrome tạm ngủ
+    return tabs
+      .filter((t) => t.status === 'complete' && !t.discarded)
+      .sort((a, b) => (/webchat/.test(b.url) ? 1 : 0) - (/webchat/.test(a.url) ? 1 : 0));
+  }
+
+  async function transport(url, init) {
+    const tabs = await shopeeTabs();
+    const skipped = [];
+    for (const t of tabs) {
+      try {
+        // world MAIN: dùng fetch của chính trang, đã được thư viện bảo mật Shopee bọc để tự gắn header
+        // chống bot (x-sap-sec, af-ac-enc-dat...). Thiếu các header này thì lệnh gửi tin bị 401.
+        const [r] = await chrome.scripting.executeScript({ target: { tabId: t.id }, world: 'MAIN', func: fetchInPage, args: [url, init] });
+        if (r && r.result) return Object.assign(r.result, { via: 'tab' });
+        skipped.push('tab ' + t.id + ' không trả kết quả');
+      } catch (e) {
+        // tab không chạy được script (trang lỗi, đang chuyển trang...): thử tab khác
+        skipped.push('tab ' + t.id + ': ' + String(e && e.message || e).slice(0, 60));
+      }
+      // Gửi tin (POST) có thể ĐÃ tới Shopee dù script lỗi giữa chừng: không thử đường khác, tránh khách nhận trùng.
+      if (init.method === 'POST') throw new Error('Không chắc tin đã gửi (' + skipped[skipped.length - 1] + '), kiểm tra hội thoại');
+    }
+    const r = await fetch(url, init);
+    const diag = `${tabs.length} tab Shopee${skipped.length ? ' (' + skipped.join('; ') + ')' : ''}, token …${(init.headers.Authorization || '').slice(-4)}`;
+    return { status: r.status, text: await r.text(), via: 'trực tiếp', diag };
+  }
+
   async function api(session, path, params, body) {
     const u = new URL(API + path);
     Object.entries(params || {}).forEach(([k, v]) => u.searchParams.set(k, v));
     const init = {
       method: body ? 'POST' : 'GET',
-      credentials: 'omit',
+      credentials: 'include', // API webchat cần cookie phiên banhang.shopee.vn, không chỉ token
       headers: { Authorization: 'Bearer ' + session.token, Accept: 'application/json, text/plain, */*' }
     };
     if (body) {
       init.headers['Content-Type'] = 'application/json';
       init.body = JSON.stringify(body);
     }
-    const r = await fetch(u.toString(), init);
-    if (r.status === 401 || r.status === 403) throw new SessionError('UNAUTHORIZED');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
+    const res = await transport(u.toString(), init);
+    if (res.via === 'tab' && res.token && res.token !== session.token && res.status < 300) {
+      session.token = res.token; // tab vừa dùng token mới hơn: các lần gọi sau trong lượt này dùng luôn
+      await saveSessionIfChanged({ token: res.token, userId: session.userId, shopId: session.shopId, shopName: session.shopName });
+    }
+    let json = null;
+    try {
+      json = JSON.parse(res.text);
+    } catch (e) {
+      // không phải JSON
+    }
+    if (res.status === 401 || res.status === 403) {
+      const code = json && (json.error_code || json.error || json.message);
+      const what = body ? 'gửi tin' : 'đọc ' + path.replace(/\/\d+/g, '/…');
+      const err = new SessionError(`${what}: HTTP ${res.status}, gọi ${res.via}${code ? ', ' + String(code).slice(0, 60) : ''}${res.diag ? ' | ' + res.diag : ''}`);
+      err.via = res.via;
+      err.isSend = !!body;
+      throw err;
+    }
+    if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status} (gọi ${res.via})`);
+    if (json === null) throw new Error(`Shopee trả về dữ liệu lạ (gọi ${res.via})`);
+    return json;
   }
 
   const listConversations = (s) =>
@@ -187,7 +309,9 @@ var AUTOCHAT_ENGINE = (function () {
       const m = sorted[i];
       const text = msgText(m.type, m.content);
       if (m.from_id === sellerId) {
-        newestSeen = true;
+        // Tin tự động của Shopee (ngoài giờ, auto reply) hoặc câu chào do Auto Chat gửi KHÔNG phải
+        // nhân viên trả lời thật: bỏ qua nhưng cũng không đánh dấu "shop là người nhắn cuối",
+        // để khách vẫn được gửi câu nhắn tiếp.
         if (isOurText(text, st) || isAuto(m.status)) {
           res.acknowledged = true;
           continue;
@@ -225,7 +349,8 @@ var AUTOCHAT_ENGINE = (function () {
     return AUTOCHAT.waitingList(q).filter((e) => {
       const g = e.greet || (e.greet = {});
       if (!e.lastIsBuyer) return false; // shop đang là người nhắn cuối
-      if (e.lastBuyerAt < st.autoSince || now - e.lastBuyerAt > st.greetMaxAgeMin * 60000) return false;
+      if (!st.replyBacklog && e.lastBuyerAt < st.autoSince) return false;
+      if (now - e.lastBuyerAt > st.greetMaxAgeMin * 60000) return false;
       if (g.failMsgId === e.lastMsgId && (g.tries || 0) >= 3) return false;
       if (!greetedThisRound(e)) return true;
       return now - e.lastBuyerAt >= st.followDelaySec * 1000 &&
@@ -236,6 +361,7 @@ var AUTOCHAT_ENGINE = (function () {
   async function sendTo(s, e, st) {
     // Đọc lại tin nhắn ngay trước khi gửi: nếu Shopee vừa tự trả lời (vd tin ngoài giờ)
     // hoặc nhân viên vừa trả lời thì shop đã là người nhắn cuối → không gửi.
+    e.greet = e.greet || {};
     const fresh = applyMessages(e, await listMessages(s, e.convId), s.userId, st);
     if (!fresh.lastIsBuyer) return false;
     const isFollow = greetedThisRound(e);
@@ -266,7 +392,8 @@ var AUTOCHAT_ENGINE = (function () {
     try {
       const st = await AUTOCHAT.getSettings();
       if (st.mode === 'off') return;
-      const s = await AUTOCHAT.getSession();
+      // Có tab Kênh Người Bán thì lấy phiên mới nhất từ đó (token đổi liên tục, có thể vừa đổi shop).
+      const s = (await syncSessionFromTab()) || (await AUTOCHAT.getSession());
       if (!s || !s.token) {
         await AUTOCHAT.saveMeta({ lastPollAt: Date.now(), lastError: 'Chưa có phiên Shopee: mở Kênh Người Bán (banhang.shopee.vn) 1 lần.' });
         return;
@@ -276,6 +403,11 @@ var AUTOCHAT_ENGINE = (function () {
       // Tự động xóa lỗi cũ do bug randomUUID gây ra để khách được gửi lại ngay
       for (const e of Object.values(q)) {
         if (e.greet && e.greet.error && e.greet.error.includes('randomUUID')) {
+          delete e.greet.error;
+          delete e.greet.failMsgId;
+          e.greet.tries = 0;
+        }
+        if (e.greet && e.greet.error && /UNAUTHORIZED|Phiên Shopee/i.test(e.greet.error)) {
           delete e.greet.error;
           delete e.greet.failMsgId;
           e.greet.tries = 0;
@@ -311,14 +443,21 @@ var AUTOCHAT_ENGINE = (function () {
       await AUTOCHAT.saveQueue(q);
       await AUTOCHAT.saveMeta({ lastPollAt: Date.now(), lastError: '', lastSent: sent });
     } catch (err) {
-      const msg = err instanceof SessionError
-        ? 'Phiên Shopee hết hạn: mở Kênh Người Bán (banhang.shopee.vn) để cập nhật lại.'
-        : 'Lỗi quét: ' + err.message;
+      let msg = 'Lỗi quét: ' + err.message;
+      if (err instanceof SessionError) {
+        if (err.via !== 'tab') {
+          msg = `Shopee từ chối khi gọi ngầm (${err.message}): mở 1 tab Kênh Người Bán bất kỳ, Auto Chat sẽ gửi qua tab đó.`;
+        } else if (err.isSend) {
+          msg = `Shopee từ chối lệnh gửi tin (${err.message}): thử F5 tab Kênh Người Bán rồi đợi lượt quét sau.`;
+        } else {
+          msg = `Shopee từ chối phiên chat (${err.message}): đăng nhập lại Kênh Người Bán rồi bấm "Lấy lại phiên".`;
+        }
+      }
       await AUTOCHAT.saveMeta({ lastPollAt: Date.now(), lastError: msg });
     } finally {
       running = false;
     }
   }
 
-  return { tick, applyMessages, pickTargets };
+  return { tick, applyMessages, pickTargets, sendTo, syncSessionFromTab };
 })();

@@ -42,6 +42,10 @@
   <section id="settings" class="settings" hidden>
     <div class="lbl">Câu chào (tin đầu tiên khi khách nhắn):</div>
     <textarea id="s-text" rows="3"></textarea>
+    <label class="row" style="margin-bottom:8px;font-weight:600;color:#1e293b;" title="Bật tùy chọn này để khi bật Tự nhắn, hệ thống sẽ tự trả lời cả những khách đang chờ sẵn trong danh sách (thay vì chỉ nhắn khách mới gửi sau khi bật).">
+      <input type="checkbox" id="s-backlog" style="cursor:pointer;margin:0 4px 0 0;">
+      <span>Tự nhắn cả khách đang chờ trong danh sách khi bật</span>
+    </label>
     <div class="lbl">Câu nhắn tiếp (khách nhắn thêm sau câu chào / sau tin tự động của Shopee):</div>
     <textarea id="s-follow" rows="3"></textarea>
     <label class="row" title="Để nhân viên kịp trả lời tay. Hết số giây này mà khách vẫn là người nhắn cuối thì Auto Chat gửi câu nhắn tiếp.">Khách nhắn tiếp: đợi <input type="number" id="s-fdelay" min="0" max="3600"> giây chưa ai trả lời mới gửi câu nhắn tiếp</label>
