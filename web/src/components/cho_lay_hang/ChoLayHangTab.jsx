@@ -47,7 +47,7 @@ export default function ChoLayHangTab() {
     const bridgeReady = hasExtensionBridge();
 
     const [bridgeState, setBridgeState] = useState(bridgeReady ? 'checking' : 'missing');
-    const [bridgeInfo, setBridgeInfo] = useState({ code: '', error: '' });
+    const [bridgeInfo, setBridgeInfo] = useState({ code: '', error: '', tried: '' });
 
     const [status, setStatus] = useState(0);
     const [rows, setRows] = useState([]);
@@ -87,7 +87,9 @@ export default function ChoLayHangTab() {
         const r = await pingExtension();
         if (!mounted.current) return false;
         setBridgeState(r.ok ? 'ok' : 'error');
-        setBridgeInfo(r.ok ? { code: '', error: '' } : { code: r.code || 'unknown', error: r.error || '' });
+        setBridgeInfo(r.ok
+            ? { code: '', error: '', tried: '' }
+            : { code: r.code || 'unknown', error: r.error || '', tried: r.tried || '' });
         return !!r.ok;
     }, []);
 
@@ -129,10 +131,10 @@ export default function ChoLayHangTab() {
             setError(msg);
             if (e && e.code && e.code !== 'unknown') {
                 setBridgeState('error');
-                setBridgeInfo({ code: e.code, error: msg });
+                setBridgeInfo({ code: e.code, error: msg, tried: (e && e.tried) || '' });
             } else if (/kết nối được background|Chưa kết nối được extension|Background không phản hồi|Extension chưa cập nhật/i.test(msg)) {
                 setBridgeState('error');
-                setBridgeInfo({ code: 'unknown', error: msg });
+                setBridgeInfo({ code: 'unknown', error: msg, tried: (e && e.tried) || '' });
             }
         } finally {
             inFlight.current = false;
@@ -506,7 +508,7 @@ export default function ChoLayHangTab() {
                             <>
                                 Trình duyệt này <b>chưa cài extension</b>. Cách cài: mở <b>chrome://extensions</b>
                                 {' '}→ bật <b>Developer mode</b> (Chế độ dành cho nhà phát triển) → <b>Load unpacked</b>
-                                {' '}→ chọn thư mục <b>D:\tải xuống 2\exten them sp12</b>.
+                                {' '}→ chọn thư mục extension (ví dụ <b>D:\tải xuống 2\exten them sp12</b>).
                             </>
                         )}
                         {bridgeInfo.code === 'not-updated' && (
@@ -523,9 +525,15 @@ export default function ChoLayHangTab() {
                                 {' '}đã khai báo trong <b>"externally_connectable"</b> của manifest.json; đã bấm <b>Reload</b> extension.
                             </>
                         )}
+                        <div style={{ marginTop: 6, fontSize: '0.72rem', fontWeight: 500 }}>
+                            Cách khác, luôn dùng được: bấm <b>icon extension</b> trên thanh công cụ → bấm nút <b>🌐 Web</b>.
+                        </div>
                         {bridgeInfo.error ? (
                             <div style={{ marginTop: 4, fontSize: '0.7rem', fontWeight: 500, opacity: 0.85, wordBreak: 'break-word' }}>
                                 Lỗi gốc: <code>{bridgeInfo.error}</code>
+                                {bridgeInfo.tried ? (
+                                    <div style={{ marginTop: 2 }}>Đã thử: <code>{bridgeInfo.tried}</code></div>
+                                ) : null}
                             </div>
                         ) : null}
                     </span>
