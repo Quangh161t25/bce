@@ -373,7 +373,7 @@ function orderRows(o) {
   const rs = `rowspan="${items.length}"`;
   return items.map((it, i) => {
     const itemCells = `
-      <td data-col="col_product_name"><div class="prod">${it.image ? `<img src="${esc(it.image)}" loading="lazy">` : ''}<span>${esc(it.name)}${copyBtn(it.name)}</span></div></td>
+      <td data-col="col_product_name">${esc(it.name || '(chưa có tên sản phẩm)')}${copyBtn(it.name)}</td>
       <td data-col="col_variation">${esc(it.model)}${copyBtn(it.model)}</td>
       <td class="sku" data-col="col_item_sku">${esc(it.itemSku)}${copyBtn(it.itemSku)}</td>
       <td class="sku" data-col="col_model_sku">${esc(it.modelSku)}${copyBtn(it.modelSku)}</td>
@@ -1019,7 +1019,10 @@ async function initSavedOrders() {
     const list = await getAllOrders();
     if (list && list.length) {
       list.sort((a, b) => (b.createTime || 0) - (a.createTime || 0));
-      state.all = list;
+      // Đọc lại tên từ dữ liệu gốc để sửa cả các đơn đã lưu bằng parser cũ.
+      state.all = list.map((o) => o.raw
+        ? { ...o, items: parseOrder(o.raw, o.detail || null).items }
+        : o);
       updateSavedCount();
       render();
       const p = $('#progress');

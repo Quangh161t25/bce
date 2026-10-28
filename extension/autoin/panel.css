@@ -33,6 +33,24 @@ body { margin: 0; background: #f8fafc; font: 12px Arial, sans-serif; color: #1e2
 
 .tc-sum { padding: 3px 8px; font-size: 11px; color: #64748b; }
 .tc-body { overflow: auto; flex: 1; padding: 0 8px 8px; }
+.tc-body { min-height: 0; min-width: 0; }
+.tc-table-wrap { overflow: auto; max-width: 100%; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; margin-bottom: 8px; }
+.tc-order-table { width: 100%; min-width: 1420px; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.tc-order-table th, .tc-order-table td { padding: 9px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid #e2e8f0; line-height: 1.5; }
+.tc-order-table th { background: #f8fafc; color: #334155; font-weight: 600; white-space: nowrap; }
+.tc-order-table tr:last-child td { border-bottom: 0; }
+.tc-order-table td { background: #fff; }
+.tc-order-table tr.warn td { background: #fff7f5; }
+.tc-order-table tr.sel td { background: #eff6ff; }
+.tc-order-table tr:hover td { background: #f8fafc; }
+.tc-order-table .tc-check { position: sticky; left: 0; width: 34px; min-width: 34px; z-index: 2; text-align: center; }
+.tc-order-table .tc-order { position: sticky; left: 34px; min-width: 155px; z-index: 2; box-shadow: 2px 0 3px #0000000a; }
+.tc-order-table a { color: #334155; font-weight: 700; text-decoration: none; }
+.tc-order-table a:hover { color: #ee4d2d; }
+.tc-order-table .tc-product { min-width: 260px; max-width: 340px; overflow-wrap: anywhere; }
+.tc-order-table .tc-money { text-align: right; white-space: nowrap; font-weight: 700; }
+.tc-order-table .tc-qty { text-align: center; }
+.tc-order-table input { accent-color: #ee4d2d; cursor: pointer; }
 .tc-group { margin: 5px 0 3px; font-weight: 700; color: #1e293b; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
 .tc-group small { font-weight: 400; color: #64748b; font-size: 11px; }
 
@@ -75,3 +93,18 @@ body { margin: 0; background: #f8fafc; font: 12px Arial, sans-serif; color: #1e2
 .tc-stat-card.orange { background: #fffbeb; border-color: #fde68a; } .tc-stat-card.orange .val { color: #d97706; }
 .tc-stat-card.red { background: #fef2f2; border-color: #fecaca; } .tc-stat-card.red .val { color: #dc2626; }
 .tc-toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: #1e293b; color: #fff; padding: 5px 12px; border-radius: 14px; font-size: 11px; z-index: 20; box-shadow: 0 3px 8px rgba(0,0,0,.25); }
+.tc-options, .tc-log-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; }
+.tc-options summary, .tc-log-panel summary { padding: 7px 9px; color: #475569; cursor: pointer; font-size: 11px; font-weight: 600; }
+.tc-options[open] summary, .tc-log-panel[open] summary { border-bottom: 1px solid #e2e8f0; }
+.tc-options .tc-tools-row { padding: 7px 9px; }
+.tc-tools-row.sub > div { flex-wrap: wrap; justify-content: flex-start; margin-left: 0 !important; }
+.tc-log-panel { margin: 0 8px 6px; flex-shrink: 0; }
+.tc-tools > .tc-tools-row:first-child .tc-btn { padding: 7px 12px; font-size: 12px; border-radius: 6px; }
+.tc-tools > .tc-tools-row:first-child { gap: 6px; }
+.tc-tools { padding: 8px; gap: 7px; }
+.tc-secondary .tc-btn { padding: 5px 7px; }
+.tc-tabs { gap: 6px; padding: 8px; }
+.tc-pill { border-radius: 6px; padding: 6px 9px; }
+.tc-order-table .tc-model-sku { color: #ee4d2d; min-width: 180px; overflow-wrap: anywhere; }
+.tc-product-content { display: flex; align-items: flex-start; gap: 8px; }
+.tc-product-image { width: 40px; height: 40px; flex: 0 0 40px; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 5px; background: #fff; }

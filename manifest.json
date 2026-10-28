@@ -23,7 +23,8 @@
     "contextMenus",
     "cookies",
     "notifications",
-    "offscreen"
+    "offscreen",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -33,6 +34,20 @@
     "https://gemini.google.com/*",
     "https://chatgpt.com/*"
   ],
+  "externally_connectable": {
+    "matches": [
+      "http://localhost/*",
+      "http://127.0.0.1/*",
+      "https://*.vercel.app/*",
+      "https://*.netlify.app/*",
+      "https://*.pages.dev/*",
+      "https://*.github.io/*",
+      "https://*.web.app/*",
+      "https://*.firebaseapp.com/*",
+      "https://*.onrender.com/*",
+      "https://*.wameli.vn/*"
+    ]
+  },
   "action": {
     "default_title": "Shopee Quản Lý SP",
     "default_icon": {
@@ -88,6 +103,15 @@
       ],
       "js": [
         "extension/autochat/token.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://banhang.shopee.vn/*"
+      ],
+      "js": [
+        "extension/roas-that/roas-that.js"
       ],
       "run_at": "document_idle"
     },

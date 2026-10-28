@@ -17,6 +17,7 @@ var AUTOCHAT = (function () {
 
   const DEFAULT_SETTINGS = {
     mode: 'off',
+    replyBacklog: true, // tự nhắn cả khách đang chờ từ trước khi bật
     autoSince: 0, // thời điểm bật "Tự nhắn": chỉ nhắn khách nhắn SAU lúc này, không nhắn khách tồn đọng cũ
     greetText: 'Dạ shop chào anh/chị ạ! Shop đã nhận được tin nhắn, nhân viên sẽ trả lời mình ngay trong ít phút nữa ạ!',
     // Khách nhắn tiếp sau câu chào (hoặc sau tin tự động của Shopee) → gửi câu này để shop luôn là người nhắn cuối.

@@ -4,9 +4,10 @@
 // Bọc trong IIFE để tên biến/hàm không đụng với các phần khác của background chính.
 // Side panel do extension chính quản lý (tab "AutoIn" nhúng extension/autoin/panel.html).
 
-importScripts("autoin/xlsx.js");
+importScripts("autoin/xlsx.js", "autoin/sku.js", "../shared/order-sheet.js");
 
 (() => {
+const { variationSku, skuPair, fillSkusFromSheet } = self.AutoInSku;
 const ICON_URL = chrome.runtime.getURL("extension/autoin/icon.png");
 
 const DEFAULT_TELE_TOKEN = "7328548423:AAEaMToHm1IYWJ28_u8WrZ9fu8qO2QkbZ9Y";
@@ -37,6 +38,22 @@ chrome.runtime.onStartup.addListener(async () => {
   initAlarms();
   startTelegramPollingLoop();
 });
+
+// TỰ CẬP NHẬT 1 LẦN: bản extension đang chạy có thể được Chrome nạp từ manifest CŨ
+// (chưa có "externally_connectable"), nên web đã deploy (Vercel/GitHub Pages...) không gọi được.
+// Gặp trường hợp đó thì tự reload để Chrome đọc lại manifest mới — chỉ làm 1 lần cho mỗi version.
+(async () => {
+  try {
+    const man = chrome.runtime.getManifest();
+    const matches = (man && man.externally_connectable && man.externally_connectable.matches) || [];
+    if (matches.length) return;                    // manifest đã mới -> không cần làm gì
+    const KEY = "autoin-web-bridge-reload";
+    const st = await chrome.storage.local.get([KEY]).catch(() => ({}));
+    if (st && st[KEY] === man.version) return;     // đã thử reload cho version này rồi
+    await chrome.storage.local.set({ [KEY]: man.version }).catch(() => {});
+    chrome.runtime.reload();                       // Chrome đọc lại manifest.json từ đĩa
+  } catch (_) { /* bỏ qua */ }
+})();
 
 // Danh sách API Shopee cho phép
 const ALLOW = [
@@ -319,44 +336,10 @@ async function handleUnshippedOrdersQuery(chatId) {
     const choXuLyCards = (await bgFetchCards(choXuLyIdx.list.slice(0, 15))).map(toRow);
     const daXuLyCards = (await bgFetchCards(daXuLyIdx.list.slice(0, 15))).map(toRow);
 
-    const numEmojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
-
-    let msg = `📦 <b>DANH SÁCH ĐƠN CHƯA ĐI (${totalUnshipped} đơn)</b>\n` +
-      `⏳ Chưa xử lý: <b>${choXuLyIdx.list.length}</b>  |  🚚 Chờ bưu tá: <b>${daXuLyIdx.list.length}</b>\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n\n`;
-
-    // 1. Nhóm Chưa xử lý
-    if (choXuLyCards.length > 0) {
-      msg += `⏳ <b>CHƯA XỬ LÝ (${choXuLyIdx.list.length} đơn):</b>\n`;
-      choXuLyCards.forEach((r, idx) => {
-        const badge = numEmojis[idx] || (idx + 1) + ".";
-        const warnIcon = r.warn ? " ⚠️ <b>QUÁ HẠN</b>" : "";
-        msg += `${badge} <code>${teleEsc(r.order_sn)}</code> (${teleEsc(r.carrier || "Shopee")})${warnIcon}\n`;
-        msg += `   ▫️ ${teleEsc(formatShortItems(r.items))}\n`;
-      });
-      if (choXuLyIdx.list.length > 15) {
-        msg += `   <i>... còn ${choXuLyIdx.list.length - 15} đơn khác</i>\n`;
-      }
-      msg += `\n`;
-    }
-
-    // 2. Nhóm Đã xử lý (chờ bưu tá qua lấy)
-    if (daXuLyCards.length > 0) {
-      msg += `🚚 <b>CHỜ BƯU TÁ LẤY (${daXuLyIdx.list.length} đơn):</b>\n`;
-      daXuLyCards.forEach((r, idx) => {
-        const badge = numEmojis[idx] || (idx + 1) + ".";
-        const tn = r.tracking ? `<code>${teleEsc(r.tracking)}</code>` : "<i>chưa có VĐ</i>";
-        msg += `${badge} <code>${teleEsc(r.order_sn)}</code> | VĐ: ${tn}\n`;
-        msg += `   ▫️ ${teleEsc(formatShortItems(r.items))}\n`;
-      });
-      if (daXuLyIdx.list.length > 15) {
-        msg += `   <i>... còn ${daXuLyIdx.list.length - 15} đơn khác</i>\n`;
-      }
-      msg += `\n`;
-    }
-
-    msg += `━━━━━━━━━━━━━━━━━━━━\n` +
-      `👉 <i>Bấm nút bên dưới để tự in & nạp đơn lên Wameli:</i>`;
+    const store = await chrome.storage.local.get(["tcdd-shop-code", "maGian", "dhHoanTextValue"]);
+    const shopCode = String(store["tcdd-shop-code"] || store.maGian || store.dhHoanTextValue || "").trim().toUpperCase();
+    await resolveTelegramSkus([...choXuLyCards, ...daXuLyCards], shopCode);
+    const msg = formatUnshippedTelegram(choXuLyCards, daXuLyCards, shopCode, choXuLyIdx.list.length, daXuLyIdx.list.length);
 
     // Tạo các nút Inline Keyboard
     const inlineButtons = [];
@@ -727,6 +710,52 @@ async function updateDayStats(date, updater) {
   chrome.runtime.sendMessage({ type: "tcdd-stats-updated", date }).catch(() => {});
 }
 
+async function resolveTelegramSkus(fresh, shopCode) {
+  for (const r of fresh) {
+    if (!(r.itemRows || []).some((it) => !it.modelSku) || !r.order_id) continue;
+    try {
+      const detail = await bgApi("/api/v3/order/get_one_order", null, "GET", `&order_id=${encodeURIComponent(r.order_id)}`);
+      for (const it of r.itemRows) {
+        if (it.modelSku) continue;
+        const matches = (detail.order_items || []).filter((d) => {
+          const id = d.item_id || d.itemid || d.product?.item_id;
+          const modelId = d.model_id || d.modelid || d.item_model?.model_id;
+          return (it.itemId && it.modelId && String(id) === String(it.itemId) && String(modelId) === String(it.modelId))
+            || skuPair(d.product?.name || d.item_name || d.name, d.item_model?.name || d.model_name || "") === skuPair(it.name, it.model);
+        });
+        const skus = new Set(matches.map((d) => String(d.item_model?.sku || d.model_sku || d.variation_sku || d.sku || "").trim()).filter(Boolean));
+        if (skus.size === 1) it.modelSku = [...skus][0];
+      }
+    } catch (e) { console.warn("Không đọc được SKU chi tiết đơn", r.order_sn, e.message); }
+  }
+  if (!fresh.some((r) => r.itemRows.some((it) => !it.modelSku))) return;
+  try {
+    const [token, sheetId] = await Promise.all([getGoogleAccessToken(), getSpreadsheetId()]);
+    const values = await fetchSheetValues("SP_SHOPEE!A:AZ", token, 30000, sheetId);
+    fillSkusFromSheet(fresh, values || [], shopCode);
+  } catch (e) { bgLog(`Không tra được SKU từ SP_SHOPEE: ${teleEsc(e.message)}`); }
+}
+
+function formatTelegramOrderLines(r) {
+  const products = (r.itemRows || []).map((it) => `${teleEsc(it.name)}\nSKU phân loại: <code>${teleEsc(it.modelSku || "Chưa tìm thấy SKU")}</code>`).join("\n");
+  return `Mã đơn: <code>${teleEsc(r.order_sn)}</code>\n${products || "Chưa có thông tin sản phẩm"}`;
+}
+
+function formatOrderTelegram(r, shopCode) {
+  return `📦 <b>Gian ${teleEsc(shopCode || "Chưa đặt mã gian")}</b>\n\n${formatTelegramOrderLines(r)}`;
+}
+
+function formatUnshippedTelegram(pending, processed, shopCode, pendingCount, processedCount) {
+  const blocks = [`📦 <b>Gian ${teleEsc(shopCode || "Chưa đặt mã gian")}</b>`];
+  for (const [list, count, label] of [[pending, pendingCount, "Chưa xử lý"], [processed, processedCount, "Chờ bưu tá lấy"]]) {
+    if (!count) continue;
+    blocks.push(`<b>${label}: ${count} đơn</b>`);
+    blocks.push(...list.map(formatTelegramOrderLines));
+    if (count > list.length) blocks.push(`<i>Còn ${count - list.length} đơn khác</i>`);
+  }
+  return blocks.join("\n\n");
+}
+
 async function recordConfirmed(r) {
   const now = new Date();
   const time = `${p2(now.getHours())}:${p2(now.getMinutes())}`;
@@ -739,17 +768,11 @@ async function recordConfirmed(r) {
   // Bắn thông báo Telegram khi có đơn mới
   const teleCfg = await getTelegramConfig();
   if (teleCfg.enabled && teleCfg.notifyOrder) {
-    const items = (r.items || []).slice(0, 3).map((it) => `   • ${teleEsc(it)}`).join("\n");
-    const text = `📦 <b>[TOPCARE] ĐƠN HÀNG MỚI</b>\n` +
-      `• Mã đơn: <code>${teleEsc(r.order_sn)}</code>\n` +
-      (r.buyer ? `• Khách mua: ${teleEsc(r.buyer)}\n` : "") +
-      (items ? `• Sản phẩm:\n${items}\n` : "") +
-      (r.total ? `• Tổng tiền: <b>${(r.total || 0).toLocaleString("vi-VN")}₫</b>\n` : "") +
-      `• ĐVVC: 🚚 <b>${teleEsc(r.carrier || "Shopee")}</b>\n` +
-      (r.tracking ? `• Mã vận đơn: <code>${teleEsc(r.tracking)}</code>\n` : "") +
-      (r.ship_by ? `• Hạn giao: ${teleEsc(r.ship_by)}\n` : "") +
-      `⏰ Giờ xác nhận: ${now.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}`;
-    sendTelegram(text);
+    const store = await chrome.storage.local.get(["tcdd-shop-code", "maGian", "dhHoanTextValue"]);
+    const shopCode = String(store["tcdd-shop-code"] || store.maGian || store.dhHoanTextValue || "").trim().toUpperCase();
+    await resolveTelegramSkus([r], shopCode);
+    const text = formatOrderTelegram(r, shopCode);
+    await sendTelegram(text);
   }
 }
 
@@ -1229,8 +1252,20 @@ function toRow(c) {
     order_id: ext.order_id,
     channel_id: p.package_ext_info?.fulfilment_channel_id || p.package_ext_info?.shipping_method || 0,
     package_number: p.package_ext_info?.package_number || "",
+    orderTime: (() => { const n = Number(ext.order_time || ext.create_time || head.order_time || head.create_time || 0); return n && n < 1e12 ? n * 1000 : n; })(),
+    shipByTs: Number(ext.ship_by_date || 0) * 1000,
     buyer: head.buyer_info?.username || "",
     items: items.map((it) => `${it.name}${it.description ? " [" + it.description + "]" : ""} ×${it.amount}`),
+    itemRows: items.map((it) => ({
+      image: (() => { const v = String(it.image || it.item_image || it.product?.image || ""); return /^https?:\/\//i.test(v) ? v : /^[\w-]+$/.test(v) ? `https://cf.shopee.vn/file/${v}` : ""; })(),
+      itemId: it.item_id || it.itemid || it.product?.item_id,
+      modelId: it.model_id || it.modelid || it.item_model?.model_id,
+      name: it.product?.name || it.item_name || it.name || "",
+      model: it.item_model?.name || it.model_name || String(it.description || "").replace(/^\s*(Variation|Phân loại)\s*:\s*/i, "").replace(/\s*\[[^\]]*\]\s*$/, ""),
+      itemSku: it.product?.sku || it.item_sku || it.parent_sku || "",
+      modelSku: it.item_model?.sku || it.model_sku || it.variation_sku || it.sku || variationSku(it.description) || "",
+      qty: it.amount ?? it.quantity ?? 1
+    })),
     total: (pay.total_price || 0) / 1e5,
     status: st.status || "",
     ship_by: ext.ship_by_date ? "Hạn " + new Date(ext.ship_by_date * 1000).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "",
@@ -1238,10 +1273,76 @@ function toRow(c) {
     warn: /quá hạn|trễ/i.test((st.status_tag || []).map((t) => t.tag_value).join(" ")),
     carrier: fi.fulfilment_channel_name || fi.masked_channel_name || "",
     seller_addr: ext.seller_address ? `${ext.seller_address.address}, ${ext.seller_address.city}, ${ext.seller_address.state}` : "",
-    tracking: fi.tracking_number || "",
+    tracking: fi.tracking_number || (fi.tracking_number_list || []).join(", ") || "",
     location_id: null,
   };
 }
+
+// Dữ liệu gọn cho web (module "Chờ lấy hàng"): chỉ các trường cần hiển thị.
+function cardToWebRow(c, stage) {
+  const p = c.package_card || c.order_card || {};
+  const ext = p.order_ext_info || {};
+  const head = p.card_header || {};
+  const r = toRow(c);
+  const rawTime = ext.order_time || ext.create_time || head.order_time || head.create_time || 0;
+  return {
+    orderSn: r.order_sn,
+    orderId: r.order_id || 0,
+    packageNumber: r.package_number,
+    buyer: r.buyer,
+    items: r.items,
+    total: r.total,
+    status: r.status,
+    tag: r.tag,
+    warn: r.warn,
+    shipBy: r.ship_by,
+    shipByTs: ext.ship_by_date ? ext.ship_by_date * 1000 : 0,
+    carrier: r.carrier,
+    tracking: r.tracking,
+    pickupAddr: r.seller_addr,
+    stage, // 1 = Chờ lấy hàng - Chưa xử lý, 2 = Chờ lấy hàng - Đã xử lý
+    orderTime: rawTime && rawTime < 1e12 ? rawTime * 1000 : rawTime,
+  };
+}
+
+// Xử lý yêu cầu "Chờ lấy hàng" cho web: dùng chung cho trang extension và web đã deploy.
+function handleChoLayHang(msg, reply) {
+  (async () => {
+    try {
+      const stage = msg.status === 1 || msg.status === 2 ? Number(msg.status) : 0;
+      const maxCards = Math.min(Math.max(Number(msg.limit) || 200, 1), 400);
+      const stages = stage ? [stage] : [1, 2];
+      const rows = [];
+      const errors = [];
+      let total = 0;
+      for (const st of stages) {
+        try {
+          const idx = await bgFetchIndex(st);
+          total += idx.list.length;
+          const cards = await bgFetchCards(idx.list.slice(0, maxCards));
+          for (const c of cards) rows.push(cardToWebRow(c, st));
+        } catch (e) {
+          errors.push(`${st === 1 ? "Chưa xử lý" : "Đã xử lý"}: ${e.message || e}`);
+        }
+      }
+      reply({ ok: errors.length === 0, rows, total, at: Date.now(), errors });
+    } catch (e) {
+      reply({ ok: false, error: e.message || String(e), rows: [] });
+    }
+  })();
+  return true;
+}
+
+// Web đã deploy (Vercel/Netlify/tên miền riêng...) gọi vào extension qua
+// chrome.runtime.sendMessage(EXTENSION_ID, ...) — cần khai báo externally_connectable trong manifest.json.
+chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
+  if (!msg || typeof msg !== "object") return;
+  if (msg.type === "autoin-ping") {
+    reply({ ok: true, id: chrome.runtime.id, origin: (sender && sender.origin) || "", at: Date.now() });
+    return true;
+  }
+  if (msg.type === "autoin-cho-lay-hang") return handleChoLayHang(msg, reply);
+});
 
 async function bgFetchIndex(status = 1) {
   let out = [], page = 1;
@@ -1274,11 +1375,59 @@ async function bgFetchCards(index) {
   return cards;
 }
 
+let sheetSyncTask = null;
+function syncWaitingOrdersSheet() {
+  if (sheetSyncTask) return sheetSyncTask;
+  sheetSyncTask = syncWaitingOrdersSheetNow().finally(() => { sheetSyncTask = null; });
+  return sheetSyncTask;
+}
+async function syncWaitingOrdersSheetNow() {
+  const {TITLE, buildSnapshot} = self.AutoInOrderSheet;
+  const store = await chrome.storage.local.get(["tcdd-shop-code", "maGian", "dhHoanTextValue"]);
+  const code = String(store["tcdd-shop-code"] || store.maGian || store.dhHoanTextValue || "").trim().toUpperCase();
+  if (!code) throw new Error("Chưa nhập Mã gian trong Auto In");
+  const fresh = [];
+  for (const stage of [1, 2]) {
+    const idx = await bgFetchIndex(stage);
+    if (!Number.isFinite(Number(idx.total)) || idx.list.length !== Number(idx.total)) throw new Error("Shopee chưa trả đủ danh sách; giữ nguyên sheet");
+    const cards = await bgFetchCards(idx.list);
+    const parsed = cards.map(toRow);
+    const expected = new Set(idx.list.map((x) => x.package_number));
+    const actual = new Set(parsed.map((r) => r.package_number));
+    if (expected.has(undefined) || actual.size !== expected.size || parsed.length !== idx.list.length || [...expected].some((p) => !actual.has(p))) throw new Error("Thiếu thẻ đơn Shopee; giữ nguyên sheet");
+    fresh.push(...parsed.map((r) => ({...r,stage})));
+  }
+  await resolveTelegramSkus(fresh, code);
+  const sheetId = self.SHARED_GOOGLE_CONFIG.webSpreadsheetId;
+  if (!sheetId) throw new Error("Chưa cấu hình bảng tính cho web");
+  const token = await getGoogleAccessToken();
+  const title = await ensureSheetExists(TITLE, token, sheetId);
+  const previous = await fetchSheetValues(`'${title}'!A:W`, token, 30000, sheetId);
+  const at = Date.now(), values = buildSnapshot(previous, fresh, code, at);
+  const metadata = await fetchSpreadsheetMetadata(token, sheetId);
+  const props = metadata.sheets.find((x) => x.properties.title === title).properties;
+  const rowCount = Math.max(previous.length, values.length);
+  const requests = [];
+  if (rowCount > props.gridProperties.rowCount) requests.push({appendDimension:{sheetId:props.sheetId,dimension:"ROWS",length:rowCount-props.gridProperties.rowCount}});
+  requests.push({updateCells:{range:{sheetId:props.sheetId,startRowIndex:0,endRowIndex:rowCount,startColumnIndex:0,endColumnIndex:23},rows:values.map((r)=>({values:r.map((v)=>({userEnteredValue:typeof v === "number" ? {numberValue:v} : {stringValue:String(v ?? "")}}))})),fields:"userEnteredValue"}});
+  const {res,data} = await fetchJsonWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({requests})});
+  if (!res.ok) throw new Error(data.error?.message || "Không ghi được sheet đơn");
+  await chrome.storage.local.set({tcdd_sheet_sync_at:at,tcdd_sheet_sync_error:""});
+  await bgLog(`Đã đồng bộ ${fresh.length} đơn gian ${code} → ${TITLE}`);
+  return {ok:true,at,count:fresh.length};
+}
+async function safeSyncWaitingOrders() {
+  try { return await syncWaitingOrdersSheet(); }
+  catch(e) { await chrome.storage.local.set({tcdd_sheet_sync_error:e.message}); await bgLog(`Đồng bộ sheet: ${e.message}`); return {ok:false,error:e.message}; }
+}
+
 const XLS_HEAD = ["Mã đơn hàng", "Mã Kiện Hàng", "Ngày đặt hàng", "Trạng Thái Đơn Hàng", "Nhận xét từ Người mua", "Mã vận đơn",
   "Đơn Vị Vận Chuyển", "Phương thức giao hàng", "Loại đơn hàng", "Ngày giao hàng dự kiến", "Ngày gửi hàng", "Thời gian giao hàng",
   "Trạng thái Trả hàng/Hoàn tiền", "SKU sản phẩm", "Tên sản phẩm", "Cân nặng sản phẩm", "Tổng cân nặng", "Tên kho hàng",
   "SKU phân loại hàng", "Tên phân loại hàng", "Giá gốc", "Người bán trợ giá", "Được Shopee trợ giá",
   "Tổng số tiền được người bán trợ giá", "Giá gốc (Y)", "Số lượng", "Số lượng sản phẩm được hoàn trả", "Tổng số tiền Người mua thanh toán"];
+
+const DEFAULT_EXCEL_PRICE = 100000000; // Mặc định giá 100.000.000đ khi xuất Excel nạp Wameli
 
 // ---------- GHI LỊCH SỬ IN ĐƠN VÀO GOOGLE SHEET IN_DON_WML ----------
 const IN_DON_WML_HEADERS = [
@@ -1690,7 +1839,7 @@ async function runAutoBackground() {
                   r[5] = o.tn || "";
                   r[6] = carrier;
                   r[18] = modelSku;
-                  r[24] = price;
+                  r[24] = DEFAULT_EXCEL_PRICE;
                   r[25] = amount;
                   xlsRows.push(r);
 
@@ -2017,7 +2166,7 @@ async function processProcessedOrders(targetOrders = null, options = {}) {
                 r[5] = o.tn || "";
                 r[6] = carrier;
                 r[18] = modelSku;
-                r[24] = price;
+                r[24] = DEFAULT_EXCEL_PRICE;
                 r[25] = amount;
                 xlsRows.push(r);
 
@@ -2237,6 +2386,8 @@ async function initAlarms() {
     chrome.alarms.clear("tcdd-auto-alarm");
   }
 
+  chrome.alarms.create("tcdd-sheet-sync", { periodInMinutes: interval });
+
   // 2. Alarm báo cáo 17h chiều
   chrome.alarms.create("tcdd-report-17", {
     when: getNextAlarmTime(17, 0),
@@ -2257,7 +2408,9 @@ async function initAlarms() {
 }
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === "tcdd-auto-alarm") {
+  if (alarm.name === "tcdd-sheet-sync") {
+    await safeSyncWaitingOrders();
+  } else if (alarm.name === "tcdd-auto-alarm") {
     await runAutoBackground();
   } else if (alarm.name === "tcdd-report-17") {
     await triggerDailyReport("17h");
@@ -2295,6 +2448,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       }
     startTelegramPollingLoop();
 })();
+    return true;
+  }
+
+  // ---------- WEB (dist/index.html): DANH SÁCH ĐƠN "CHỜ LẤY HÀNG" ĐỌC TRỰC TIẾP TỪ SHOPEE ----------
+  // Dùng lại đúng đường API của AutoIn (bgFetchIndex + bgFetchCards) nên cần 1 tab banhang.shopee.vn đang mở.
+  // status: 0 = cả Chưa xử lý + Đã xử lý, 1 = Chưa xử lý, 2 = Đã xử lý
+  if (msg.type === "autoin-cho-lay-hang") {
+    return handleChoLayHang(msg, reply);
+  }
+
+  if (msg.type === "autoin-ping") {
+    reply({ ok: true, id: chrome.runtime.id, at: Date.now() });
     return true;
   }
 
@@ -2376,6 +2541,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
         reply({ ok: false, error: e.message || String(e) });
       }
     })();
+    return true;
+  }
+
+  if (msg.type === "tcdd-sync-waiting-sheet") {
+    safeSyncWaitingOrders().then(reply);
     return true;
   }
 

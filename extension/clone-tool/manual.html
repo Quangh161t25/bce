@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sao Chép Tay - Shopee</title>
+  <link rel="stylesheet" href="app.css" />
+  <link rel="stylesheet" href="manual.css" />
+</head>
+<body>
+  <header>
+    <div class="header-title">
+      <span>✍️</span> Sao chép tay (Tạo SP thủ công)
+    </div>
+    <div style="display: flex; gap: 6px; align-items: center;">
+      <span id="shopStatus" class="pill">Đang kiểm tra shop...</span>
+      <button type="button" id="btnTopClearAll" class="btn danger" style="padding: 3px 8px; font-size: 11px;" title="Xóa trắng toàn bộ form để tạo sản phẩm mới">
+        🗑️ Xóa trắng
+      </button>
+    </div>
+  </header>
+
+  <!-- Cài đặt Gemini AI -->
+  <details id="geminiApiCard" class="card" style="background: #f8fafc; border: 1px solid #cbd5e1; margin-bottom: 8px;">
+    <summary style="font-weight: 700; color: #1e40af; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+      <span style="display: flex; align-items: center; gap: 5px;">🤖 Cài đặt Gemini AI (Viết lại Tiêu đề &amp; Mô tả)</span>
+      <span id="geminiStatusBadge" class="pill" style="font-size: 10px; margin: 0;">Chưa kiểm tra</span>
+    </summary>
+    <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">
+      <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+          <label for="geminiApiKeyInput" style="font-weight: 600; margin: 0; font-size: 11.5px; color: #334155;">Gemini API Key:</label>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="small" style="color: #2563eb; text-decoration: underline;">🔑 Lấy API Key miễn phí</a>
+        </div>
+        <div style="display: flex; gap: 6px;">
+          <input type="password" id="geminiApiKeyInput" placeholder="Dán Gemini API Key (AIzaSy...)" style="flex: 1; margin: 0; font-size: 12px; font-family: monospace;" />
+          <button type="button" id="btnToggleGeminiKeyVis" class="btn" style="padding: 3px 8px; font-size: 11px;" title="Hiện/ẩn API Key">👁️</button>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 130px;">
+          <label for="geminiModelSelect" style="font-weight: 600; margin: 0 0 3px 0; font-size: 11.5px; color: #334155;">Model:</label>
+          <select id="geminiModelSelect" style="width: 100%; padding: 5px 6px; font-size: 11.5px; border: 1px solid var(--border); border-radius: 4px; background: #fff;">
+            <option value="gemini-2.0-flash" selected>gemini-2.0-flash (Mới nhất, siêu nhanh)</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash (Ổn định, nhanh)</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro (Chất lượng cao nhất)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+          </select>
+        </div>
+        <button type="button" id="btnSaveGeminiKey" class="btn blue" style="padding: 5px 10px; font-size: 11.5px; white-space: nowrap;">💾 Lưu</button>
+        <button type="button" id="btnTestGeminiKey" class="btn green" style="padding: 5px 10px; font-size: 11.5px; white-space: nowrap;">⚡ Kiểm tra kết nối</button>
+      </div>
+      <div id="geminiApiMsg" class="small hint" style="font-style: italic; min-height: 14px;"></div>
+    </div>
+  </details>
+
+  <!-- Card 1: Tiêu đề & Mô tả -->
+  <section class="card">
+    <!-- Tiêu đề sản phẩm -->
+    <div style="margin-bottom: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; flex-wrap: wrap; gap: 4px;">
+        <label for="productTitleInput" style="font-weight: 700; color: #1e293b; margin: 0; font-size: 11.5px;">
+          📝 Tiêu đề sản phẩm:
+        </label>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button type="button" id="btnCopyTitle" class="btn ghost" style="padding: 2px 6px; font-size: 10.5px;">Copy</button>
+          <button type="button" id="btnRewriteTitleAi" class="btn green" style="padding: 2px 7px; font-size: 10.5px;">Viết lại AI</button>
+          <button type="button" id="btnPushTitleToProduct" class="btn blue" style="padding: 2px 7px; font-size: 10.5px;">Điền vào SP</button>
+          <span id="titleCharCount" class="hint small">0/120</span>
+        </div>
+      </div>
+      <textarea id="productTitleInput" rows="2" style="width: 100%; font-weight: 600; font-size: 12px; border-color: #059669; padding: 5px 8px; border-radius: 4px; box-sizing: border-box; line-height: 1.35;" placeholder="Nhập tiêu đề sản phẩm..." maxlength="255"></textarea>
+    </div>
+
+    <!-- Mô tả sản phẩm -->
+    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; flex-wrap: wrap; gap: 4px;">
+        <label for="productDescInput" style="font-weight: 700; color: #1e293b; margin: 0; font-size: 11.5px;">
+          📄 Mô tả sản phẩm (Chuẩn SEO &amp; Hashtag):
+        </label>
+        <div style="display: flex; gap: 4px; align-items: center;">
+          <button type="button" id="btnCopyDesc" class="btn ghost" style="padding: 2px 6px; font-size: 10.5px;">Copy</button>
+          <button type="button" id="btnRewriteDescAi" class="btn green" style="padding: 2px 7px; font-size: 10.5px;">Viết lại AI</button>
+          <button type="button" id="btnPushDescToProduct" class="btn blue" style="padding: 2px 7px; font-size: 10.5px;">Điền vào SP</button>
+          <span id="descCharCount" class="hint small">0 ký tự</span>
+        </div>
+      </div>
+      <textarea id="productDescInput" rows="6" style="width: 100%; font-size: 11.5px; line-height: 1.45; border-radius: 4px; padding: 6px 8px; box-sizing: border-box;" placeholder="Nhập mô tả sản phẩm (hoặc gõ vài dòng tóm tắt rồi bấm 'Viết lại AI' để tạo bài viết chuẩn SEO 2700 ký tự)..."></textarea>
+    </div>
+  </section>
+
+  <!-- Card 2: 🖼️ Ảnh sản phẩm (9 ô ảnh chọn từ thư mục máy) -->
+  <section class="card" id="imageSection">
+    <div class="row between" style="margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+      <b style="color: #0f172a; font-size: 12px;">🖼️ Ảnh sản phẩm (<span id="photoCountBadge">0/9</span> ảnh)</b>
+      <div class="row gap">
+        <input type="file" id="batchImageInput" accept="image/*" multiple style="display: none;" />
+        <button type="button" id="btnPickBatchImages" class="btn primary" style="padding: 3px 8px; font-size: 11px;">
+          📁 Chọn ảnh từ máy
+        </button>
+        <button type="button" id="btnClearAllImages" class="btn ghost" style="padding: 3px 6px; font-size: 10.5px;">
+          ✕ Xóa hết ảnh
+        </button>
+      </div>
+    </div>
+    <div class="hint small" style="margin-bottom: 8px; color: #64748b; line-height: 1.4;">
+      💡 Bấm <b>"Chọn ảnh từ máy"</b> để chọn cùng lúc nhiều ảnh, hoặc kéo thả ảnh vào từng ô bên dưới, hoặc nhấn <b>Ctrl+V</b> để dán ảnh bìa.
+    </div>
+
+    <!-- Lưới 9 ô ảnh -->
+    <div class="image-slots-grid" id="slotsGrid">
+      <!-- 9 slot sẽ được render tự động bằng Javascript -->
+    </div>
+    <input type="file" id="singleSlotInput" accept="image/*" style="display: none;" />
+  </section>
+
+  <!-- Card 3: Thông tin bán hàng & SKU -->
+  <section class="card">
+    <div class="row between" style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed var(--border);">
+      <label style="display: flex; align-items: center; gap: 6px; font-weight: bold; margin: 0; color: #1e293b;">
+        🏬 Mã gian:
+        <input id="manualMaGian" list="manualMaGianList" placeholder="Nhập mã gian..." style="width: 130px; margin: 0; padding: 4px 8px; font-weight: bold; border-color: #059669; border-radius: 4px;" />
+        <datalist id="manualMaGianList"></datalist>
+      </label>
+    </div>
+
+    <div class="grid3" style="margin-bottom: 6px;">
+      <label>
+        Cân nặng (g)
+        <input id="inputWeight" type="number" min="1" value="500" />
+      </label>
+      <label>
+        Tồn kho mặc định
+        <input id="inputStock" type="number" min="0" value="1000" />
+      </label>
+      <label>
+        Giá bán chung (VNĐ)
+        <input id="inputSinglePrice" type="number" min="1000" placeholder="VD: 150000" />
+      </label>
+    </div>
+
+    <div class="row" style="margin-top: 4px;">
+      <label style="flex: 1; margin: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+          <span>SKU sản phẩm (mã chung)</span>
+          <span class="hint small" style="font-size: 10px; color: #2563eb;">💡 Gợi ý từ DS_SP &amp; tự thêm -mã gian</span>
+        </div>
+        <div class="id-autocomplete-wrap">
+          <input id="parentSkuInput" placeholder="Tìm kiếm SKU từ sheet DS_SP hoặc nhập tự do..." autocomplete="off" />
+          <div id="parentSkuDropdown" class="id-suggest-dropdown"></div>
+        </div>
+      </label>
+    </div>
+  </section>
+
+  <!-- Card 4: Phân loại hàng (Biến thể) -->
+  <section class="card" id="variationCard">
+    <div class="row between" style="margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+      <b style="color: #0f172a; font-size: 12px;">
+        📋 Phân loại hàng (<span id="varCount">0</span> phân loại)
+      </b>
+      <div class="row gap">
+        <button type="button" id="btnAddVariation" class="btn primary" style="padding: 3px 8px; font-size: 11px;">
+          ➕ Thêm phân loại
+        </button>
+        <button type="button" id="btnAutoFillSku" class="btn blue" style="padding: 3px 8px; font-size: 11px;" title="Tự ghép SKU theo [SKU chung]-[Tên phân loại]-[Mã gian]">
+          ⚡ Điền nhanh SKU
+        </button>
+        <button type="button" id="btnClearAllVariations" class="btn ghost" style="padding: 3px 6px; font-size: 10.5px;">
+          🗑️ Xóa hết phân loại
+        </button>
+      </div>
+    </div>
+
+    <!-- Thanh áp dụng giá & kho nhanh -->
+    <div class="var-quick-bar" id="varQuickBar" style="display: none;">
+      <span class="small hint" style="font-weight: 700;">Áp dụng nhanh cho tất cả:</span>
+      <div style="display: flex; gap: 4px; align-items: center;">
+        <input type="number" id="quickPriceInput" placeholder="Giá..." style="width: 85px; padding: 3px 6px; font-size: 11px;" />
+        <button type="button" id="btnApplyQuickPrice" class="btn ghost" style="padding: 3px 6px; font-size: 10.5px;">Áp giá</button>
+      </div>
+      <div style="display: flex; gap: 4px; align-items: center;">
+        <input type="number" id="quickStockInput" placeholder="Kho..." style="width: 75px; padding: 3px 6px; font-size: 11px;" value="1000" />
+        <button type="button" id="btnApplyQuickStock" class="btn ghost" style="padding: 3px 6px; font-size: 10.5px;">Áp kho</button>
+      </div>
+    </div>
+
+    <!-- Bảng danh sách phân loại -->
+    <div id="variationEmptyNotice" class="hint small" style="text-align: center; padding: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px;">
+      Chưa có phân loại nào. Sản phẩm sẽ được đăng dưới dạng <b>Sản phẩm đơn</b> (1 giá &amp; 1 kho ở trên).<br/>
+      Bấm nút <b>"➕ Thêm phân loại"</b> để tạo các phân loại (màu sắc, kích cỡ, combo...).
+    </div>
+
+    <div id="variationTableWrap" style="display: none; max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px;">
+      <table class="var-table">
+        <thead>
+          <tr>
+            <th style="width: 44px; text-align: center;">Ảnh</th>
+            <th>Tên phân loại</th>
+            <th style="width: 85px;">Giá (VNĐ)</th>
+            <th style="width: 65px;">Kho</th>
+            <th style="width: 100px;">SKU phân loại</th>
+            <th style="width: 30px; text-align: center;">✕</th>
+          </tr>
+        </thead>
+        <tbody id="variationTbody"></tbody>
+      </table>
+    </div>
+    <input type="file" id="varImageInput" accept="image/*" style="display: none;" />
+  </section>
+
+  <!-- Card 5: Cài đặt vận chuyển & Kho -->
+  <section class="card">
+    <div class="row between" style="margin-bottom: 4px;">
+      <b class="small">🚚 Đơn vị vận chuyển</b>
+      <a href="#" id="reloadShop" class="small" style="color: #2563eb; text-decoration: underline;">↻ Tải lại</a>
+    </div>
+    <div id="channelList" class="chips"><span class="hint small">Đang tải...</span></div>
+    <b class="small">🏬 Kho lấy hàng</b>
+    <div id="locationList" class="chips"><span class="hint small">Đang tải...</span></div>
+    
+    <div style="margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap;">
+      <label style="cursor: pointer; display: flex; align-items: center; gap: 4px; margin: 0;">
+        <input type="checkbox" id="chkUnlisted" /> Ẩn sản phẩm sau khi đăng
+      </label>
+    </div>
+  </section>
+
+  <!-- Card 6: Nút hành động & Log -->
+  <section class="card">
+    <div style="display: flex; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;">
+      <button id="btnClone" class="btn primary big" style="flex: 2; min-width: 160px;">
+        🚀 Đăng sản phẩm lên Shopee
+      </button>
+      <button id="btnFillShopeeTab" class="btn blue big" style="flex: 1.5; min-width: 130px;" title="Điền tiêu đề & mô tả sang tab Đăng sản phẩm mới của Shopee">
+        📝 Điền vào SP
+      </button>
+      <button id="btnBottomClearAll" class="btn danger" style="padding: 10px 12px;" title="Xóa trắng toàn bộ form để nhập lại từ đầu">
+        🗑️ Xóa trắng
+      </button>
+    </div>
+    <div id="log" class="log"></div>
+  </section>
+
+  <script type="module" src="manual.js"></script>
+</body>
+</html>

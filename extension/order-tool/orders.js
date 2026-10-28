@@ -100,13 +100,22 @@ function parseItem({ node: it, ctx }) {
   const variationText = find(['description', 'model_description', 'variation_description', 'model_name', 'variation_name', 'variation'], isVariationText) || '';
   const variation = parseVariation(variationText);
   const modelRaw = find(['model_name', 'variation_name', 'variation', 'model_desc', 'tier_variation_name'], (v) => isText(v) && !isVariationText(v)) || '';
+  // `name` ở dòng model có thể chỉ là tên phân loại. Tìm tên sản phẩm
+  // tường minh ở mọi scope trước, rồi mới dùng title/name của nhóm sản phẩm.
+  const nameOk = (v) => isText(v) && !isVariationText(v);
+  const productName = scopes.flatMap((s) => [s.product?.name, s.item_info?.item_name, s.item_info?.name, s.item_name, s.product_name]).find(nameOk)
+    || scopes.map((s) => s.title).find(nameOk)
+    || [...ctx, it].map((s) => s.name).find(nameOk)
+    || findDeep(it, ['item_name', 'product_name'], nameOk)
+    || findDeep(it, ['name', 'title'], nameOk)
+    || '';
   return {
     itemId: Number(it.item_id ?? it.itemid ?? it.product_id),
     modelId: Number(it.model_id ?? it.modelid ?? 0),
-    name: find(['item_name', 'product_name', 'name', 'title'], (v) => isText(v) && !isVariationText(v)) || '',
-    model: cleanModel(modelRaw) || variation.model,
-    itemSku: find(['item_sku', 'parent_sku', 'product_sku'], isText) || '',
-    modelSku: find(['model_sku', 'variation_sku', 'sku'], isText) || variation.sku,
+    name: productName,
+    model: cleanModel(it.item_model?.name || modelRaw) || variation.model,
+    itemSku: it.product?.sku || find(['item_sku', 'parent_sku', 'product_sku'], isText) || '',
+    modelSku: it.item_model?.sku || find(['model_sku', 'variation_sku', 'sku'], isText) || variation.sku,
     variationText,
     qty: num(find(['amount', 'quantity', 'item_count', 'qty']) ?? 1) || 1,
     price: money(find(['order_price', 'item_price', 'discounted_price', 'price'])),

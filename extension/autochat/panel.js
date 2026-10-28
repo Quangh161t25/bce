@@ -21,6 +21,7 @@
     $('s-fgap').value = s.followGapMin;
     $('s-age').value = s.greetMaxAgeMin;
     $('s-max').value = s.maxPerHour;
+    if ($('s-backlog')) $('s-backlog').checked = s.replyBacklog !== false;
   }
 
   async function saveSettings() {
@@ -35,7 +36,8 @@
       followDelaySec: num('s-fdelay', cur.followDelaySec, 0),
       followGapMin: num('s-fgap', cur.followGapMin, 1),
       greetMaxAgeMin: num('s-age', cur.greetMaxAgeMin, 5),
-      maxPerHour: num('s-max', cur.maxPerHour, 1)
+      maxPerHour: num('s-max', cur.maxPerHour, 1),
+      replyBacklog: $('s-backlog') ? $('s-backlog').checked : true
     });
   }
 
@@ -56,6 +58,7 @@
         <div class="card-foot">
           ${AUTOCHAT.greetTags(e, 'tag')}
           <span class="grow"></span>
+          ${waiting && e.lastIsBuyer ? `<button class="btn" style="background:#16a34a;border-color:#16a34a;color:#fff;" data-act="send-now" data-id="${id}">⚡ Gửi ngay</button>` : ''}
           <button class="btn" data-act="open" data-id="${id}">💬 Mở chat</button>
           ${waiting && e.greet && e.greet.error ? `<button class="btn ghost" data-act="retry" data-id="${id}">🔄 Thử gửi lại</button>` : ''}
           ${waiting
@@ -96,8 +99,27 @@
     $('st-poll').textContent = s.mode === 'off' ? '—' : meta.lastPollAt ? new Date(meta.lastPollAt).toLocaleTimeString('vi-VN') : 'đang chờ lượt đầu…';
     $('st-waiting').textContent = waiting.length;
     $('st-sent').textContent = log.filter((l) => l.ok && l.at >= today).length;
-    $('st-error').hidden = !(s.mode !== 'off' && meta.lastError);
-    $('st-error').textContent = meta.lastError || '';
+    const hasErr = s.mode !== 'off' && meta.lastError;
+    $('st-error').hidden = !hasErr;
+    if (hasErr) {
+      $('st-error').innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+          <span>${AUTOCHAT.esc(meta.lastError)}</span>
+          <button id="btn-renew-session" style="padding:3px 8px;font-size:11px;font-weight:700;border:1px solid #dc2626;border-radius:4px;background:#fff;color:#dc2626;cursor:pointer;white-space:nowrap;">🔄 Lấy lại phiên ngay</button>
+        </div>`;
+      const renewBtn = $('btn-renew-session');
+      if (renewBtn) {
+        renewBtn.onclick = () => {
+          renewBtn.disabled = true;
+          renewBtn.textContent = '⏳ Đang làm mới...';
+          chrome.runtime.sendMessage({ type: 'autochat-refresh-session' }, () => {
+            setTimeout(render, 1500);
+          });
+        };
+      }
+    } else {
+      $('st-error').textContent = '';
+    }
 
     $('n-waiting').textContent = waiting.length;
     $('n-done').textContent = done.length;
@@ -141,7 +163,18 @@
     const q = await AUTOCHAT.getQueue();
     const e = q[btn.dataset.id];
     if (!e) return;
-    if (btn.dataset.act === 'open') {
+    if (btn.dataset.act === 'send-now') {
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang gửi...';
+      chrome.runtime.sendMessage({ type: 'autochat-send-now', convId: e.convId }, (res) => {
+        btn.disabled = false;
+        btn.textContent = '⚡ Gửi ngay';
+        if (!res || !res.ok) {
+          alert('Chưa gửi được: ' + (res?.error || 'Phiên hết hạn hoặc lỗi mạng'));
+        }
+        render();
+      });
+    } else if (btn.dataset.act === 'open') {
       chrome.runtime.sendMessage({ type: 'autochat-open-conv', convId: e.convId });
     } else if (btn.dataset.act === 'retry') {
       if (e.greet) {

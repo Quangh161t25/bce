@@ -297,6 +297,381 @@ function renderProduct() {
 
 // ---------- Danh sách phân loại & Điền chi tiết SKU ----------
 
+
+// ---------- Gợi ý SKU từ Google Sheet DS_SP ----------
+
+function getEffectiveMaGian() {
+  const inp = $('#cloneMaGian');
+  const val = (inp ? inp.value : '') || currentMaGian || '';
+  return val.trim();
+}
+
+let dsSpList = [];
+let isFetchingDsSp = false;
+let skuDropdownEl = null;
+let activeSkuInput = null;
+let highlightedIndex = -1;
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeSearchStr(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .trim()
+    .toLowerCase();
+}
+
+function parseDsSpRows(values) {
+  if (!Array.isArray(values) || values.length <= 1) return [];
+  const header = (values[0] || []).map((h) => String(h || '').trim().toLowerCase());
+
+  let idCtIdx = header.findIndex(
+    (h) => h === 'id_sp_ct' || h === 'id_sp_con' || h.includes('id_sp_ct') || h.includes('id_sp_con')
+  );
+  if (idCtIdx === -1) idCtIdx = 0;
+
+  let idSpIdx = header.findIndex(
+    (h) => h === 'id_sp' || h === 'ma sp' || h === 'mã sp' || (h.includes('id_sp') && !h.includes('ct') && !h.includes('con'))
+  );
+  if (idSpIdx === -1) idSpIdx = 1;
+
+  let tenIdx = header.findIndex(
+    (h) => h === 'ten_sp' || h === 'tên sp' || h.includes('ten_sp') || h.includes('tên')
+  );
+  if (tenIdx === -1) tenIdx = 2;
+
+  let giaBanIdx = header.findIndex(
+    (h) => h === 'gia_ban' || h === 'giá bán' || h.includes('gia_ban') || h.includes('giá')
+  );
+  if (giaBanIdx === -1) giaBanIdx = 4;
+
+  const list = [];
+  const seen = new Set();
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    if (!row || !Array.isArray(row)) continue;
+
+    const skuCt = String(row[idCtIdx] || '').trim();
+    const skuParent = String(row[idSpIdx] || '').trim();
+    const name = String(row[tenIdx] || '').trim();
+    const price = String(row[giaBanIdx] || '').trim();
+
+    const primarySku = skuCt || skuParent;
+    if (primarySku && !seen.has(primarySku.toUpperCase())) {
+      seen.add(primarySku.toUpperCase());
+      list.push({
+        sku: primarySku,
+        name,
+        parentSku: skuParent,
+        price
+      });
+    }
+
+    if (skuParent && skuParent !== primarySku && !seen.has(skuParent.toUpperCase())) {
+      seen.add(skuParent.toUpperCase());
+      list.push({
+        sku: skuParent,
+        name: name ? `${name} (Mã chung)` : '',
+        parentSku: skuParent,
+        price
+      });
+    }
+  }
+
+  return list;
+}
+
+async function loadDsSpData(forceReload = false) {
+  if (isFetchingDsSp) return dsSpList;
+  try {
+    if (!forceReload && (!dsSpList || dsSpList.length === 0)) {
+      const stored = await chrome.storage.local.get(['ds_sp_cache_data']);
+      if (stored && Array.isArray(stored.ds_sp_cache_data) && stored.ds_sp_cache_data.length > 1) {
+        dsSpList = parseDsSpRows(stored.ds_sp_cache_data);
+      }
+    }
+
+    if (forceReload || !dsSpList || dsSpList.length === 0) {
+      isFetchingDsSp = true;
+      const res = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'FETCH_DS_SP' }, resolve);
+      });
+      isFetchingDsSp = false;
+      if (res && res.ok && Array.isArray(res.values) && res.values.length > 1) {
+        dsSpList = parseDsSpRows(res.values);
+        chrome.storage.local.set({ ds_sp_cache_data: res.values });
+      }
+    }
+  } catch (err) {
+    isFetchingDsSp = false;
+    console.warn('Lỗi tải DS_SP cho gợi ý SKU:', err);
+  }
+  return dsSpList;
+}
+
+function filterDsSpSuggestions(query, limit = 25) {
+  if (!dsSpList || dsSpList.length === 0) return [];
+  const mg = getEffectiveMaGian();
+  let q = normalizeSearchStr(query);
+  if (mg) {
+    const mgNorm = normalizeSearchStr(mg);
+    if (q.endsWith('-' + mgNorm)) {
+      q = q.slice(0, -(mgNorm.length + 1)).trim();
+    }
+  }
+
+  if (!q) {
+    return dsSpList.slice(0, limit);
+  }
+
+  const results = [];
+  for (const item of dsSpList) {
+    const skuNorm = normalizeSearchStr(item.sku);
+    const nameNorm = normalizeSearchStr(item.name);
+    const parentNorm = normalizeSearchStr(item.parentSku);
+    if (skuNorm.includes(q) || nameNorm.includes(q) || parentNorm.includes(q)) {
+      results.push(item);
+      if (results.length >= limit) break;
+    }
+  }
+  return results;
+}
+
+function getOrCreateSkuDropdown() {
+  if (skuDropdownEl && document.body.contains(skuDropdownEl)) return skuDropdownEl;
+  skuDropdownEl = document.createElement('div');
+  skuDropdownEl.id = 'skuSuggestDropdown';
+  skuDropdownEl.className = 'sku-autocomplete-dropdown';
+  skuDropdownEl.hidden = true;
+  document.body.appendChild(skuDropdownEl);
+  return skuDropdownEl;
+}
+
+function positionSkuDropdown(input) {
+  if (!skuDropdownEl || !input) return;
+  const rect = input.getBoundingClientRect();
+  if (rect.bottom < 0 || rect.top > window.innerHeight) {
+    hideSkuDropdown();
+    return;
+  }
+  const dropdownWidth = Math.max(rect.width, 280);
+  let left = rect.left + window.scrollX;
+  if (left + dropdownWidth > window.innerWidth - 10) {
+    left = Math.max(10, window.innerWidth - dropdownWidth - 10);
+  }
+  let top = rect.bottom + window.scrollY + 2;
+  const ddHeight = skuDropdownEl.offsetHeight || 200;
+  if (rect.bottom + ddHeight > window.innerHeight && rect.top > ddHeight) {
+    top = rect.top + window.scrollY - ddHeight - 2;
+  }
+  skuDropdownEl.style.left = `${left}px`;
+  skuDropdownEl.style.top = `${top}px`;
+  skuDropdownEl.style.width = `${dropdownWidth}px`;
+}
+
+function highlightSkuItem(index) {
+  if (!skuDropdownEl) return;
+  const items = skuDropdownEl.querySelectorAll('.sku-suggest-item');
+  items.forEach((it, idx) => {
+    if (idx === index) {
+      it.classList.add('active');
+      it.scrollIntoView({ block: 'nearest' });
+    } else {
+      it.classList.remove('active');
+    }
+  });
+  highlightedIndex = index;
+}
+
+function hideSkuDropdown() {
+  if (skuDropdownEl) {
+    skuDropdownEl.hidden = true;
+  }
+  activeSkuInput = null;
+  highlightedIndex = -1;
+}
+
+function selectSkuSuggestion(item, input) {
+  if (!item || !input) return;
+  const maGian = getEffectiveMaGian();
+  let finalSku = item.sku;
+  if (maGian) {
+    const suffix = `-${maGian.toLowerCase()}`;
+    if (!finalSku.toLowerCase().endsWith(suffix)) {
+      finalSku = `${finalSku}-${maGian}`;
+    }
+  }
+
+  input.value = finalSku;
+
+  const key = input.dataset.key;
+  if (key) {
+    currentModelSkus[key] = finalSku;
+    opts.modelSkus = currentModelSkus;
+    if (current) {
+      chrome.storage.local.set({ [`modelSkus_${current.itemId}`]: currentModelSkus });
+    }
+  }
+
+  if (input.id === 'parentSkuInput' || input.dataset.opt === 'parentSku') {
+    opts.parentSku = finalSku;
+    chrome.storage.local.set({ [OPTS_KEY]: opts });
+  }
+
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  hideSkuDropdown();
+  input.focus();
+  log(`Đã chọn SKU: ${finalSku}`, 'ok');
+}
+
+function renderSkuSuggestions(items, input) {
+  const dd = getOrCreateSkuDropdown();
+  highlightedIndex = -1;
+  const maGian = getEffectiveMaGian();
+
+  if (!items || items.length === 0) {
+    dd.innerHTML = `
+      <div class="sku-suggest-header">
+        <span>Gợi ý từ DS_SP (${dsSpList.length} SP)</span>
+        ${maGian ? `<span style="color: #047857;">Mã gian: -${escapeHtml(maGian)}</span>` : '<span style="color: #ea580c;">Chưa có mã gian</span>'}
+      </div>
+      <div style="padding: 10px; color: #94a3b8; font-size: 11px; text-align: center;">Không tìm thấy SKU phù hợp trong DS_SP</div>
+    `;
+    dd.hidden = false;
+    positionSkuDropdown(input);
+    return;
+  }
+
+  const gianSuffix = maGian ? `-${maGian}` : '';
+  let itemsHtml = '';
+  items.forEach((item, idx) => {
+    let finalPreview = item.sku;
+    if (maGian && !finalPreview.toLowerCase().endsWith(gianSuffix.toLowerCase())) {
+      finalPreview = `${finalPreview}${gianSuffix}`;
+    }
+
+    const priceText = item.price ? ` · ${fmtMoney(Number(String(item.price).replace(/[^\d]/g, '')) || 0) || item.price}` : '';
+
+    itemsHtml += `
+      <div class="sku-suggest-item" data-index="${idx}">
+        <div class="sku-suggest-top">
+          <span class="sku-suggest-sku">${escapeHtml(item.sku)}</span>
+          ${maGian ? `<span class="sku-suggest-badge" title="Tự động gắn mã gian">➔ ${escapeHtml(finalPreview)}</span>` : ''}
+        </div>
+        ${item.name ? `<div class="sku-suggest-name">${escapeHtml(item.name)}${priceText}</div>` : ''}
+      </div>
+    `;
+  });
+
+  dd.innerHTML = `
+    <div class="sku-suggest-header">
+      <span>Gợi ý DS_SP (${items.length}/${dsSpList.length})</span>
+      ${maGian ? `<span style="color: #047857; font-weight: bold;">Mã gian: -${escapeHtml(maGian)}</span>` : '<span style="color: #ea580c;">Chưa điền mã gian</span>'}
+    </div>
+    ${itemsHtml}
+  `;
+  dd.hidden = false;
+  positionSkuDropdown(input);
+
+  dd.querySelectorAll('.sku-suggest-item').forEach((el, idx) => {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      selectSkuSuggestion(items[idx], input);
+    });
+    el.addEventListener('mouseenter', () => {
+      highlightSkuItem(idx);
+    });
+  });
+}
+
+function handleSkuInputKeydown(e, items, input) {
+  const dd = getOrCreateSkuDropdown();
+  if (dd.hidden || !items || items.length === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    highlightSkuItem(highlightedIndex + 1 < items.length ? highlightedIndex + 1 : 0);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    highlightSkuItem(highlightedIndex - 1 >= 0 ? highlightedIndex - 1 : items.length - 1);
+  } else if (e.key === 'Enter') {
+    if (highlightedIndex >= 0 && items[highlightedIndex]) {
+      e.preventDefault();
+      selectSkuSuggestion(items[highlightedIndex], input);
+    }
+  } else if (e.key === 'Escape') {
+    hideSkuDropdown();
+  }
+}
+
+function attachSkuAutocomplete(input) {
+  if (!input || input._skuAutocompleteAttached) return;
+  input._skuAutocompleteAttached = true;
+  input.setAttribute('autocomplete', 'off');
+
+  let currentFilteredItems = [];
+
+  const updateSuggestions = async () => {
+    if (!dsSpList || dsSpList.length === 0) {
+      await loadDsSpData();
+    }
+    const val = input.value.trim();
+    currentFilteredItems = filterDsSpSuggestions(val);
+    activeSkuInput = input;
+    renderSkuSuggestions(currentFilteredItems, input);
+  };
+
+  input.addEventListener('focus', () => {
+    updateSuggestions();
+  });
+
+  input.addEventListener('input', () => {
+    updateSuggestions();
+  });
+
+  input.addEventListener('keydown', (e) => {
+    handleSkuInputKeydown(e, currentFilteredItems, input);
+  });
+
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (activeSkuInput === input) {
+        hideSkuDropdown();
+      }
+    }, 200);
+  });
+}
+
+document.addEventListener('mousedown', (e) => {
+  if (!skuDropdownEl || skuDropdownEl.hidden) return;
+  if (activeSkuInput && (activeSkuInput === e.target || activeSkuInput.contains(e.target))) return;
+  if (skuDropdownEl.contains(e.target)) return;
+  hideSkuDropdown();
+});
+
+window.addEventListener('scroll', () => {
+  if (activeSkuInput && skuDropdownEl && !skuDropdownEl.hidden) {
+    positionSkuDropdown(activeSkuInput);
+  }
+}, true);
+
+window.addEventListener('resize', () => {
+  if (activeSkuInput && skuDropdownEl && !skuDropdownEl.hidden) {
+    positionSkuDropdown(activeSkuInput);
+  }
+});
+
 function getModelDisplayName(m, tiers) {
   if (m.name && m.name.trim()) return m.name.trim();
   if (tiers && tiers.length) {
@@ -400,6 +775,7 @@ async function renderVariations() {
     row.appendChild(leftBox);
     row.appendChild(input);
     listEl.appendChild(row);
+    attachSkuAutocomplete(input);
   });
 }
 
@@ -869,19 +1245,34 @@ async function runClone() {
 
 // Helper gửi message tới tab Shopee active hoặc mở mới trang thêm SP nếu chưa mở
 async function sendMessageToActiveShopeeTab(message) {
-    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    if (!tab || !tab.url || !tab.url.includes("banhang.shopee.vn/portal/product/")) {
-        const tabs = await chrome.tabs.query({ url: "https://banhang.shopee.vn/portal/product/*" });
-        if (tabs && tabs.length > 0) {
-            tab = tabs[0];
+    let tab = null;
+    const currentTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (currentTabs && currentTabs[0] && currentTabs[0].url && currentTabs[0].url.includes("shopee.vn/portal/product/")) {
+        tab = currentTabs[0];
+    } else {
+        const allShopeeTabs = await chrome.tabs.query({ url: "*://*.shopee.vn/portal/product/*" });
+        if (allShopeeTabs && allShopeeTabs.length > 0) {
+            tab = allShopeeTabs.find(t => t.active) || allShopeeTabs[0];
             await chrome.tabs.update(tab.id, { active: true });
         } else {
             tab = await chrome.tabs.create({ url: "https://banhang.shopee.vn/portal/product/new?from=sidebar" });
-            await new Promise(r => setTimeout(r, 3000));
+            await new Promise((r) => setTimeout(r, 3000));
         }
     }
-    return new Promise((resolve) => chrome.tabs.sendMessage(tab.id, message, resolve));
+
+    if (!tab || !tab.id) {
+        throw new Error("Không tìm thấy tab trang sản phẩm Shopee đang mở!");
+    }
+
+    return new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(tab.id, message, (response) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+            } else {
+                resolve(response || { ok: true });
+            }
+        });
+    });
 }
 
 // Helper gọi XKiro AI API dự phòng với cơ chế thử nhiều model (DeepSeek, Qwen Free, Minimax...)
@@ -1260,10 +1651,51 @@ function setupWebSpActionButtons() {
             btnRewriteDesc.disabled = true;
 
             try {
-                const prompt = `Bạn là chuyên gia marketing Shopee. Hãy viết lại bài mô tả sản phẩm chuyên nghiệp, đầy đủ công dụng, thông số kỹ thuật, bảo hành, dùng biểu tượng emoji đẹp mắt. Giữ nguyên định dạng xuống dòng.\nTUYỆT ĐỐI KHÔNG dùng ký tự in đậm markdown ** (không được dùng dấu ** ở bất kỳ đâu trong văn bản).\nTên sản phẩm: ${currentName}\nMô tả cũ (nếu có): ${currentDesc}`;
+                const prompt = `Bạn là chuyên gia viết content marketing và SEO Shopee hàng đầu. Hãy viết lại bài mô tả sản phẩm này thật chi tiết, hấp dẫn và chuẩn SEO Shopee.
+
+YÊU CẦU BẮT BUỘC:
+1. ĐỘ DÀI: Khoảng 2500 đến 2700 ký tự (Đảm bảo độ dài từ 2500 - 2700 ký tự, không được vượt quá 2900 ký tự vì Shopee giới hạn tối đa 3000 ký tự).
+2. HASHTAG: Ở CUỐI BÀI VIẾT, BẮT BUỘC THÊM TỪ 15 - 20 HASHTAG CHUẨN SEO liên quan đến sản phẩm (Định dạng: #hashtag1 #hashtag2 #hashtag3...).
+3. BỐ CỤC ĐẦY ĐỦ RÕ RÀNG:
+   - Đoạn giới thiệu cuốn hút về sản phẩm.
+   - Đặc điểm nổi bật & Lợi ích vượt trội khi sử dụng sản phẩm.
+   - Thông số kỹ thuật chi tiết.
+   - Hướng dẫn sử dụng & Mẹo bảo quản.
+   - Chính sách cam kết & Bảo hành đổi trả uy tín của shop.
+   - Danh sách hashtag ở cuối cùng.
+4. ĐỊNH DẠNG:
+   - Dùng icon emoji sinh động, chuyên nghiệp cho từng đầu mục.
+   - Giữ nguyên định dạng xuống dòng rõ ràng giữa các đoạn.
+   - TUYỆT ĐỐI KHÔNG DÙNG ký tự markdown in đậm như ** hoặc __ hoặc * (Shopee không hỗ trợ markdown, sẽ bị lỗi hiển thị).
+   - Chỉ trả về duy nhất nội dung bài mô tả, không thêm bất kỳ lời chào hay ghi chú thừa nào.
+
+Tên sản phẩm: ${currentName}
+Mô tả hiện tại:
+${currentDesc}`;
                 let newDesc = await callGeminiApiDirect(prompt);
                 if (newDesc) {
-                    newDesc = newDesc.replace(/\*\*/g, '').replace(/\*/g, '').trim();
+                    newDesc = newDesc
+                        .replace(/```markdown/gi, '')
+                        .replace(/```/g, '')
+                        .replace(/\*\*/g, '')
+                        .replace(/\*/g, '')
+                        .trim();
+
+                    // Đảm bảo có hashtag nếu AI quên
+                    if (!/#\w+/.test(newDesc)) {
+                        const words = (currentName || '').toLowerCase().replace(/[^\w\sà-ỹ]/g, '').split(/\s+/).filter(w => w.length >= 2);
+                        const autoTags = [];
+                        for (let i = 0; i < words.length - 1 && autoTags.length < 15; i++) {
+                            autoTags.push('#' + words[i] + words[i+1]);
+                        }
+                        autoTags.push('#shopeevn', '#chinhhang', '#giare', '#freeship');
+                        newDesc += '\n\n' + autoTags.join(' ');
+                    }
+
+                    // Đảm bảo không vượt quá 2950 ký tự (giới hạn cứng của Shopee là 3000 ký tự)
+                    if (newDesc.length > 2950) {
+                        newDesc = newDesc.substring(0, 2900).trim();
+                    }
                     if (descInp) descInp.value = newDesc;
                     if (current) current.description = newDesc;
                     const countEl = document.getElementById('descCharCount');
@@ -1327,17 +1759,21 @@ function setupWebSpActionButtons() {
                     type: "FILL_PRODUCT_TEXT",
                     product: { description: val }
                 });
-                if (response?.message) {
-                    btnFillDesc.textContent = "Đã điền!";
+                if (response && response.ok) {
+                    btnFillDesc.textContent = "✔ Đã điền!";
+                    log(`✔ Đã điền mô tả sản phẩm vào Shopee (${val.length} ký tự)`, 'ok');
                 } else {
-                    btnFillDesc.textContent = "Đã gửi điền mô tả";
+                    const msg = response?.message || "Không tìm thấy ô nhập mô tả trên trang Shopee.";
+                    alert("Lỗi điền mô tả: " + msg);
+                    log("✖ Lỗi điền mô tả: " + msg, "err");
+                    btnFillDesc.textContent = "Lỗi điền";
                 }
-                log(`✔ Đã gửi điền mô tả sản phẩm vào Shopee (${val.length} ký tự)`, 'ok');
             } catch (err) {
                 alert("Lỗi điền mô tả: " + err.message);
                 log("✖ Lỗi điền mô tả vào Shopee: " + err.message, "err");
+                btnFillDesc.textContent = "Lỗi điền";
             } finally {
-                setTimeout(() => { btnFillDesc.textContent = "Điền vào SP"; }, 1500);
+                setTimeout(() => { btnFillDesc.textContent = "Điền vào SP"; }, 2000);
             }
         });
     }
@@ -1488,15 +1924,54 @@ async function init() {
   $('#btnClone')?.addEventListener('click', handleCloneClick);
   $('#btnDlAll')?.addEventListener('click', downloadAllMedia);
   $('#btnScan')?.addEventListener('click', runScan);
+  // Tải trước dữ liệu DS_SP cho gợi ý SKU
+  loadDsSpData(false);
+
+  // Đính kèm gợi ý SKU cho ô SKU cha
+  const parentSkuInp = $('#parentSkuInput');
+  if (parentSkuInp) {
+    attachSkuAutocomplete(parentSkuInp);
+  }
+
+  // Nút làm mới danh sách sản phẩm từ sheet DS_SP
+  $('#btnRefreshDsSp')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const btn = $('#btnRefreshDsSp');
+    const oldText = btn.textContent;
+    btn.textContent = '⏳ Đang tải...';
+    try {
+      const list = await loadDsSpData(true);
+      log(`Đã tải lại ${list.length} mã SKU từ sheet DS_SP thành công!`, 'ok');
+    } catch (err) {
+      log(`Lỗi tải sheet DS_SP: ${err.message}`, 'err');
+    } finally {
+      btn.textContent = oldText;
+    }
+  });
+
   $('#btnAutoFillSku')?.addEventListener('click', (e) => {
     e.preventDefault();
     if (!current || !current.models) return;
-    const parentSkuVal = String($('#parentSkuInput')?.value || opts.parentSku || current.itemId || '').trim();
+    let parentSkuVal = String($('#parentSkuInput')?.value || opts.parentSku || current.itemId || '').trim();
+    const maGian = getEffectiveMaGian();
+
+    let baseParent = parentSkuVal;
+    let hasMaGian = false;
+    if (maGian && baseParent.toLowerCase().endsWith(`-${maGian.toLowerCase()}`)) {
+      baseParent = baseParent.slice(0, -(maGian.length + 1)).trim();
+      hasMaGian = true;
+    }
+
     current.models.forEach((m) => {
       const key = m.tierIndex.join('-');
       const name = getModelDisplayName(m, current.tiers);
       const slugName = fileSlug(name);
-      const autoSku = parentSkuVal ? `${parentSkuVal}-${slugName}` : slugName;
+      let autoSku = baseParent ? `${baseParent}-${slugName}` : slugName;
+      if (maGian && (hasMaGian || maGian)) {
+        if (!autoSku.toLowerCase().endsWith(`-${maGian.toLowerCase()}`)) {
+          autoSku = `${autoSku}-${maGian}`;
+        }
+      }
       currentModelSkus[key] = autoSku;
       const inp = document.querySelector(`.var-sku-input[data-key="${key}"]`);
       if (inp) inp.value = autoSku;
@@ -1631,6 +2106,9 @@ async function init() {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     if (changes.sclProducts && currentItemId) setCurrentItem(currentItemId);
+    if (changes.ds_sp_cache_data && changes.ds_sp_cache_data.newValue) {
+      dsSpList = parseDsSpRows(changes.ds_sp_cache_data.newValue);
+    }
     if (changes.sclLastItemId && !current) detectFromActiveTab();
     if (changes.aiCoverImage) loadCover().then(checkAutoFlow);
     if (changes.maGian || changes.dhHoanTextValue) {

@@ -1,3 +1,4 @@
+const { variationSku, skuPair, fillSkusFromSheet } = self.AutoInSku;
 // Side Panel: đọc đơn, hiện kho + địa chỉ lấy hàng, chọn đơn.
 // Nút "Xác nhận lấy hàng": hiện tóm tắt, bấm "Gửi yêu cầu lấy hàng" mới gọi batch_init_orders (giống nút trên Shopee).
 const BATCH = 5;
@@ -171,6 +172,13 @@ async function fetchCards(v, index) {
   return cards;
 }
 
+function productImage(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  return /^[\w-]+$/.test(raw) ? `https://cf.shopee.vn/file/${raw}` : "";
+}
+
 function toRow(c) {
   const p = c.package_card || c.order_card || {};
   const ext = p.order_ext_info || {};
@@ -186,6 +194,16 @@ function toRow(c) {
     package_number: p.package_ext_info?.package_number || "",
     buyer: head.buyer_info?.username || "",
     items: items.map((it) => `${it.name}${it.description ? " [" + it.description + "]" : ""} ×${it.amount}`),
+    itemRows: items.map((it) => ({
+      image: productImage(it.image || it.item_image || it.cover_image || it.product?.image),
+      itemId: it.item_id || it.itemid || it.product?.item_id,
+      modelId: it.model_id || it.modelid || it.item_model?.model_id,
+      name: it.product?.name || it.item_name || it.name || "",
+      model: it.item_model?.name || it.model_name || String(it.description || "").replace(/^\s*(Variation|Phân loại)\s*:\s*/i, "").replace(/\s*\[[^\]]*\]\s*$/, ""),
+      itemSku: it.product?.sku || it.item_sku || it.parent_sku || "",
+      modelSku: it.item_model?.sku || it.model_sku || it.variation_sku || it.sku || variationSku(it.description) || "",
+      qty: it.amount ?? it.quantity ?? 1
+    })),
     total: (pay.total_price || 0) / 1e5,
     status: st.status || "",
     ship_by: ext.ship_by_date ? "Hạn " + new Date(ext.ship_by_date * 1000).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }) : "",
@@ -196,6 +214,34 @@ function toRow(c) {
     tracking: fi.tracking_number || "",
     location_id: null,
   };
+}
+
+// SKU Shopee trước, SP_SHOPEE chỉ bổ sung các ô còn thiếu.
+
+async function resolveOrderSkus(fresh) {
+  for (const r of fresh) {
+    if (!(r.itemRows || []).some((it) => !it.modelSku) || !r.order_id) continue;
+    try {
+      const detail = await api("/api/v3/order/get_one_order", null, "GET", `&order_id=${encodeURIComponent(r.order_id)}`);
+      for (const it of r.itemRows) {
+        if (it.modelSku) continue;
+        const matches = (detail.order_items || []).filter((d) => {
+          const id = d.item_id || d.itemid || d.product?.item_id;
+          const modelId = d.model_id || d.modelid || d.item_model?.model_id;
+          return (it.itemId && it.modelId && String(id) === String(it.itemId) && String(modelId) === String(it.modelId))
+            || skuPair(d.product?.name || d.item_name || d.name, d.item_model?.name || d.model_name || "") === skuPair(it.name, it.model);
+        });
+        const skus = new Set(matches.map((d) => String(d.item_model?.sku || d.model_sku || d.variation_sku || d.sku || "").trim()).filter(Boolean));
+        if (skus.size === 1) it.modelSku = [...skus][0];
+      }
+    } catch (e) { console.warn("Không đọc được SKU chi tiết đơn", r.order_sn, e.message); }
+  }
+  if (!fresh.some((r) => r.itemRows.some((it) => !it.modelSku))) return;
+  try {
+    const res = await chrome.runtime.sendMessage({ type: "FETCH_SP_SHOPEE" });
+    if (!res?.ok) throw new Error(res?.error || "Không đọc được SP_SHOPEE");
+    fillSkusFromSheet(fresh, res.values || [], $("#tc-gian-input")?.value || "");
+  } catch (e) { autoLog(`Không tra được SKU từ SP_SHOPEE: ${esc(e.message)}`); }
 }
 
 // ---------- kho & địa chỉ lấy hàng (chỉ đọc) ----------
@@ -237,14 +283,10 @@ const money = (n) => n.toLocaleString("vi-VN") + "₫";
 
 function mount() {
   $("#app").innerHTML = `
-    <div class="tc-bar" style="display:flex;justify-content:space-between;align-items:center;">
-      <span>AutoIn · <span id="tc-current-shop-title" style="color:#fef08a;">Đang tải...</span></span>
-      <span style="font-size:11px;font-weight:400;color:#9ec5fe">⚡ Tự động chạy nền & Báo động</span>
-    </div>
     <div style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:5px 12px;display:flex;align-items:center;gap:6px;font-size:11px;">
       <span style="font-weight:600;color:#475569;">Mã gian:</span>
       <input type="text" id="tc-gian-input" placeholder="Mã gian..." style="width:75px;padding:2px 5px;border:1px solid #cbd5e1;border-radius:4px;font-weight:bold;text-transform:uppercase;font-size:11px;">
-      <span style="color:#64748b;">→ Shop Wameli:</span>
+      <span style="color:#64748b;">Wameli:</span>
       <span id="tc-shop-name-label" style="font-weight:bold;color:#0284c7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;" title="Tên shop theo Sheet CAI_DAT">--</span>
     </div>
     <div class="tc-tabs">${Object.entries(VIEWS).map(([k, v]) => `<button class="tc-pill" data-k="${k}">${v.label}<span class="n">–</span></button>`).join("")}</div>
@@ -252,6 +294,9 @@ function mount() {
       <div class="tc-tools-row">
         <button class="tc-btn" id="tc-read" title="Quét đơn ngay lập tức">↻ Đọc ngay</button>
         <button class="tc-btn gray" id="tc-auto" title="Bật/Tắt tự động chạy nền">🤖 Tự động: TẮT</button>
+      </div>
+      <details class="tc-options"><summary>Tiện ích & cài đặt</summary>
+      <div class="tc-tools-row tc-secondary">
         <button class="tc-btn sm purple" id="tc-report" title="Báo cáo tổng kết ngày (17h & 8h)">📊 Tổng kết</button>
         <button class="tc-btn sm blue" id="tc-tele" title="Cài đặt thông báo Telegram">✈️ Tele</button>
         <button class="tc-btn sm blue" id="tc-pdf" title="Xem & tải lại PDF vừa in">⬇ PDF</button>
@@ -276,9 +321,10 @@ function mount() {
           </label>
         </div>
       </div>
+      </details>
     </div>
     <div class="tc-sum" id="tc-sum"></div>
-    <div class="tc-note" id="tc-autolog" hidden style="margin:0 8px 6px;max-height:120px;overflow:auto"></div>
+    <details class="tc-log-panel"><summary>Nhật ký hoạt động</summary><div class="tc-note" id="tc-autolog" hidden style="margin:0;max-height:140px;overflow:auto"></div></details>
     <div class="tc-body" id="tc-body"></div>
     <div class="tc-ship" id="tc-ship" hidden></div>`;
 
@@ -510,18 +556,29 @@ chrome.runtime.onMessage.addListener((msg) => {
 function card(r) {
   const wh = whs.find((w) => w.id === r.location_id);
   const isNew = !seen.has(r.order_sn);
-  const sel = cur === "cho-xu-ly" || cur === "da-xu-ly";
-  return `<div class="tc-card ${r.warn ? "warn" : ""} ${isNew ? "new" : ""} ${picked.has(r.package_number) ? "sel" : ""}">
-    <div class="tc-top"><span>${sel ? `<input type="checkbox" data-p="${esc(r.package_number)}" ${picked.has(r.package_number) ? "checked" : ""}>` : ""}
-      <a href="https://banhang.shopee.vn/portal/sale/order/${r.order_id}" target="_blank">${esc(r.order_sn)}</a></span>
-      <span>${money(r.total)}</span></div>
-    <div class="tc-row"><span>👤 ${esc(r.buyer)}</span>${wh ? `<span class="tc-kho ${isHCM(wh.name) ? "hcm" : ""}">${esc(wh.name)}</span>` : ""}</div>
-    <div class="tc-items">${r.items.map(esc).join("<br>")}</div>
-    <div class="tc-row"><span>🚚 ${esc(r.carrier)} ${esc(r.tracking)}</span><span>${esc(r.ship_by)}</span></div>
-    ${r.tag ? `<div class="tc-muted">⏱ ${esc(r.tag)}</div>` : ""}
-    ${wh && sel ? `<div class="tc-muted">📍 Lấy tại: ${esc(addrOf(wh) ? `${addrOf(wh).address}, ${addrOf(wh).city}` : "chưa có địa chỉ lấy hàng cho kho này")}</div>` : ""}
-    ${isNew ? `<span class="tc-tag blue">Đơn mới</span>` : ""}${r.warn ? `<span class="tc-tag">Sắp/quá hạn</span>` : ""}
-  </div>`;
+  const selectable = cur === "cho-xu-ly" || cur === "da-xu-ly";
+  const items = r.itemRows?.length ? r.itemRows : (r.items || []).map((text) => {
+    const match = String(text).match(/^(.*?)(?: \[(?:Variation|Phân loại):\s*(.*?)\])? ×(\d+)$/i);
+    return { name: match ? match[1] : text, model: match?.[2] || "", qty: match?.[3] || "", itemSku: "", modelSku: "" };
+  });
+  if (!items.length) items.push({ name: "Chưa có thông tin sản phẩm", model: "", itemSku: "", modelSku: "", qty: "" });
+  const span = `rowspan="${items.length}"`;
+  const flags = `${isNew ? '<span class="tc-tag blue">Đơn mới</span>' : ''}${r.warn ? '<span class="tc-tag">Sắp/quá hạn</span>' : ''}`;
+  return items.map((it, i) => `<tr class="${r.warn ? 'warn' : ''} ${picked.has(r.package_number) ? 'sel' : ''}">
+    ${i === 0 ? `<td ${span} class="tc-check">${selectable ? `<input type="checkbox" aria-label="Chọn đơn ${esc(r.order_sn)}" data-p="${esc(r.package_number)}" ${picked.has(r.package_number) ? 'checked' : ''}>` : ''}</td>
+    <td ${span} class="tc-order"><a href="https://banhang.shopee.vn/portal/sale/order/${r.order_id}" target="_blank" rel="noopener">${esc(r.order_sn)}</a><div>${flags}</div></td>
+    <td ${span}>${esc(r.buyer)}</td>
+    <td ${span}>${esc(r.status)}${r.tag ? `<div class="tc-muted">${esc(r.tag)}</div>` : ''}</td>` : ''}
+    <td class="tc-product"><div class="tc-product-content">${it.image ? `<img class="tc-product-image" src="${esc(it.image)}" loading="lazy" alt="">` : ""}<span>${esc(it.name)}</span></div></td><td>${esc(it.model)}</td><td class="tc-model-sku">${esc(it.modelSku)}</td><td class="tc-qty">${esc(it.qty)}</td>
+    ${i === 0 ? `<td ${span} class="tc-money">${money(r.total)}</td><td ${span}>${esc(r.carrier)}<div class="tc-muted">${esc(r.tracking)}</div></td><td ${span}>${esc(r.ship_by)}</td>
+    <td ${span}>${wh ? `<span class="tc-kho ${isHCM(wh.name) ? 'hcm' : ''}">${esc(wh.name)}</span><div class="tc-muted">${esc(addrOf(wh) ? `${addrOf(wh).address}, ${addrOf(wh).city}` : 'Chưa có địa chỉ lấy hàng')}</div>` : 'Chưa rõ kho'}</td>` : ''}
+  </tr>`).join("");
+}
+
+function orderTable(list) {
+  return `<div class="tc-table-wrap"><table class="tc-order-table"><thead><tr>
+    <th class="tc-check"></th><th>Mã đơn</th><th>Người mua</th><th>Trạng thái</th><th>Sản phẩm</th><th>Phân loại</th><th>SKU phân loại</th><th>SL</th><th>Tổng tiền</th><th>Vận chuyển / Mã vận đơn</th><th>Hạn giao</th><th>Kho / Địa chỉ lấy hàng</th>
+    </tr></thead><tbody>${list.map(card).join("")}</tbody></table></div>`;
 }
 
 function render() {
@@ -529,12 +586,12 @@ function render() {
   const body = $("#tc-body");
   if (!rows.length) { body.innerHTML = `<p class="tc-muted">Không có đơn.</p>`; $("#tc-ship").hidden = true; return; }
   if (cur === "da-xu-ly") { renderPrinted(body); return; }
-  if (cur !== "cho-xu-ly") { body.innerHTML = rows.map(card).join(""); $("#tc-ship").hidden = true; return; }
+  if (cur !== "cho-xu-ly") { body.innerHTML = orderTable(rows); $("#tc-ship").hidden = true; return; }
   const groups = {};
   for (const r of rows) (groups[r.location_id || "?"] ||= []).push(r);
   body.innerHTML = Object.entries(groups).map(([loc, list]) => {
     const wh = whs.find((w) => w.id === loc);
-    return `<div class="tc-group">${esc(wh?.name || "Chưa rõ kho")} <small><label><input type="checkbox" data-all="${esc(loc)}"> chọn tất cả (${list.length})</label></small></div>${list.map(card).join("")}`;
+    return `<div class="tc-group">${esc(wh?.name || "Chưa rõ kho")} <small><label><input type="checkbox" data-all="${esc(loc)}"> chọn tất cả (${list.length})</label></small></div>${orderTable(list)}`;
   }).join("");
   body.querySelectorAll("input[data-p]").forEach((c) => (c.onchange = () => { c.checked ? picked.add(c.dataset.p) : picked.delete(c.dataset.p); render(); }));
   body.querySelectorAll("input[data-all]").forEach((c) => {
@@ -547,7 +604,7 @@ function render() {
 
 // ---------- Tab ĐÃ XỬ LÝ (CHẠY LẠI QUY TRÌNH & IN ĐƠN) ----------
 function renderPrinted(body) {
-  body.innerHTML = `<div class="tc-group">Đơn đã xử lý <small><label><input type="checkbox" id="tc-allp"> chọn tất cả (${rows.length})</label></small></div>` + rows.map(card).join("");
+  body.innerHTML = `<div class="tc-group">Đơn đã xử lý <small><label><input type="checkbox" id="tc-allp"> chọn tất cả (${rows.length})</label></small></div>` + orderTable(rows);
 
   body.querySelectorAll("input[data-p]").forEach((c) => (c.onchange = () => { c.checked ? picked.add(c.dataset.p) : picked.delete(c.dataset.p); render(); }));
   const all = $("#tc-allp");
@@ -927,6 +984,8 @@ const XLS_HEAD = ["Mã đơn hàng", "Mã Kiện Hàng", "Ngày đặt hàng", "
   "Trạng thái Trả hàng/Hoàn tiền", "SKU sản phẩm", "Tên sản phẩm", "Cân nặng sản phẩm", "Tổng cân nặng", "Tên kho hàng",
   "SKU phân loại hàng", "Tên phân loại hàng", "Giá gốc", "Người bán trợ giá", "Được Shopee trợ giá",
   "Tổng số tiền được người bán trợ giá", "Giá gốc (Y)", "Số lượng", "Số lượng sản phẩm được hoàn trả", "Tổng số tiền Người mua thanh toán"];
+
+const DEFAULT_EXCEL_PRICE = 100000000; // Mặc định giá 100.000.000đ khi xuất Excel nạp Wameli
 async function downloadExcel(orders, filename, log) {
   try {
     const rows = [XLS_HEAD];
@@ -950,7 +1009,7 @@ async function downloadExcel(orders, filename, log) {
           r[5] = o.tn || "";
           r[6] = carrier;
           r[18] = modelSku;
-          r[24] = price;
+          r[24] = DEFAULT_EXCEL_PRICE;
           r[25] = amount;
           rows.push(r);
 
@@ -1211,7 +1270,7 @@ async function teleMenu() {
       <div style="background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:8px">
         <b style="font-size:12px">Chọn các thông báo muốn nhận:</b>
         <div style="display:flex;flex-direction:column;gap:5px;margin-top:6px;font-size:12px">
-          <label><input type="checkbox" id="tc-tel-order" ${cfg["tcdd-tele-order"] !== "0" ? "checked" : ""}> 📦 Gửi khi có <b>Đơn hàng mới</b> (Mã đơn, người mua, sản phẩm, tổng tiền, ĐVVC)</label>
+          <label><input type="checkbox" id="tc-tel-order" ${cfg["tcdd-tele-order"] !== "0" ? "checked" : ""}> 📦 Gửi khi có <b>Đơn hàng mới</b> (Gian, mã đơn, tên sản phẩm, SKU phân loại)</label>
           <label><input type="checkbox" id="tc-tel-error" ${cfg["tcdd-tele-error"] !== "0" ? "checked" : ""}> 🚨 Gửi khi có <b>Đơn lỗi ❌</b> (Cảnh báo khẩn cấp để xử lý ngay trên điện thoại)</label>
           <label><input type="checkbox" id="tc-tel-report" ${cfg["tcdd-tele-report"] !== "0" ? "checked" : ""}> 📊 Tự động gửi <b>Báo cáo tổng kết lúc 17h & 8h sáng</b> vào nhóm</label>
           <label><input type="checkbox" id="tc-tel-wameli" ${cfg["tcdd-tele-wameli"] !== "0" ? "checked" : ""}> ☁️ Gửi khi <b>Nạp Wameli thành công</b> (Tên lô, khung giờ, số lượng)</label>
@@ -1418,6 +1477,8 @@ async function load() {
     if (idx.list[0]) shop = { shop_id: idx.list[0].shop_id, region_id: idx.list[0].region_id };
     const fresh = (await fetchCards(v, idx.list)).map(toRow);
     if (my !== seq) return;
+    await resolveOrderSkus(fresh);
+    if (my !== seq) return;
     rows = fresh;
     counts[cur] = idx.total;
     if (cur === "cho-xu-ly") { await loadWarehouses(); await tagLocations(); slots = []; }
@@ -1427,6 +1488,7 @@ async function load() {
     rows.forEach((r) => seen.add(r.order_sn));
     ls.set("tcdd-seen", JSON.stringify([...seen].slice(-2000)));
     $("#tc-sum").textContent = `${v.label}: ${rows.length} đơn · đọc lúc ${new Date().toLocaleTimeString("vi-VN")}`;
+    chrome.runtime.sendMessage({type:"tcdd-sync-waiting-sheet"}).then((res) => { if (res && !res.ok) autoLog(`Đồng bộ sheet: ${esc(res.error)}`); }).catch((e) => autoLog(`Đồng bộ sheet: ${esc(e.message)}`));
     fails = 0;
     countAll();
     schedule();

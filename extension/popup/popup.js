@@ -124,7 +124,7 @@ function applySpreadsheetConfig(spreadsheetId) {
   GOOGLE_SHEET_CONFIG.spreadsheetId = savedId || DEFAULT_SPREADSHEET_ID;
 
   const configInput = document.getElementById("config-spreadsheet-id");
-  if (configInput) configInput.value = GOOGLE_SHEET_CONFIG.spreadsheetId;
+  if (configInput) configInput.value = savedId;
 
   return GOOGLE_SHEET_CONFIG.spreadsheetId;
 }
@@ -5653,7 +5653,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const savedId = res.customSpreadsheetId ? String(res.customSpreadsheetId).trim() : "";
       applySpreadsheetConfig(savedId);
       updateSavedSpreadsheetIdDisplay(savedId);
-      if (configInput) configInput.value = GOOGLE_SHEET_CONFIG.spreadsheetId;
+      if (configInput) configInput.value = savedId;
       // Chưa nhập ID sheet để kết nối -> chỉ hiện tab Cài đặt
       if (!savedId) {
           hideAllTabsExceptSettings();
@@ -6281,6 +6281,45 @@ saveToSheetTestButton.addEventListener("click", async () => {
   }
 });
 
+const GRP2_TAB_IDS = new Set([
+  "tab-hang-hoan", "tab-api-images", "tab-doanh-thu", "tab-tools",
+  "tab-images", "tab-print", "tab-test", "tab-km", "tab-nhieu-don-hang", "tab-roas-that"
+]);
+
+function switchTabGroup(groupNumber, autoClickFirst = false) {
+  const btn1 = document.getElementById("btn-group-1");
+  const btn2 = document.getElementById("btn-group-2");
+  const grp1Btns = document.getElementById("tab-group-btns-1");
+  const grp2Btns = document.getElementById("tab-group-btns-2");
+
+  const isGrp1 = (groupNumber === 1 || groupNumber === "1");
+
+  if (btn1) btn1.classList.toggle("active", isGrp1);
+  if (btn2) btn2.classList.toggle("active", !isGrp1);
+
+  if (grp1Btns) grp1Btns.style.display = isGrp1 ? "flex" : "none";
+  if (grp2Btns) grp2Btns.style.display = isGrp1 ? "none" : "flex";
+
+  if (autoClickFirst) {
+    const targetGrp = isGrp1 ? grp1Btns : grp2Btns;
+    if (targetGrp) {
+      const activeInGrp = targetGrp.querySelector(".tab-btn.active");
+      if (!activeInGrp) {
+        const firstVisible = Array.from(targetGrp.querySelectorAll(".tab-btn")).find(b => b.style.display !== "none");
+        if (firstVisible) firstVisible.click();
+      }
+    }
+  }
+}
+
+function syncGroupForTab(tabId) {
+  if (GRP2_TAB_IDS.has(tabId)) {
+    switchTabGroup(2, false);
+  } else {
+    switchTabGroup(1, false);
+  }
+}
+
 const switchToTab = (tabId) => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".tab-content").forEach(c => {
@@ -6295,6 +6334,8 @@ const switchToTab = (tabId) => {
       targetTab.classList.add("active");
       targetTab.hidden = false;
     }
+
+    syncGroupForTab(tabId);
 
     const sharedFolder = document.getElementById("shared-folder-section");
     const sharedImage = document.getElementById("shared-image-section");
@@ -6331,6 +6372,9 @@ document.querySelectorAll(".tab-btn").forEach((tabButton) => {
     }
   });
 });
+document.getElementById("btn-group-1")?.addEventListener("click", () => switchTabGroup(1, true));
+document.getElementById("btn-group-2")?.addEventListener("click", () => switchTabGroup(2, true));
+
 
 
 
@@ -8028,10 +8072,10 @@ const CAI_DAT_TAB_NAME_TO_ID = {
   "ds don hang": "tab-nhieu-don-hang",
   "dh": "tab-nhieu-don-hang",
   "hang hoan": "tab-hang-hoan",
-  "ds sp": "tab-ds-sp",
-  "danh sach sp": "tab-ds-sp",
-  "sp shopee": "tab-sheet-sp-shopee",
-  "sp giam gia": "tab-sp-giam-gia",
+
+
+
+
   "km": "tab-km",
   "khuyen mai": "tab-km",
   "doanh thu": "tab-doanh-thu",
@@ -8041,6 +8085,9 @@ const CAI_DAT_TAB_NAME_TO_ID = {
   "flash sale tool": "tab-fs-tool",
   "fs": "tab-fs-tool",
   "sao chep san pham": "tab-in-nang-cao",
+  "sao chep tay": "tab-clone-manual",
+  "chep tay": "tab-clone-manual",
+  "sao chep thu cong": "tab-clone-manual",
   "in nang cao": "tab-in-nang-cao",
   "autoin": "tab-autoin",
   "auto in": "tab-autoin",
@@ -8051,19 +8098,22 @@ const CAI_DAT_TAB_NAME_TO_ID = {
   "don tool": "tab-order-tool",
   "order tool": "tab-order-tool",
   "in": "tab-print",
-  "tao phieu": "tab-tao-phieu",
-  "in phieu": "tab-tao-phieu",
-  "in tu dong": "tab-in-tu-dong",
-  "tu dong in": "tab-in-tu-dong",
-  "chat ai": "tab-chat-ai",
-  "chat": "tab-chat-ai",
-  "tu van chat": "tab-chat-ai",
-  "chat shopee": "tab-chat-ai",
+
+
+
+
+
+
+
+
   "quet shop": "tab-quet-shop",
   "quet sp": "tab-quet-shop",
   "doc sp shop": "tab-quet-shop",
   "doc san pham shop": "tab-quet-shop",
-  "quet san pham": "tab-quet-shop"
+  "quet san pham": "tab-quet-shop",
+  "roas that": "tab-roas-that",
+  "roas": "tab-roas-that",
+  "roas quang cao": "tab-roas-that"
 };
 
 function normalizeCaiDatTabName(value) {
@@ -8110,23 +8160,55 @@ function applyCaiDatTabOrder(tabNames) {
     }
   });
 
-  // Đưa các tab được khai báo trong Sheet cai_dat lên đầu theo thứ tự
-  orderedIds.forEach((tabId) => {
-    const btn = btnById.get(tabId);
-    if (btn) tabHeader.appendChild(btn);
-  });
+  const grp1Container = document.getElementById("tab-group-btns-1");
+  const grp2Container = document.getElementById("tab-group-btns-2");
 
-  // Đưa các tab mới (chưa có trong Sheet) về phía sau để luôn hiển thị cho người dùng bấm
-  tabBtns.forEach((btn) => {
-    if (!orderedIds.includes(btn.dataset.tab) && !explicitlyHiddenTabs.has(btn.dataset.tab)) {
-      tabHeader.appendChild(btn);
-    }
-  });
+  if (grp1Container && grp2Container) {
+    const grp1Ids = ["tab-web-sp", "tab-in-nang-cao", "tab-clone-manual", "tab-order-tool", "tab-settings", "tab-fs-tool", "tab-day-sp", "tab-hieu-qua-sp", "tab-quet-shop", "tab-autoin", "tab-autochat"];
+    const grp2Ids = ["tab-hang-hoan", "tab-api-images", "tab-doanh-thu", "tab-tools", "tab-images", "tab-print", "tab-test", "tab-km", "tab-nhieu-don-hang", "tab-roas-that"];
+
+    // Sắp xếp lại trong Nhóm 1 nếu có trong orderedIds
+    const orderedGrp1 = orderedIds.filter(id => grp1Ids.includes(id));
+    const restGrp1 = grp1Ids.filter(id => !orderedGrp1.includes(id));
+    [...orderedGrp1, ...restGrp1].forEach(id => {
+      const btn = btnById.get(id);
+      if (btn) grp1Container.appendChild(btn);
+    });
+    const webBtn = document.getElementById("btn-open-web");
+    if (webBtn) grp1Container.appendChild(webBtn);
+
+    // Sắp xếp lại trong Nhóm 2 nếu có trong orderedIds
+    const orderedGrp2 = orderedIds.filter(id => grp2Ids.includes(id));
+    const restGrp2 = grp2Ids.filter(id => !orderedGrp2.includes(id));
+    [...orderedGrp2, ...restGrp2].forEach(id => {
+      const btn = btnById.get(id);
+      if (btn) grp2Container.appendChild(btn);
+    });
+
+    const switcher = document.querySelector(".group-switcher");
+    if (switcher) switcher.style.display = "flex";
+  } else {
+    orderedIds.forEach((tabId) => {
+      const btn = btnById.get(tabId);
+      if (btn) tabHeader.appendChild(btn);
+    });
+
+    tabBtns.forEach((btn) => {
+      if (!orderedIds.includes(btn.dataset.tab) && !explicitlyHiddenTabs.has(btn.dataset.tab)) {
+        tabHeader.appendChild(btn);
+      }
+    });
+  }
 
   const activeBtn = document.querySelector(".tab-btn.active");
   if (!activeBtn || activeBtn.style.display === "none") {
     const firstVisible = tabBtns.find(b => b.style.display !== "none");
     if (firstVisible) firstVisible.click();
+  }
+
+  const currentActive = document.querySelector(".tab-btn.active");
+  if (currentActive && currentActive.dataset.tab) {
+    syncGroupForTab(currentActive.dataset.tab);
   }
 
   return { orderedIds };
@@ -8145,6 +8227,12 @@ window.hideAllTabsExceptSettings = function() {
                 btn.style.display = "none";
             }
         });
+        const switcher = document.querySelector(".group-switcher");
+        if (switcher) switcher.style.display = "none";
+        const grp2Btns = document.getElementById("tab-group-btns-2");
+        if (grp2Btns) grp2Btns.style.display = "none";
+        const grp1Btns = document.getElementById("tab-group-btns-1");
+        if (grp1Btns) grp1Btns.style.display = "flex";
         if (settingsBtn) settingsBtn.click();
     }
 };

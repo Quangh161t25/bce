@@ -3058,54 +3058,23 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
   }
 
   function fillInputLikeUser(input, value) {
+    if (!input) return;
     const text = value !== undefined && value !== null ? String(value) : "";
 
     input.scrollIntoView({ block: "center", inline: "nearest" });
-    
-    // Simulate mouse interaction on the wrapper to activate custom event handlers
-    const wrapper = input.closest('.eds-input, .eds-input-number') || input.parentElement || input;
-    if (wrapper) {
-      wrapper.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-      wrapper.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-      wrapper.click();
-    }
-    
     input.focus();
-    input.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-    input.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-    input.click();
-    
-    setNativeValue(input, "");
-    input.setAttribute("modelvalue", "");
 
-    for (const character of text) {
-      const nextValue = input.value + character;
+    setNativeValue(input, text);
+    input.setAttribute("modelvalue", text);
+    input.setAttribute("value", text);
+    if (input._value !== undefined) input._value = text;
 
-      input.dispatchEvent(new KeyboardEvent("keydown", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        key: character
-      }));
-      input.dispatchEvent(new InputEvent("beforeinput", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        data: character,
-        inputType: "insertText"
-      }));
-      setNativeValue(input, nextValue);
-      input.setAttribute("modelvalue", nextValue);
-      input.dispatchEvent(new KeyboardEvent("keyup", {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        key: character
-      }));
-    }
-
+    try {
+      input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, data: text }));
+    } catch (_) {}
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
     input.dispatchEvent(new Event("blur", { bubbles: true, composed: true }));
-    input.blur();
   }
 
   function findProductNameInput() {
@@ -3140,10 +3109,34 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
   }
 
   function findProductDescriptionEditor() {
+    // 1. Tìm theo nhãn "Mô tả sản phẩm" hoặc "Product Description"
+    const allLabels = Array.from(document.querySelectorAll('label, div, span, h2, h3, h4, p'));
+    const descLabel = allLabels.find(el => {
+      const t = (el.textContent || '').trim().toLowerCase();
+      return (t === 'mô tả sản phẩm' || t === '* mô tả sản phẩm' || t.includes('mô tả sản phẩm') || t === 'mô tả' || t === '* mô tả') && el.children.length <= 2;
+    });
+
+    if (descLabel) {
+      const container = descLabel.closest('.eds-form-item, .product-edit-form-item, .edit-row, .shopee-form-item, section, .form-item') || descLabel.parentElement?.parentElement;
+      if (container) {
+        const ed = container.querySelector('.ProseMirror, .ql-editor[contenteditable="true"], [contenteditable="true"]:not(.ql-clipboard), textarea');
+        if (ed && isVisible(ed)) return ed;
+      }
+    }
+
+    // 2. ƯU TIÊN: Gọi hàm chuyên dụng cho Kênh Người Bán Shopee
+    if (typeof findSellerProductDescriptionEditor === 'function') {
+      try {
+        const sellerEd = findSellerProductDescriptionEditor();
+        if (sellerEd && isVisible(sellerEd)) return sellerEd;
+      } catch (e) {}
+    }
+
     const editables = Array.from(document.querySelectorAll("[contenteditable='true']"));
     
-    // 1. Try finding by placeholder containing 'mo ta'
+    // 3. Tìm theo placeholder chứa 'mo ta'
     let editor = editables.find((el) => {
+      if (el.classList?.contains('ql-clipboard')) return false;
       const p1 = normalizeSearchText(el.getAttribute("data-placeholder") || "");
       const p2 = normalizeSearchText(el.getAttribute("placeholder") || "");
       return p1.includes("mo ta") || p2.includes("mo ta");
@@ -3151,7 +3144,7 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
     
     if (editor && isVisible(editor)) return editor;
 
-    // 2. Fallback: find any textarea with placeholder containing 'mo ta'
+    // 4. Fallback: tìm textarea chứa 'mo ta'
     const textareas = Array.from(document.querySelectorAll("textarea"));
     let textarea = textareas.find((el) => {
       const p1 = normalizeSearchText(el.getAttribute("placeholder") || "");
@@ -3161,43 +3154,112 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
 
     if (textarea && isVisible(textarea)) return textarea;
 
-    // 3. Fallback: return the first large editable or textarea (height > 50px)
-    editor = editables.find(el => isVisible(el) && el.clientHeight > 50);
+    // 5. Fallback: phần tử editable lớn (height > 50px)
+    editor = editables.find(el => isVisible(el) && el.clientHeight > 50 && !el.classList?.contains('ql-clipboard'));
     if (editor) return editor;
 
     textarea = textareas.find(el => isVisible(el) && el.clientHeight > 50);
     if (textarea) return textarea;
 
-    if (typeof findSellerProductDescriptionEditor === 'function') {
-      try {
-        const sellerEd = findSellerProductDescriptionEditor();
-        if (sellerEd) return sellerEd;
-      } catch (e) {}
-    }
-
     return null;
   }
   
   function fillDescriptionEditor(editor, text) {
-    if (!editor || !text) return;
+    if (!editor || !text) return false;
+
+    editor.scrollIntoView({ block: "center", inline: "nearest" });
     editor.focus();
-    
+
+    // Trường hợp 1: Nếu là thẻ textarea thông thường
     if (editor.tagName && editor.tagName.toLowerCase() === "textarea") {
-      setNativeValue(editor, text);
-    } else {
-      editor.classList.remove("ql-blank");
-      editor.innerHTML = "";
-      for (const line of text.split(/\r?\n/)) {
-        const paragraph = document.createElement("p");
-        paragraph.textContent = line || " ";
-        editor.append(paragraph);
+      editor.select();
+      let success = false;
+      try {
+        success = document.execCommand("insertText", false, text);
+      } catch (e) {}
+
+      if (!success || editor.value !== text) {
+        setNativeValue(editor, text);
       }
-      editor.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText", data: text }));
+      editor.setAttribute("modelvalue", text);
+      editor.setAttribute("value", text);
+      if (editor._value !== undefined) editor._value = text;
+      editor.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
       editor.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+      return true;
     }
+
+    // Trường hợp 2: Nếu là contenteditable (.ql-editor / .ProseMirror)
+    const escape = (s) => String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+
+    const html = text
+      .split(/\r?\n/)
+      .map(line => {
+        const trimmed = line.trim();
+        return trimmed ? `<p>${escape(line)}</p>` : `<p><br></p>`;
+      })
+      .join("");
+
+    // 1. Chọn toàn bộ nội dung cũ
+    try {
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) {
+      try { document.execCommand("selectAll", false, null); } catch (_) {}
+    }
+
+    // 2. Chèn bằng insertHTML (lệnh chuẩn browser cho Quill & ProseMirror)
+    let inserted = false;
+    try {
+      inserted = document.execCommand("insertHTML", false, html);
+    } catch (e) {
+      console.warn("execCommand insertHTML failed:", e);
+    }
+
+    // 3. Nếu insertHTML không thành công hoặc editor vẫn rỗng, thử insertText
+    if (!inserted || !editor.innerText || !editor.innerText.trim()) {
+      try {
+        document.execCommand("selectAll", false, null);
+        inserted = document.execCommand("insertText", false, text);
+      } catch (e) {
+        console.warn("execCommand insertText failed:", e);
+      }
+    }
+
+    // 4. Fallback gán innerHTML trực tiếp nếu execCommand bị chặn
+    if (!editor.innerText || !editor.innerText.trim()) {
+      editor.classList.remove("ql-blank");
+      editor.innerHTML = html;
+    }
+
+    // 5. Kích hoạt sự kiện để Shopee validation và word counter cập nhật
+    try {
+      editor.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertHTML", data: html }));
+    } catch (_) {}
+    editor.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    editor.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+
+    // 6. Cập nhật vị trí con trỏ về cuối
+    try {
+      const range = document.createRange();
+      const selection = window.getSelection();
+      range.selectNodeContents(editor);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } catch (_) {}
+
+    return true;
   }
 
-  
   async function autoFillIfEmpty(product, brand) {
     let result = "";
     
@@ -9309,6 +9371,9 @@ Chúc anh/chị có một ngày thật vui vẻ, nhiều năng lượng và tố
     }
 
     if (message?.type === "FILL_PRODUCT_TEXT") {
+      if (window.self !== window.top && !document.querySelector('.ql-editor, .ProseMirror, textarea[placeholder*="tả" i]')) {
+        return;
+      }
       sendResponse(fillProductText(message.product || {}));
       return false;
     }

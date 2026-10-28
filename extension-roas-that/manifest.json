@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "ROAS thật – Shopee",
+  "version": "1.0.0",
+  "description": "Tính ROAS thật của Dịch vụ Hiển thị Shopee sau khi trừ đơn hủy, giao thất bại, trả hàng. Xem theo ngày, tuần, tháng.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://banhang.shopee.vn/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://banhang.shopee.vn/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -498,6 +498,11 @@
             margin-bottom: 10px;
         }
 
+        /* Xoay icon (Loader2) trong các module dùng lucide-react */
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
         @keyframes spin {
             0% {
                 transform: rotate(0deg);

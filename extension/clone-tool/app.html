@@ -125,8 +125,11 @@
     </div>
     <div class="row" style="margin-top: 4px;">
       <label style="flex: 1; margin: 0;">
-        SKU sản phẩm (mã chung)
-        <input data-opt="parentSku" id="parentSkuInput" placeholder="Để trống = ID sản phẩm gốc" />
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+          <span>SKU sản phẩm (mã chung)</span>
+          <span class="hint small" style="font-size: 10px; color: #2563eb;">💡 Gợi ý từ DS_SP &amp; tự thêm -mã gian</span>
+        </div>
+        <input data-opt="parentSku" id="parentSkuInput" placeholder="Tìm kiếm SKU từ sheet DS_SP hoặc để trống = ID gốc..." autocomplete="off" />
       </label>
     </div>
 
@@ -134,6 +137,7 @@
       <div class="row between" style="margin-bottom: 4px;">
         <b class="small" style="color: #1e293b;">📋 Phân loại &amp; SKU (<span id="varCount">0</span> phân loại):</b>
         <div class="row gap">
+          <a href="#" id="btnRefreshDsSp" class="small" style="color: #059669; text-decoration: underline; margin-right: 6px;" title="Tải lại danh sách SKU từ sheet DS_SP">🔄 Tải lại DS_SP</a>
           <a href="#" id="btnAutoFillSku" class="small" style="color: #2563eb; text-decoration: underline;" title="Tự điền SKU theo mẫu: [SKU chung]-[Tên phân loại]">⚡ Điền nhanh SKU</a>
         </div>
       </div>

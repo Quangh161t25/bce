@@ -35,8 +35,8 @@ cRUVkq/nAg4IB78jDp5Yc3n5VXAr10zWHWNFwVbdcZAs3BT9Q4WacASPdyowQPx0
 JYdnFqf9hx1XKT04zZ49M7w=
 -----END PRIVATE KEY-----`,
     tokenUrl: "https://oauth2.googleapis.com/token",
-    // Sheet mặc định (có thể ghi đè bằng customSpreadsheetId trong chrome.storage.local)
-    extensionSpreadsheetId: "1cnA33cHHMhcOSaXa9l4Jeu6qw8QnXlUnEU4Bqtkj9wo",
+    // Sheet mặc định (để trống khi cài ban đầu, người dùng nhập trong Cài đặt)
+    extensionSpreadsheetId: "",
     webSpreadsheetId: "19gZ6mR4UnKjZiWQc-W5CrCBKD7xz02Szd4Amlqvu99Y"
   };
 })(typeof self !== "undefined" ? self : globalThis);
