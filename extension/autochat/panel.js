@@ -5,6 +5,11 @@
   'use strict';
 
   const $ = (id) => document.getElementById(id);
+  document.getElementById('btn-sheet-sync')?.addEventListener('click', async () => {
+    const btn=$('btn-sheet-sync'), label=$('sheet-sync-status');btn.disabled=true;label.textContent='Đang đồng bộ…';
+    try {const res=await chrome.runtime.sendMessage({type:'autochat-sync-sheet'});label.textContent=res?.ok?`${res.customers} khách · ${res.pending} hội thoại đang tải · ${res.indexDone?'Đã quét hết danh sách':'Đang quét danh sách'}${res.error?' · '+res.error:''}`:(res?.error || 'Không đồng bộ được');}
+    catch(e){label.textContent=e.message;}finally{btn.disabled=false;}
+  });
   let currentTab = 'waiting';
 
   const MODE_HINTS = {
@@ -85,6 +90,9 @@
     const [q, meta, s, session, log] = await Promise.all([
       AUTOCHAT.getQueue(), AUTOCHAT.getMeta(), AUTOCHAT.getSettings(), AUTOCHAT.getSession(), AUTOCHAT.getLog()
     ]);
+    const syncInfo=await chrome.storage.local.get(['autochat_sheet_meta','autochat_sheet_error']);
+    const syncMeta=syncInfo.autochat_sheet_meta;
+    if ($('sheet-sync-status') && !$('btn-sheet-sync').disabled) $('sheet-sync-status').textContent=syncInfo.autochat_sheet_error || (syncMeta ? `${syncMeta.code} · ${syncMeta.customers} khách · ${syncMeta.indexDone?'Đã quét hết danh sách':'Đang quét danh sách'} · ${syncMeta.pending} hội thoại đang tải${syncMeta.error?' · '+syncMeta.error:''}` : 'Chỉ đọc, đồng bộ mỗi phút; không bật chế độ gửi tin.');
     const waiting = s.mode === 'off' ? [] : AUTOCHAT.waitingList(q);
     const done = Object.values(q).filter((e) => e.status === 'done').sort((a, b) => b.doneAt - a.doneAt);
     const today = new Date().setHours(0, 0, 0, 0);

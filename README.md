@@ -106,3 +106,13 @@ Có thể đổi Spreadsheet ID lúc chạy bằng tab Cài đặt (`customSprea
   đọc đơn theo chu kỳ, tự xác nhận lấy hàng, in phiếu, tải PDF + Excel vào `TOPCARE-phieu-in/`, nạp Wameli,
   báo âm thanh (`autoin/offscreen.html`, quyền `offscreen`), gửi Telegram, tổng kết 17h & 8h.
 - Bản gốc: `archive/extension-doc-don-original/`. Hướng dẫn chi tiết: `extension/autoin/HUONG-DAN.md`.
+
+## Auto Chat — danh sách khách và hội thoại trên Google Sheets
+
+- Tab **AUTO CHAT** trên web (`?tab=AUTO_CHAT`) đọc `AUTO_CHAT` (13 cột) và `NOI_DUNG_CHAT` (10 cột), trong cùng bảng tính web.
+- Chrome extension đồng bộ chỉ đọc mỗi phút, kể cả khi chế độ tự gửi đang tắt; không tự bật Auto Chat. Cần Shopee đã đăng nhập và Mã gian đã nhập ở Auto In.
+- Auto Chat trong side panel có nút **Đồng bộ khách & hội thoại lên Sheet**, hiển thị tiến độ và lỗi. Lần đầu đọc theo từng trang, 5 trang lịch sử mỗi lượt; không giới hạn vào 50 khách đầu hoặc chỉ 3 ngày gần nhất như hàng đợi tự trả lời.
+- Lưu hội thoại hai chiều theo ID shop + ID hội thoại + ID tin, không ghép theo tên khách, không xóa hội thoại đã xong. Nội dung ảnh/video/thẻ sản phẩm được biểu diễn bằng nhãn loại tin.
+- Cột **Đã tự chat** dựa trên lần gửi Auto Chat thành công đã được ghi nhận; trả lời tay và gửi lỗi không được tính. Các lần gửi cũ đã mất khỏi bộ nhớ trước khi thêm tính năng không thể xác nhận lại chỉ bằng nội dung câu chào.
+- Web có tìm kiếm cả nội dung hội thoại, lọc gian, lọc Chưa tự chat / Đã tự chat; bấm tên khách để xem lịch sử. Dữ liệu đang tải chưa hoàn tất được đánh dấu rõ, lỗi API/phân trang giữ lại dữ liệu cũ.
+- Sau cập nhật cần Reload extension và bấm đồng bộ lần đầu. Kiểm thử: `node tools/test-chat-sheet.mjs`.

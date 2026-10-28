@@ -372,7 +372,14 @@ var AUTOCHAT_ENGINE = (function () {
       if (!res || !res.id) throw new Error('Shopee không trả về id tin nhắn');
       e.greet = { sentAt: Date.now(), count: (e.greet.count || 0) + 1, lastKind: kind };
       e.lastIsBuyer = false;
-      await AUTOCHAT.addLog({ at: Date.now(), name: e.name, kind, text, ok: true });
+      try {
+        const key = 'autochat_sent_' + s.shopId;
+        const saved = await chrome.storage.local.get(key);
+        const ledger = saved[key] || {};
+        ledger[e.convId] = {at:Date.now(),messageId:res.id,text};
+        await chrome.storage.local.set({[key]:ledger});
+      } catch (storageError) { console.warn('[AutoChat] Không lưu được trạng thái tin đã gửi', storageError); }
+      await AUTOCHAT.addLog({ at: Date.now(), convId:e.convId, shopId:s.shopId, name: e.name, kind, text, ok: true });
       return true;
     } catch (err) {
       if (err instanceof SessionError) throw err;
@@ -459,5 +466,8 @@ var AUTOCHAT_ENGINE = (function () {
     }
   }
 
-  return { tick, applyMessages, pickTargets, sendTo, syncSessionFromTab };
+  return { tick, applyMessages, pickTargets, sendTo, syncSessionFromTab,
+    readConversationsPage: (s, offset) => api(s, '/conversations', {direction:'older',limit:50,offset,type:'all',biz_id:0,on_message_received:true}),
+    readMessagesPage: (s, convId, offset) => api(s, '/conversations/' + encodeURIComponent(convId) + '/messages', {shop_id:s.shopId,offset,limit:20,direction:'older',biz_id:0,on_message_received:true})
+  };
 })();

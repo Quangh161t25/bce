@@ -7,6 +7,7 @@ import {
     ShoppingBag,
     Archive,
     Truck,
+    MessageCircle,
     PanelLeftClose,
     PanelLeftOpen
 } from 'lucide-react';
@@ -17,7 +18,8 @@ export const TABS = [
     { id: 'SP_GIAM_GIA', label: 'SP GIẢM GIÁ', icon: Tags },
     { id: 'WEB_SP', label: 'WEB SP', icon: Globe },
     { id: 'DH', label: 'ĐH', icon: ShoppingBag },
-    { id: 'CHO_LAY_HANG', label: 'CHỜ LẤY HÀNG', icon: Truck }
+    { id: 'CHO_LAY_HANG', label: 'CHỜ LẤY HÀNG', icon: Truck },
+    { id: 'AUTO_CHAT', label: 'AUTO CHAT', icon: MessageCircle }
 ];
 
 export default function Sidebar({

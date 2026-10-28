@@ -8,7 +8,7 @@ importScripts("clone-tool/background.js");
 // AutoIn (TOPCARE – Đọc đơn hàng): tự xác nhận lấy hàng, in phiếu, nạp Wameli, Telegram (extension/autoin/)
 importScripts("autoin/background.js");
 // Auto Chat: chạy ngầm qua API chat, khách là người nhắn cuối thì tự nhắn lại + lập danh sách khách chờ (extension/autochat/)
-importScripts("autochat/shared.js", "autochat/engine.js", "autochat/background.js");
+importScripts("autochat/shared.js", "autochat/engine.js", "autochat/background.js", "autochat/sheet-sync.js");
 
 let GOOGLE_SHEET_CONFIG = {
   spreadsheetId: self.SHARED_GOOGLE_CONFIG.extensionSpreadsheetId,

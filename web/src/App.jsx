@@ -39,6 +39,7 @@ import { showToast } from './utils/clipboard.js';
 import Sidebar from './components/layout/Sidebar.jsx';
 import HeaderActions from './components/layout/HeaderActions.jsx';
 import ChoLayHangTab from './components/cho_lay_hang/ChoLayHangTab.jsx';
+import AutoChatTab from './components/autochat/AutoChatTab.jsx';
 import Pagination from './components/layout/Pagination.jsx';
 import LoadingMask from './components/layout/LoadingMask.jsx';
 import DropOverlay from './components/layout/DropOverlay.jsx';
@@ -69,7 +70,7 @@ export default function App() {
     const [currentTab, setCurrentTab] = useState(() => {
         try {
             const fromUrl = new URLSearchParams(window.location.search).get('tab');
-            const allowed = ['DS_SP', 'TINH_GIA', 'SP_GIAM_GIA', 'WEB_SP', 'DH', 'CHO_LAY_HANG'];
+            const allowed = ['DS_SP', 'TINH_GIA', 'SP_GIAM_GIA', 'WEB_SP', 'DH', 'CHO_LAY_HANG', 'AUTO_CHAT'];
             if (fromUrl && allowed.includes(fromUrl)) return fromUrl;
             return localStorage.getItem(STORAGE_TAB_KEY) || 'DS_SP';
         } catch (_) {
@@ -231,8 +232,8 @@ export default function App() {
     // Load Active Tab Data
     // -------------------------------------------------------------------------
     const loadData = useCallback(async (tabToLoad = currentTab) => {
-        // Module "Chờ lấy hàng" đọc trực tiếp từ Shopee (qua extension), không dùng Google Sheets
-        if (tabToLoad === 'CHO_LAY_HANG') {
+        // Các module đồng bộ có bộ đọc Google Sheets riêng.
+        if (['CHO_LAY_HANG', 'AUTO_CHAT'].includes(tabToLoad)) {
             setAllData([]);
             setCurrentPage(1);
             setSelectedIds(new Set());
@@ -1477,8 +1478,8 @@ export default function App() {
     // Excel Upload Handler (Drag & Drop or File Input)
     // -------------------------------------------------------------------------
     const handleProcessFiles = async (files) => {
-        if (currentTab === 'CHO_LAY_HANG') {
-            alert('Tab CHỜ LẤY HÀNG đọc trực tiếp từ Shopee, không nhập từ file Excel.');
+        if (['CHO_LAY_HANG', 'AUTO_CHAT'].includes(currentTab)) {
+            alert('Tab này đọc dữ liệu đồng bộ từ Google Sheets, không nhập từ file Excel.');
             return;
         }
         const excelFiles = files.filter(f => /\.(xlsx|xls|csv)$/i.test(f.name));
@@ -1667,7 +1668,7 @@ export default function App() {
 
             {/* Main Application Area */}
             <main className="main-content">
-                {currentTab === 'CHO_LAY_HANG' ? (
+                {currentTab === 'AUTO_CHAT' ? (<AutoChatTab />) : currentTab === 'CHO_LAY_HANG' ? (
                     <ChoLayHangTab />
                 ) : (
                     <>
